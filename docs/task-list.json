@@ -1,0 +1,90 @@
+{
+  "project_name": "智能排课排场室系统 (K-12版)",
+  "project_description": "根据产品需求文档(PRD)V1.0生成的详细开发任务列表，已优化依赖关系、优先级和里程碑。",
+  "task_list": [
+    {
+      "task_id": "TKS-001",
+      "title": "[后端] 搭建项目基础架构和数据库模型",
+      "description": "初始化后端项目，配置数据库连接，并根据PRD设计用户、角色、教师、班级、课程、场室等核心数据表的结构。",
+      "epic": "基础数据设置",
+      "milestone": "V1.0 (MVP)",
+      "dependencies": [],
+      "priority": "高",
+      "status": "Done",
+      "effort_points": 5,
+      "tags": ["backend", "database", "setup"],
+      "acceptance_criteria": [
+        "✅ 数据库中已创建所有需要的表结构",
+        "✅ 后端项目可以成功运行并连接到数据库"
+      ],
+      "completion_summary": {
+        "completed_date": "2024-06-30",
+        "actual_effort": 5,
+        "deliverables": [
+          "Express.js后端项目结构 (src/)",
+          "MongoDB数据库连接配置 (config/database.ts)",
+          "6个核心数据模型 (User, Teacher, Class, Course, Room, Schedule)",
+          "环境配置文件 (.env, tsconfig.json)",
+          "数据库初始化脚本 (scripts/init-database.ts)",
+          "项目启动脚本和基础API健康检查"
+        ],
+        "challenges_and_solutions": [
+          {
+            "challenge": "better-sqlite3编译失败 - 缺少Visual Studio构建工具",
+            "solution": "改用MongoDB数据库，避免了原生模块编译问题"
+          },
+          {
+            "challenge": "缺少dotenv等依赖包导致TypeScript编译错误",
+            "solution": "按组分批安装依赖：核心框架 -> 数据库 -> 工具库 -> 类型定义"
+          },
+          {
+            "challenge": "Express路由path-to-regexp解析错误",
+            "solution": "移除通配符路由 app.all('*')，改用简化的路由结构"
+          },
+          {
+            "challenge": "Mongoose重复索引警告",
+            "solution": "分离字段定义中的unique和Schema.index()定义，避免重复声明"
+          }
+        ],
+        "key_learnings": [
+          "Windows环境下应优先选择无需编译的数据库方案",
+          "依赖安装应按功能模块分组进行，便于排查问题",
+          "Express路由定义需谨慎处理通配符，避免path-to-regexp解析错误",
+          "MongoDB Schema设计中索引定义应统一在index()方法中处理"
+        ]
+      }
+    },
+    {
+      "task_id": "TKS-002",
+      "title": "[后端] 开发用户与角色管理的API",
+      "description": "提供对用户和角色的CRUD（创建、读取、更新、删除）操作的RESTful API。",
+      "epic": "基础数据设置",
+      "milestone": "V1.0 (MVP)",
+      "dependencies": ["TKS-001"],
+      "priority": "高",
+      "status": "To Do",
+      "effort_points": 3,
+      "tags": ["backend", "api", "user-management"],
+      "acceptance_criteria": [
+        "API能够创建、查询、编辑和删除用户",
+        "API能够为用户分配角色"
+      ]
+    },
+    {
+      "task_id": "TKS-003",
+      "title": "[前端] 开发基础数据管理界面框架",
+      "description": "搭建前端项目框架，并创建左侧导航栏和主内容区布局，用于承载后续的各个管理模块。",
+      "epic": "基础数据设置",
+      "milestone": "V1.0 (MVP)",
+      "dependencies": [],
+      "priority": "高",
+      "status": "To Do",
+      "effort_points": 3,
+      "tags": ["frontend", "ui", "setup"],
+      "acceptance_criteria": [
+        "页面包含清晰的导航结构",
+        "为教师管理、班级管理等功能预留了路由和入口"
+      ]
+    }
+  ]
+}

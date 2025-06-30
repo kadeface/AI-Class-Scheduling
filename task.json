@@ -1,0 +1,283 @@
+{
+  "project_name": "智能排课排场室系统 (K-12版)",
+  "project_description": "根据产品需求文档(PRD)V1.0生成的详细开发任务列表，已优化依赖关系、优先级和里程碑。",
+  "task_list": [
+    {
+      "task_id": "TKS-001",
+      "title": "[后端] 搭建项目基础架构和数据库模型",
+      "description": "初始化后端项目，配置数据库连接，并根据PRD设计用户、角色、教师、班级、课程、场室等核心数据表的结构。",
+      "epic": "基础数据设置",
+      "milestone": "V1.0 (MVP)",
+      "dependencies": [],
+      "priority": "高",
+      "status": "To Do",
+      "effort_points": 5,
+      "tags": ["backend", "database", "setup"],
+      "acceptance_criteria": [
+        "数据库中已创建所有需要的表结构",
+        "后端项目可以成功运行并连接到数据库"
+      ]
+    },
+    {
+      "task_id": "TKS-002",
+      "title": "[后端] 开发用户与角色管理的API",
+      "description": "提供对用户和角色的CRUD（创建、读取、更新、删除）操作的RESTful API。",
+      "epic": "基础数据设置",
+      "milestone": "V1.0 (MVP)",
+      "dependencies": ["TKS-001"],
+      "priority": "高",
+      "status": "To Do",
+      "effort_points": 3,
+      "tags": ["backend", "api", "user-management"],
+      "acceptance_criteria": [
+        "API能够创建、查询、编辑和删除用户",
+        "API能够为用户分配角色"
+      ]
+    },
+    {
+      "task_id": "TKS-003",
+      "title": "[前端] 开发基础数据管理界面框架",
+      "description": "搭建前端项目框架，并创建左侧导航栏和主内容区布局，用于承载后续的各个管理模块。",
+      "epic": "基础数据设置",
+      "milestone": "V1.0 (MVP)",
+      "dependencies": [],
+      "priority": "高",
+      "status": "To Do",
+      "effort_points": 3,
+      "tags": ["frontend", "ui", "setup"],
+      "acceptance_criteria": [
+        "页面包含清晰的导航结构",
+        "为教师管理、班级管理等功能预留了路由和入口"
+      ]
+    },
+    {
+      "task_id": "TKS-004",
+      "title": "[后端] 开发教学资源 (教师/班级/课程/场室) 管理的API",
+      "description": "为教师、班级、课程、场室等核心教学资源提供CRUD API。",
+      "epic": "基础数据设置",
+      "milestone": "V1.0 (MVP)",
+      "dependencies": ["TKS-001"],
+      "priority": "高",
+      "status": "To Do",
+      "effort_points": 8,
+      "tags": ["backend", "api"],
+      "acceptance_criteria": [
+        "可以增删改查教师档案",
+        "可以增删改查班级信息",
+        "可以增删改查课程信息",
+        "可以增删改查场室信息"
+      ]
+    },
+    {
+      "task_id": "TKS-005",
+      "title": "[前端] 开发教学资源管理界面",
+      "description": "开发用于管理教师、班级、课程、场室的前端界面，包括列表展示、搜索、新建和编辑表单。",
+      "epic": "基础数据设置",
+      "milestone": "V1.0 (MVP)",
+      "dependencies": ["TKS-003", "TKS-004"],
+      "priority": "高",
+      "status": "To Do",
+      "effort_points": 8,
+      "tags": ["frontend", "ui"],
+      "acceptance_criteria": [
+        "用户可以在界面上完成对教师、班级、课程、场室的增删改查操作",
+        "表单有合理的校验规则"
+      ]
+    },
+    {
+      "task_id": "TKS-006",
+      "title": "[后端] 开发教学计划与排课规则API",
+      "description": "开发API用于设置班级的教学计划（哪个班上什么课由谁教），以及设置全局排课规则。",
+      "epic": "基础数据设置",
+      "milestone": "V1.0 (MVP)",
+      "dependencies": ["TKS-004"],
+      "priority": "高",
+      "status": "To Do",
+      "effort_points": 5,
+      "tags": ["backend", "api"],
+      "acceptance_criteria": [
+        "可以为每个班级指定课程和授课老师",
+        "可以设置连排、场地要求等规则"
+      ]
+    },
+    {
+      "task_id": "TKS-007",
+      "title": "[前端] 开发教学计划与排课规则界面",
+      "description": "开发用于设置教学计划和排课规则的前端界面。",
+      "epic": "基础数据设置",
+      "milestone": "V1.0 (MVP)",
+      "dependencies": ["TKS-005", "TKS-006"],
+      "priority": "高",
+      "status": "To Do",
+      "effort_points": 5,
+      "tags": ["frontend", "ui"],
+      "acceptance_criteria": [
+        "用户可以通过界面完成教学计划的配置"
+      ]
+    },
+    {
+      "task_id": "TKS-008",
+      "title": "[后端] 研发核心排课算法",
+      "description": "设计并实现满足硬约束和软约束的智能排课算法。这是系统的技术核心，需要重点投入。",
+      "epic": "智能排课引擎",
+      "milestone": "V1.0 (MVP)",
+      "dependencies": ["TKS-006"],
+      "priority": "高",
+      "status": "To Do",
+      "effort_points": 8,
+      "tags": ["backend", "algorithm"],
+      "acceptance_criteria": [
+        "算法能处理所有预设的硬约束",
+        "算法能生成一份无硬性冲突的课表",
+        "算法能返回无法满足的冲突列表"
+      ]
+    },
+    {
+      "task_id": "TKS-009",
+      "title": "[后端] <一键排课>功能API封装",
+      "description": "将排课算法封装成一个异步API。接收到请求后开始计算，并允许前端轮询查询结果。",
+      "epic": "智能排课引擎",
+      "milestone": "V1.0 (MVP)",
+      "dependencies": ["TKS-008"],
+      "priority": "高",
+      "status": "To Do",
+      "effort_points": 3,
+      "tags": ["backend", "api"],
+      "acceptance_criteria": [
+        "提供一个API触发排课任务",
+        "提供一个API查询排课进度和结果"
+      ]
+    },
+    {
+      "task_id": "TKS-010",
+      "title": "[前端] 可视化课表组件开发",
+      "description": "开发网格化的课表组件，用于展示排课结果，并支持拖拽操作。这是前端的核心和难点。",
+      "epic": "智能排课引擎",
+      "milestone": "V1.0 (MVP)",
+      "dependencies": ["TKS-003"],
+      "priority": "高",
+      "status": "To Do",
+      "effort_points": 8,
+      "tags": ["frontend", "ui", "component"],
+      "acceptance_criteria": [
+        "组件能正确渲染课表数据",
+        "支持拖动课程卡片",
+        "拖动时能实时反馈目标位置是否可用"
+      ]
+    },
+    {
+      "task_id": "TKS-011",
+      "title": "[后端] 手动调课API",
+      "description": "提供单个课程的移动、交换的API，每次调用时都进行冲突检测。",
+      "epic": "智能排课引擎",
+      "milestone": "V1.0 (MVP)",
+      "dependencies": ["TKS-008"],
+      "priority": "高",
+      "status": "To Do",
+      "effort_points": 3,
+      "tags": ["backend", "api"],
+      "acceptance_criteria": [
+        "API能成功移动课程到无冲突的位置",
+        "API在遇到冲突时返回失败和原因"
+      ]
+    },
+    {
+      "task_id": "TKS-012",
+      "title": "[前端] 整合排课与调课功能",
+      "description": "将<一键排课>、课表展示、拖拽调课等功能整合到一个完整的页面流程中。",
+      "epic": "智能排课引擎",
+      "milestone": "V1.0 (MVP)",
+      "dependencies": ["TKS-009", "TKS-010", "TKS-011"],
+      "priority": "高",
+      "status": "To Do",
+      "effort_points": 5,
+      "tags": ["frontend", "integration"],
+      "acceptance_criteria": [
+        "用户可以点击按钮开始排课",
+        "排课完成后课表能自动显示",
+        "用户可以在课表上进行拖拽微调"
+      ]
+    },
+    {
+      "task_id": "TKS-013",
+      "title": "[前端] 多维度课表查询、打印与导出",
+      "description": "开发班级、教师维度的课表查询视图，并实现配套的打印样式和导出到Excel的功能。",
+      "epic": "日常应用与输出",
+      "milestone": "V1.0 (MVP)",
+      "dependencies": ["TKS-012"],
+      "priority": "高",
+      "status": "To Do",
+      "effort_points": 5,
+      "tags": ["frontend", "feature"],
+      "acceptance_criteria": [
+        "可以按班级或教师查看课表",
+        "打印预览样式干净整洁",
+        "导出的Excel文件格式正确"
+      ]
+    },
+    {
+      "task_id": "TKS-014",
+      "title": "[后端] Excel数据批量导入功能",
+      "description": "开发后端逻辑，用于解析用户上传的特定模板的Excel文件，并批量导入基础数据。",
+      "epic": "基础数据设置",
+      "milestone": "V1.1",
+      "dependencies": ["TKS-004"],
+      "priority": "中",
+      "status": "To Do",
+      "effort_points": 5,
+      "tags": ["backend", "feature", "excel"],
+      "acceptance_criteria": [
+        "可以成功解析符合模板的Excel文件",
+        "对于格式错误或数据冲突有明确的提示"
+      ]
+    },
+    {
+      "task_id": "TKS-015",
+      "title": "[前端] Excel数据导入界面",
+      "description": "提供文件上传控件和导入说明界面。",
+      "epic": "基础数据设置",
+      "milestone": "V1.1",
+      "dependencies": ["TKS-014"],
+      "priority": "中",
+      "status": "To Do",
+      "effort_points": 2,
+      "tags": ["frontend", "ui"],
+      "acceptance_criteria": [
+        "用户可以上传文件",
+        "导入后能看到成功或失败的结果反馈"
+      ]
+    },
+    {
+      "task_id": "TKS-016",
+      "title": "[后端] 监考安排算法与API",
+      "description": "开发用于分配考场和监考教师的独立算法，并封装成API。",
+      "epic": "日常应用与输出",
+      "milestone": "V2.0",
+      "dependencies": ["TKS-008"],
+      "priority": "中",
+      "status": "To Do",
+      "effort_points": 8,
+      "tags": ["backend", "feature", "algorithm"],
+      "acceptance_criteria": [
+        "能根据考生人数自动分配和拆分考场",
+        "能均衡地为教师分配监考任务"
+      ]
+    },
+    {
+      "task_id": "TKS-017",
+      "title": "[前端] 监考安排管理界面",
+      "description": "开发用于设置考试、运行安排、查看和打印监考表的完整前端界面。",
+      "epic": "日常应用与输出",
+      "milestone": "V2.0",
+      "dependencies": ["TKS-016"],
+      "priority": "中",
+      "status": "To Do",
+      "effort_points": 5,
+      "tags": ["frontend", "feature", "ui"],
+      "acceptance_criteria": [
+        "用户可以完成一次完整的监考安排流程",
+        "可以打印总的监考表和教师个人监考条"
+      ]
+    }
+  ]
+}

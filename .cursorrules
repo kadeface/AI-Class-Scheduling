@@ -1,0 +1,129 @@
+# 智能排课排场室系统 (K-12版) - Cursor 开发规则
+
+## 项目概述
+这是一个面向K-12阶段（小学、初中、高中）的智能排课与场室管理系统。
+
+## 技术栈
+### 前端
+- 框架: Next.js (基于React)
+- UI组件库: Radix UI
+- 样式引擎: Tailwind CSS
+- 动画库: Framer Motion
+- 语言: TypeScript
+
+### 后端
+- 运行时: Node.js
+- 框架: Express.js
+- API设计: RESTful 风格
+- 语言: TypeScript
+
+## 开发规范
+
+### 代码风格
+1. 使用TypeScript，严格类型检查
+2. 使用Google Style Docstrings格式编写注释
+3. 函数和类必须包含完整的文档注释，包括：
+   - 简要描述
+   - 参数说明 (Args)
+   - 返回值说明 (Returns)
+   - 异常说明 (Raises, 如适用)
+
+### 前端开发规则
+1. 优先使用Next.js的文件路由系统
+2. 组件开发优先使用Radix UI，确保无障碍访问
+3. 样式优先使用Tailwind CSS原子类，避免自定义CSS
+4. 动画效果统一使用Framer Motion
+5. 组件必须使用TypeScript接口定义props
+6. 使用React Hooks和函数组件，避免类组件
+7. 状态管理优先使用React内置hooks，复杂场景考虑Zustand
+8. 所有API调用使用async/await语法
+
+### 后端开发规则
+1. 使用Express.js构建RESTful API
+2. 路由按功能模块分组 (users, classes, courses, schedules等)
+3. 中间件用于身份验证、日志记录、错误处理
+4. 数据库操作使用async/await
+5. API响应格式统一：
+   ```typescript
+   {
+     success: boolean;
+     data?: any;
+     message?: string;
+     error?: string;
+   }
+   ```
+
+### 文件结构
+```
+/
+├── frontend/              # Next.js前端应用
+│   ├── src/
+│   │   ├── app/          # App Router (Next.js 13+)
+│   │   ├── components/   # 可复用组件
+│   │   ├── lib/         # 工具函数和配置
+│   │   └── types/       # TypeScript类型定义
+│   ├── package.json
+│   └── tailwind.config.js
+├── backend/              # Express.js后端应用
+│   ├── src/
+│   │   ├── routes/      # API路由
+│   │   ├── models/      # 数据模型
+│   │   ├── middleware/  # 中间件
+│   │   ├── controllers/ # 控制器
+│   │   └── utils/       # 工具函数
+│   ├── package.json
+│   └── tsconfig.json
+└── docs/                # 文档
+```
+
+### 命名约定
+- 文件名: kebab-case (例: user-profile.tsx)
+- 组件名: PascalCase (例: UserProfile)
+- 函数名: camelCase (例: getUserProfile)
+- 常量: UPPER_SNAKE_CASE (例: API_BASE_URL)
+- CSS类名: Tailwind原子类优先
+
+### API设计规范
+- 使用RESTful风格
+- URL使用复数名词 (/api/users, /api/classes)
+- HTTP状态码要准确 (200, 201, 400, 401, 404, 500等)
+- 支持CORS跨域
+- 实现统一的错误处理中间件
+
+### UI/UX设计规范
+1. 遵循Apple设计语言，简洁至上
+2. 使用现代化UI设计：毛玻璃效果、渐变背景、响应式布局
+3. 图标使用Font Awesome等成熟开源图标库
+4. 重视交互动画和悬停效果
+5. 采用卡片式布局和网格系统
+6. 专业性设计，避免业余元素如Emoji图标
+
+### 开发流程
+1. 功能开发前先创建对应的TypeScript类型定义
+2. 后端API开发完成后需要提供接口文档
+3. 前端组件开发要考虑Loading、Error、Empty等状态
+4. 代码提交前进行类型检查和格式化
+5. 优先开发移动端适配，确保响应式设计
+
+### 安装与设置规则
+**重要：所有包管理和项目初始化都应手动执行，不使用自动化脚本**
+1. 提供详细的手动安装步骤，包括具体的npm install命令
+2. 每个安装步骤都要说明安装的包的用途
+3. 提供完整的配置文件内容，供开发者手动创建
+4. 安装命令应该分组进行，避免一次性安装过多包
+5. 总是提供备选方案和故障排除建议
+
+### 错误处理
+1. 前端统一错误边界处理
+2. 后端统一错误中间件
+3. 用户友好的错误提示信息
+4. 开发环境显示详细错误，生产环境隐藏敏感信息
+
+### 性能优化
+1. 使用Next.js的Image组件优化图片
+2. 实现代码分割和懒加载
+3. API响应实现分页
+4. 使用React.memo优化不必要的重渲染
+5. Tailwind CSS按需打包
+
+当编写代码时，请严格遵循以上规则，确保代码质量和项目一致性。 
