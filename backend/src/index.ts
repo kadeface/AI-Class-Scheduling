@@ -19,6 +19,9 @@ import dotenv from 'dotenv';
 import { connectDatabase } from './config/database';
 import { initializeDefaultData } from './models';
 
+// 导入路由
+import { userRoutes } from './routes/user-routes';
+
 // 加载环境变量
 dotenv.config();
 
@@ -75,6 +78,9 @@ function configureRoutes(): void {
       docs: '/api/health'
     });
   });
+
+  // 用户管理路由
+  app.use('/api/users', userRoutes);
 }
 
 /**
