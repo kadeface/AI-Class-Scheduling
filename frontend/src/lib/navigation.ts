@@ -62,6 +62,12 @@ export const navigationItems: NavigationItem[] = [
         label: '场室管理',
         href: '/management/rooms',
         icon: MapPin
+      },
+      {
+        id: 'schedules',
+        label: '排课设置',
+        href: '/management/schedules',
+        icon: Calendar
       }
     ]
   },

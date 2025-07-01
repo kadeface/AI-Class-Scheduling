@@ -21,6 +21,12 @@ import { initializeDefaultData } from './models';
 
 // 导入路由
 import { userRoutes } from './routes/user-routes';
+import { teacherRoutes } from './routes/teacher-routes';
+import { classRoutes } from './routes/class-routes';
+import { courseRoutes } from './routes/course-routes';
+import { roomRoutes } from './routes/room-routes';
+import teachingPlanRoutes from './routes/teaching-plan-routes';
+import schedulingRulesRoutes from './routes/scheduling-rules-routes';
 
 // 加载环境变量
 dotenv.config();
@@ -38,8 +44,13 @@ function configureMiddleware(): void {
   app.use(helmet());
   
   // 跨域中间件
+  const allowedOrigins = ['http://localhost:3000', 'http://localhost:3001'];
+  if (process.env.CORS_ORIGIN) {
+    allowedOrigins.push(process.env.CORS_ORIGIN);
+  }
+  
   app.use(cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: allowedOrigins,
     credentials: true
   }));
   
@@ -81,6 +92,24 @@ function configureRoutes(): void {
 
   // 用户管理路由
   app.use('/api/users', userRoutes);
+  
+  // 教师管理路由
+  app.use('/api/teachers', teacherRoutes);
+  
+  // 班级管理路由
+  app.use('/api/classes', classRoutes);
+  
+  // 课程管理路由
+  app.use('/api/courses', courseRoutes);
+  
+  // 场室管理路由
+  app.use('/api/rooms', roomRoutes);
+  
+  // 教学计划路由
+  app.use('/api/teaching-plans', teachingPlanRoutes);
+  
+  // 排课规则路由
+  app.use('/api/scheduling-rules', schedulingRulesRoutes);
 }
 
 /**

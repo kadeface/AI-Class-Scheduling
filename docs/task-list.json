@@ -180,15 +180,55 @@
         "milestone": "V1.0 (MVP)",
         "dependencies": ["TKS-001"],
         "priority": "高",
-        "status": "To Do",
+        "status": "Done",
         "effort_points": 8,
         "tags": ["backend", "api"],
         "acceptance_criteria": [
-          "可以增删改查教师档案",
-          "可以增删改查班级信息",
-          "可以增删改查课程信息",
-          "可以增删改查场室信息"
-        ]
+          "✅ 可以增删改查教师档案",
+          "✅ 可以增删改查班级信息",
+          "✅ 可以增删改查课程信息",
+          "✅ 可以增删改查场室信息"
+        ],
+        "completion_summary": {
+          "completed_date": "2024-12-19",
+          "actual_effort": 8,
+          "deliverables": [
+            "教师数据模型和API类型定义 (Teacher.ts, api.ts)",
+            "班级数据模型和API类型定义 (Class.ts, api.ts)",
+            "课程数据模型和API类型定义 (Course.ts, api.ts)",
+            "场室数据模型和API类型定义 (Room.ts, api.ts)",
+            "四个资源的完整验证中间件 (validation.ts扩展)",
+            "四个资源的CRUD控制器 (teacher-controller.ts, class-controller.ts, course-controller.ts, room-controller.ts)",
+            "四个资源的RESTful路由配置 (teacher-routes.ts, class-routes.ts, course-routes.ts, room-routes.ts)",
+            "主应用路由注册 (index.ts更新)",
+            "完整的API测试指南文档 (api-testing-guide.md扩展)"
+          ],
+          "challenges_and_solutions": [
+            {
+              "challenge": "复杂的关联数据验证 - 教师、班级、课程、场室之间的依赖关系验证",
+              "solution": "设计分层验证策略，在业务逻辑层处理关联验证，数据层专注格式验证"
+            },
+            {
+              "challenge": "多样化的查询需求 - 不同资源需要不同的筛选和排序方式",
+              "solution": "采用统一的查询接口设计，通过泛型和枚举实现类型安全的查询构建"
+            },
+            {
+              "challenge": "时间段数据结构复杂性 - 教师不可用时间、场室不可用时间的建模",
+              "solution": "抽象出TimeSlot通用接口，支持灵活的时间段表示和验证"
+            },
+            {
+              "challenge": "课程场地要求的复杂性 - 多种教室类型、设备要求的组合",
+              "solution": "设计RoomRequirement接口，支持类型、容量、设备的多维度要求表达"
+            }
+          ],
+          "key_learnings": [
+            "MongoDB关联查询使用populate()实现，需要合理设计引用关系",
+            "复杂业务逻辑的API设计应分离验证、业务处理、数据持久化三层",
+            "TypeScript类型定义应在项目架构设计阶段就确立，避免后期重构",
+            "RESTful API设计需要考虑资源的生命周期管理（软删除vs硬删除）",
+            "教育领域的排课系统需要灵活的时间段和约束表达能力"
+          ]
+        }
       },
       {
         "task_id": "TKS-005",
@@ -198,13 +238,77 @@
         "milestone": "V1.0 (MVP)",
         "dependencies": ["TKS-003", "TKS-004"],
         "priority": "高",
-        "status": "To Do",
+        "status": "Done",
         "effort_points": 8,
         "tags": ["frontend", "ui"],
         "acceptance_criteria": [
-          "用户可以在界面上完成对教师、班级、课程、场室的增删改查操作",
-          "表单有合理的校验规则"
-        ]
+          "✅ 用户可以在界面上完成对教师、班级、课程、场室的增删改查操作",
+          "✅ 表单有合理的校验规则",
+          "✅ 用户可以下载Excel/CSV导入模板",
+          "✅ 用户可以通过CSV文件批量导入数据",
+          "✅ 导入过程有数据验证和错误提示"
+        ],
+        "completion_summary": {
+          "completed_date": "2024-12-19",
+          "actual_effort": 8,
+          "deliverables": [
+            "前端API调用工具函数库 (lib/api.ts)",
+            "通用UI组件库 (components/ui/)",
+            "数据表格组件 (data-table.tsx)",
+            "对话框组件 (dialog.tsx)",
+            "表单输入组件 (input.tsx, select.tsx)",
+            "教师管理页面 (app/management/teachers/page.tsx)",
+            "班级管理页面 (app/management/classes/page.tsx)",
+            "课程管理页面 (app/management/courses/page.tsx)",
+            "场室管理页面 (app/management/rooms/page.tsx)",
+            "完整的CRUD功能实现（增删改查、搜索、分页）",
+            "表单验证和错误处理机制",
+            "响应式设计和暗色模式支持",
+            "CSV数据处理工具函数库 (lib/csv.ts)",
+            "导入模板定义和验证 (lib/import-templates.ts)",
+            "通用数据导入对话框组件 (components/ui/import-dialog.tsx)",
+            "四个管理页面的批量导入功能集成",
+            "Excel/CSV模板下载和数据验证功能"
+          ],
+          "challenges_and_solutions": [
+            {
+              "challenge": "复杂表单数据的状态管理 - 特别是课程的场地要求和教师的时间偏好",
+              "solution": "使用React useState进行细粒度状态管理，为复杂对象设计专门的处理函数"
+            },
+            {
+              "challenge": "多资源间的关联展示 - 班级关联教师和教室，场室关联班级等",
+              "solution": "在API层面实现populate查询，前端通过下拉选择和关联信息展示处理"
+            },
+            {
+              "challenge": "通用组件的抽象设计 - 既要满足多种数据类型又要保持类型安全",
+              "solution": "使用TypeScript泛型设计通用组件，通过render props模式实现自定义渲染"
+            },
+            {
+              "challenge": "表单验证的复杂性 - 不同资源有不同的验证规则",
+              "solution": "为每个资源创建独立的验证函数，统一错误状态管理模式"
+            },
+            {
+              "challenge": "批量导入功能的实现 - 需要支持CSV解析、数据验证、错误处理",
+              "solution": "创建通用的CSV处理工具库和导入组件，支持模板下载、数据预览、分步导入流程"
+            },
+            {
+              "challenge": "不同资源的导入模板设计 - 每种资源有不同的字段和验证规则",
+              "solution": "设计统一的导入模板接口，为每种资源定义专门的验证器和格式化函数"
+            }
+          ],
+          "key_learnings": [
+            "React组件的可复用性设计需要在通用性和特定性之间找到平衡",
+            "TypeScript泛型在复杂数据表格中的应用可以显著提高代码质量",
+            "表单状态管理应该考虑嵌套对象和数组的场景",
+            "UI组件库的设计应该从项目的实际需求出发，避免过度抽象",
+            "前端API调用应该统一错误处理和加载状态管理",
+            "响应式设计需要在组件级别考虑不同屏幕尺寸的适配",
+            "CSV数据处理需要考虑字符编码、特殊字符转义、数据验证等细节",
+            "批量导入功能的用户体验设计：模板下载→数据填写→文件上传→预览验证→导入执行→结果反馈",
+            "通用导入组件设计需要平衡灵活性和类型安全，泛型接口是关键",
+            "大批量数据处理应该提供进度反馈和错误详情，增强用户体验"
+          ]
+        }
       },
       {
         "task_id": "TKS-006",
@@ -214,13 +318,53 @@
         "milestone": "V1.0 (MVP)",
         "dependencies": ["TKS-004"],
         "priority": "高",
-        "status": "To Do",
+        "status": "Done",
         "effort_points": 5,
         "tags": ["backend", "api"],
         "acceptance_criteria": [
-          "可以为每个班级指定课程和授课老师",
-          "可以设置连排、场地要求等规则"
-        ]
+          "✅ 可以为每个班级指定课程和授课老师",
+          "✅ 可以设置连排、场地要求等规则"
+        ],
+        "completion_summary": {
+          "completed_date": "2024-12-19",
+          "actual_effort": 5,
+          "deliverables": [
+            "教学计划数据模型 (TeachingPlan.ts) - 支持班级课程安排配置",
+            "排课规则数据模型 (SchedulingRules.ts) - 完整的约束规则体系",
+            "API类型定义扩展 (api.ts) - 教学计划和排课规则接口",
+            "验证中间件扩展 (validation.ts) - 复杂数据结构验证",
+            "教学计划控制器 (teaching-plan-controller.ts) - CRUD + 审批功能",
+            "排课规则控制器 (scheduling-rules-controller.ts) - CRUD + 默认规则管理",
+            "RESTful路由配置和主应用注册",
+            "API测试指南文档更新"
+          ],
+          "challenges_and_solutions": [
+            {
+              "challenge": "复杂的教学计划数据结构设计 - 需要支持多课程、多教师、时间偏好等复杂配置",
+              "solution": "设计ICourseAssignment嵌套接口，支持课程-教师映射和灵活的时间偏好配置"
+            },
+            {
+              "challenge": "排课规则的多层次约束体系 - 时间、教师、教室、课程等多维度规则管理",
+              "solution": "分层设计约束接口：TimeRules、TeacherConstraints、RoomConstraints等，保持结构清晰可维护"
+            },
+            {
+              "challenge": "教学计划的业务流程管理 - 草稿、审批、激活等状态转换和权限控制",
+              "solution": "实现完整的状态机和审批流程，支持状态追踪和权限验证"
+            },
+            {
+              "challenge": "排课规则的默认机制和版本管理 - 跨学期规则继承和默认配置",
+              "solution": "设计唯一性约束和静态方法，支持默认规则设置、规则复制和版本管理"
+            }
+          ],
+          "key_learnings": [
+            "复杂业务模型设计需要平衡灵活性和约束性，过度灵活会导致数据一致性问题",
+            "嵌套数据结构的验证需要递归验证策略，确保数据完整性和业务逻辑正确性",
+            "教育业务的状态管理往往涉及审批流程，需要考虑权限控制和操作历史追踪",
+            "默认配置的设计要考虑数据迁移、版本兼容性和业务连续性问题",
+            "排课系统的约束规则设计是核心技术难点，直接影响后续智能排课算法的实现效果",
+            "API设计应该考虑业务场景的复杂性，提供足够的灵活性同时保持接口的简洁性"
+          ]
+        }
       },
       {
         "task_id": "TKS-007",

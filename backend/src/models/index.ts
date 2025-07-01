@@ -10,6 +10,8 @@ export { Class, IClass } from './Class';
 export { Course, ICourse, IRoomRequirement } from './Course';
 export { Room, IRoom } from './Room';
 export { Schedule, ISchedule } from './Schedule';
+export { default as TeachingPlan, ITeachingPlan, ICourseAssignment } from './TeachingPlan';
+export { SchedulingRules, ISchedulingRules, ITimeRules, ITeacherConstraints, IRoomConstraints, ICourseArrangementRules, IConflictResolutionRules } from './SchedulingRules';
 
 /**
  * 数据库初始化工具
