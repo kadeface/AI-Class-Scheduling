@@ -302,4 +302,5 @@ TeachingPlanSchema.statics.findCurrentPlan = function(
 
 const TeachingPlan = mongoose.model<ITeachingPlan, ITeachingPlanModel>('TeachingPlan', TeachingPlanSchema);
 
+export { TeachingPlan };
 export default TeachingPlan;
