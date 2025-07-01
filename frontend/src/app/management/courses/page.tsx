@@ -165,7 +165,7 @@ export default function CoursesPage() {
           </div>
           {requirements.types.length > 0 && (
             <div className="flex flex-wrap gap-1">
-              {requirements.types.slice(0, 2).map((type, index) => (
+              {requirements.types.slice(0, 2).map((type: any, index: number) => (
                 <span
                   key={index}
                   className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200"
