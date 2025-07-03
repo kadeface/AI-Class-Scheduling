@@ -262,12 +262,12 @@ export function printSchedule(
   // 写入HTML并打印
   printWindow.document.write(printHtml);
   printWindow.document.close();
-  
-  // 等待内容加载完成后打印
-  printWindow.onload = () => {
+
+  printWindow.focus();
+  setTimeout(() => {
     printWindow.print();
     printWindow.close();
-  };
+  }, 300); // 延迟确保内容渲染
 }
 
 /**
