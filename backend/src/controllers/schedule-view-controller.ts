@@ -100,17 +100,22 @@ export async function getClassSchedule(req: Request, res: Response): Promise<voi
       }
     }
 
-    // 填充课程数据
+    // 填充课程数据 - 添加安全的空值检查
     let totalHours = 0;
     schedules.forEach(schedule => {
+      // 安全访问关联对象属性
+      const course = schedule.course as any;
+      const teacher = schedule.teacher as any;
+      const room = schedule.room as any;
+
       const courseSlot: CourseSlot = {
-        courseId: schedule.course._id.toString(),
-        courseName: (schedule.course as any).name,
-        subject: (schedule.course as any).subject,
-        teacherId: schedule.teacher._id.toString(),
-        teacherName: (schedule.teacher as any).name,
-        roomId: schedule.room._id.toString(),
-        roomName: (schedule.room as any).name,
+        courseId: course?._id?.toString() || '',
+        courseName: course?.name || '未知课程',
+        subject: course?.subject || '未知科目',
+        teacherId: teacher?._id?.toString() || '',
+        teacherName: teacher?.name || '未知教师',
+        roomId: room?._id?.toString() || '',
+        roomName: room?.name || '未知教室',
         duration: 1, // 基础时长，后续处理连排
         notes: schedule.notes
       };
@@ -200,17 +205,22 @@ export async function getTeacherSchedule(req: Request, res: Response): Promise<v
       }
     }
 
-    // 填充课程数据
+    // 填充课程数据 - 添加安全的空值检查
     let totalHours = 0;
     schedules.forEach(schedule => {
+      // 安全访问关联对象属性
+      const course = schedule.course as any;
+      const classInfo = schedule.class as any;
+      const room = schedule.room as any;
+
       const courseSlot: CourseSlot = {
-        courseId: schedule.course._id.toString(),
-        courseName: `${(schedule.course as any).name} - ${(schedule.class as any).name}`,
-        subject: (schedule.course as any).subject,
-        teacherId: schedule.teacher._id.toString(),
+        courseId: course?._id?.toString() || '',
+        courseName: `${course?.name || '未知课程'} - ${classInfo?.name || '未知班级'}`,
+        subject: course?.subject || '未知科目',
+        teacherId: schedule.teacher._id?.toString() || '',
         teacherName: teacherInfo.name,
-        roomId: schedule.room._id.toString(),
-        roomName: (schedule.room as any).name,
+        roomId: room?._id?.toString() || '',
+        roomName: room?.name || '未知教室',
         duration: 1,
         notes: schedule.notes
       };
@@ -300,16 +310,21 @@ export async function getRoomSchedule(req: Request, res: Response): Promise<void
       }
     }
 
-    // 填充课程数据
+    // 填充课程数据 - 添加安全的空值检查
     let totalHours = 0;
     schedules.forEach(schedule => {
+      // 安全访问关联对象属性
+      const course = schedule.course as any;
+      const teacher = schedule.teacher as any;
+      const classInfo = schedule.class as any;
+
       const courseSlot: CourseSlot = {
-        courseId: schedule.course._id.toString(),
-        courseName: `${(schedule.course as any).name} - ${(schedule.class as any).name}`,
-        subject: (schedule.course as any).subject,
-        teacherId: schedule.teacher._id.toString(),
-        teacherName: (schedule.teacher as any).name,
-        roomId: schedule.room._id.toString(),
+        courseId: course?._id?.toString() || '',
+        courseName: `${course?.name || '未知课程'} - ${classInfo?.name || '未知班级'}`,
+        subject: course?.subject || '未知科目',
+        teacherId: teacher?._id?.toString() || '',
+        teacherName: teacher?.name || '未知教师',
+        roomId: schedule.room._id?.toString() || '',
         roomName: roomInfo.name,
         duration: 1,
         notes: schedule.notes

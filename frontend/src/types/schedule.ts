@@ -61,18 +61,31 @@ export interface Room {
  * 课程安排项
  */
 export interface ScheduleItem {
-  _id: string;
-  academicYear: string;   // 学年
-  semester: string;       // 学期
-  class: Class;           // 班级信息
-  course: Course;         // 课程信息
-  teacher: Teacher;       // 教师信息
-  room: Room;             // 场室信息
-  dayOfWeek: number;      // 星期几
-  period: number;         // 第几节课
-  duration?: number;      // 持续课时（默认1）
-  isFixed?: boolean;      // 是否固定安排
-  conflictStatus?: 'none' | 'warning' | 'error'; // 冲突状态
+  _id?: string;
+  class: {
+    _id: string;
+    name: string;
+    grade: number;
+  } | null;
+  course: {
+    _id: string;
+    name: string;
+    subject: string;
+  } | null;
+  teacher: {
+    _id: string;
+    name: string;
+  } | null;
+  room: {
+    _id: string;
+    name: string;
+    type: string;
+  } | null;
+  dayOfWeek: number;
+  period: number;
+  academicYear: string;
+  semester: string;
+  status: 'active' | 'draft' | 'suspended' | 'replaced';
 }
 
 /**
@@ -180,4 +193,20 @@ export interface CourseCardProps {
   showDetails?: boolean;
   compact?: boolean;
   className?: string;
+}
+
+/**
+ * 课程安排相关类型定义
+ */
+
+export interface ConflictInfo {
+  type: 'teacher' | 'class' | 'room';
+  message: string;
+  conflictingSchedule: ScheduleItem;
+}
+
+export interface Option {
+  _id: string;
+  name: string;
+  [key: string]: any;
 }

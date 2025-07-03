@@ -1,12 +1,16 @@
 /**
  * Separator组件
  * 
- * 基于Radix UI的Separator组件实现
+ * 简化版本的分隔符组件
  */
 
 import * as React from 'react';
-import * as SeparatorPrimitive from '@radix-ui/react-separator';
 import { cn } from '@/lib/utils';
+
+interface SeparatorProps extends React.HTMLAttributes<HTMLDivElement> {
+  orientation?: 'horizontal' | 'vertical';
+  decorative?: boolean;
+}
 
 /**
  * Separator组件
@@ -15,25 +19,22 @@ import { cn } from '@/lib/utils';
  *   className: 额外的CSS类名
  *   orientation: 分隔符方向
  *   decorative: 是否为装饰性分隔符
- *   ...props: 其他Separator属性
+ *   ...props: 其他div属性
  * 
  * Returns:
  *   React.ReactElement: Separator组件
  */
-const Separator = React.forwardRef<
-  React.ElementRef<typeof SeparatorPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof SeparatorPrimitive.Root>
->(
+const Separator = React.forwardRef<HTMLDivElement, SeparatorProps>(
   (
     { className, orientation = 'horizontal', decorative = true, ...props },
     ref
   ) => (
-    <SeparatorPrimitive.Root
+    <div
       ref={ref}
-      decorative={decorative}
-      orientation={orientation}
+      role={decorative ? 'none' : 'separator'}
+      aria-orientation={orientation}
       className={cn(
-        'shrink-0 bg-border',
+        'shrink-0 bg-gray-200 dark:bg-gray-700',
         orientation === 'horizontal' ? 'h-[1px] w-full' : 'h-full w-[1px]',
         className
       )}
@@ -41,6 +42,6 @@ const Separator = React.forwardRef<
     />
   )
 );
-Separator.displayName = SeparatorPrimitive.Root.displayName;
+Separator.displayName = 'Separator';
 
 export { Separator };

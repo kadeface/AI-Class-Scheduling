@@ -74,23 +74,23 @@ export const navigationItems: NavigationItem[] = [
   {
     id: 'scheduling',
     label: '排课管理',
-    href: '/scheduling',
+    href: '/management/schedules',
     icon: Calendar,
     children: [
       {
         id: 'manual-schedule',
         label: '手动排课',
-        href: '/scheduling/manual'
+        href: '/management/schedules/manual'
       },
       {
         id: 'auto-schedule',
         label: '智能排课',
-        href: '/scheduling/auto'
+        href: '/management/schedules/integrated'
       },
       {
         id: 'view-schedule',
         label: '查看课表',
-        href: '/scheduling/view'
+        href: '/management/schedules/schedule-view'
       }
     ]
   },

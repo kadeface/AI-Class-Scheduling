@@ -6,6 +6,7 @@
  * 课程时段接口定义
  */
 export interface CourseSlot {
+  scheduleId?: string;  // 添加课程安排记录ID，用于调课操作
   courseId: string;
   courseName: string;
   subject: string;

@@ -29,6 +29,8 @@ import teachingPlanRoutes from './routes/teaching-plan-routes';
 import schedulingRulesRoutes from './routes/scheduling-rules-routes';
 import schedulingRoutes from './routes/scheduling-routes';
 import scheduleViewRoutes from './routes/schedule-view-routes';
+import manualSchedulingRoutes from './routes/manual-scheduling-routes';
+import scheduleRoutes from './routes/schedule-routes';
 
 // 加载环境变量
 dotenv.config();
@@ -46,7 +48,11 @@ function configureMiddleware(): void {
   app.use(helmet());
   
   // 跨域中间件
-  const allowedOrigins = ['http://localhost:3000', 'http://localhost:3001'];
+  const allowedOrigins = [
+    'http://localhost:3000', 
+    'http://localhost:3001', 
+    'http://localhost:3003'  // 添加3003端口支持
+  ];
   if (process.env.CORS_ORIGIN) {
     allowedOrigins.push(process.env.CORS_ORIGIN);
   }
@@ -116,8 +122,14 @@ function configureRoutes(): void {
   // 智能排课路由
   app.use('/api/scheduling', schedulingRoutes);
   
+  // 手动调课路由
+  app.use('/api/manual-scheduling', manualSchedulingRoutes);
+  
   // 课表查看路由
   app.use('/api/schedule-view', scheduleViewRoutes);
+  
+  // 课程安排管理路由
+  app.use('/api/schedules', scheduleRoutes);
 }
 
 /**

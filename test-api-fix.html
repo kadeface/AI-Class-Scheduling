@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API修复测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        .success { color: green; }
+        .error { color: red; }
+        .loading { color: blue; }
+        pre { background: #f5f5f5; padding: 10px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>API修复测试</h1>
+    
+    <div class="test-section">
+        <h3>1. 测试课程安排列表API (/api/schedules)</h3>
+        <button onclick="testSchedulesAPI()">测试</button>
+        <div id="schedules-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>2. 测试班级课表API (/api/schedule-view/class/...)</h3>
+        <button onclick="testClassScheduleAPI()">测试</button>
+        <div id="class-schedule-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>3. 测试课表选项API (/api/schedule-view/options/classes)</h3>
+        <button onclick="testScheduleOptionsAPI()">测试</button>
+        <div id="options-result"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000';
+        
+        async function testAPI(url, elementId, description) {
+            const resultDiv = document.getElementById(elementId);
+            resultDiv.innerHTML = `<span class="loading">正在测试${description}...</span>`;
+            
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    resultDiv.innerHTML = `
+                        <span class="success">✅ ${description}成功</span>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <span class="error">❌ ${description}失败 (${response.status})</span>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <span class="error">❌ ${description}错误: ${error.message}</span>
+                `;
+            }
+        }
+        
+        function testSchedulesAPI() {
+            testAPI(
+                `${API_BASE}/api/schedules?academicYear=2024-2025&semester=1`,
+                'schedules-result',
+                '课程安排列表'
+            );
+        }
+        
+        function testClassScheduleAPI() {
+            // 使用一个示例班级ID
+            testAPI(
+                `${API_BASE}/api/schedule-view/class/686539f6b196ca68492ca139?academicYear=2024-2025&semester=1`,
+                'class-schedule-result',
+                '班级课表'
+            );
+        }
+        
+        function testScheduleOptionsAPI() {
+            testAPI(
+                `${API_BASE}/api/schedule-view/options/classes`,
+                'options-result',
+                '课表选项'
+            );
+        }
+        
+        // 页面加载后自动运行测试
+        window.onload = function() {
+            setTimeout(() => {
+                console.log('开始自动测试...');
+                testSchedulesAPI();
+                setTimeout(testClassScheduleAPI, 1000);
+                setTimeout(testScheduleOptionsAPI, 2000);
+            }, 2000); // 等待2秒让服务启动
+        };
+    </script>
+</body>
+</html> 
