@@ -31,7 +31,7 @@ export const createSchedulingRules = async (req: Request, res: Response): Promis
     const rulesData: CreateSchedulingRulesRequest = req.body;
     // TODO: 实现用户认证中间件后启用
     // const userId = req.user?.id;
-    const userId = 'temporary-user-id'; // 临时用户ID，待实现认证后修改
+    const userId = new mongoose.Types.ObjectId('6862641baff97ed1dbda1987'); // 使用系统管理员ID，待实现认证后修改
 
     // 如果设置为默认规则，检查是否已存在默认规则
     if (rulesData.isDefault) {
@@ -268,7 +268,7 @@ export const updateSchedulingRules = async (req: Request, res: Response): Promis
     const updateData: UpdateSchedulingRulesRequest = req.body;
     // TODO: 实现用户认证中间件后启用
     // const userId = req.user?.id;
-    const userId = 'temporary-user-id'; // 临时用户ID，待实现认证后修改
+    const userId = new mongoose.Types.ObjectId('6862641baff97ed1dbda1987'); // 使用系统管理员ID，待实现认证后修改
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       const response: ApiResponse = {
@@ -638,7 +638,7 @@ export const copySchedulingRules = async (req: Request, res: Response): Promise<
     const { targetAcademicYear, targetSemester, newName } = req.body;
     // TODO: 实现用户认证中间件后启用
     // const userId = req.user?.id;
-    const userId = 'temporary-user-id'; // 临时用户ID，待实现认证后修改
+    const userId = new mongoose.Types.ObjectId('6862641baff97ed1dbda1987'); // 使用系统管理员ID，待实现认证后修改
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       const response: ApiResponse = {

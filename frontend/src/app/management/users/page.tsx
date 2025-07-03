@@ -60,7 +60,7 @@ export default function UsersPage() {
     name: '',
     email: '',
     employeeId: '',
-    role: 'staff' as const,
+    role: 'staff' as User['role'],
     password: '',
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -112,7 +112,7 @@ export default function UsersPage() {
           teacher: { label: '教师', color: 'blue' },
           staff: { label: '职员', color: 'green' },
         };
-        const roleInfo = roleMap[value] || { label: '未知', color: 'gray' };
+        const roleInfo = roleMap[value as keyof typeof roleMap] || { label: '未知', color: 'gray' };
         
         return (
           <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-${roleInfo.color}-100 dark:bg-${roleInfo.color}-900 text-${roleInfo.color}-800 dark:text-${roleInfo.color}-200`}>
@@ -291,7 +291,7 @@ export default function UsersPage() {
         
         <Select
           value={searchParams.role}
-          onChange={(value) => setSearchParams(prev => ({ ...prev, role: value }))}
+          onValueChange={(value) => setSearchParams(prev => ({ ...prev, role: value }))}
           options={[
             { value: '', label: '全部角色' },
             { value: 'admin', label: '管理员' },
@@ -375,7 +375,7 @@ export default function UsersPage() {
               <Select
                 label="角色"
                 value={formData.role}
-                onChange={(value) => setFormData(prev => ({ ...prev, role: value as any }))}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, role: value as any }))}
                 options={[
                   { value: 'admin', label: '管理员' },
                   { value: 'teacher', label: '教师' },

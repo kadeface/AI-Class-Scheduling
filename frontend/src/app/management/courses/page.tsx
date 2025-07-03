@@ -223,6 +223,8 @@ export default function CoursesPage() {
    */
   const handleSearch = () => {
     setPagination(prev => ({ ...prev, current: 1 }));
+    // 强制重新获取数据
+    fetchCourses();
   };
 
   /**
@@ -450,7 +452,7 @@ export default function CoursesPage() {
         
         <Select
           value={searchParams.subject}
-          onChange={(value) => setSearchParams(prev => ({ ...prev, subject: value }))}
+          onValueChange={(value) => setSearchParams(prev => ({ ...prev, subject: value }))}
           options={[
             { value: '', label: '全部学科' },
             ...SUBJECTS.map(subject => ({ value: subject, label: subject }))
@@ -460,7 +462,7 @@ export default function CoursesPage() {
         
         <Select
           value={searchParams.isActive}
-          onChange={(value) => setSearchParams(prev => ({ ...prev, isActive: value }))}
+          onValueChange={(value) => setSearchParams(prev => ({ ...prev, isActive: value }))}
           options={[
             { value: '', label: '全部状态' },
             { value: 'true', label: '启用' },
@@ -532,15 +534,15 @@ export default function CoursesPage() {
                   required
                 />
 
-                <Select
-                  label="学科"
-                  value={formData.subject}
-                  onChange={(value) => setFormData(prev => ({ ...prev, subject: value }))}
-                  options={SUBJECTS.map(subject => ({ value: subject, label: subject }))}
-                  error={!!formErrors.subject}
-                  helperText={formErrors.subject}
-                  required
-                />
+                              <Select
+                label="学科"
+                value={formData.subject}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, subject: value }))}
+                options={SUBJECTS.map(subject => ({ value: subject, label: subject }))}
+                error={!!formErrors.subject}
+                helperText={formErrors.subject}
+                required
+              />
 
                 <Input
                   label="周课时数"

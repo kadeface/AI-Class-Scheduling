@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>排课规则API测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { color: green; }
+        .error { color: red; }
+        .loading { color: blue; }
+        button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🧪 排课规则API测试工具</h1>
+    
+    <div class="test-section">
+        <h2>步骤1: 后端健康检查</h2>
+        <button onclick="testBackendHealth()">测试后端连接</button>
+        <div id="health-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>步骤2: 排课规则列表API</h2>
+        <button onclick="testGetRules()">获取规则列表</button>
+        <div id="rules-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>步骤3: 创建排课规则API</h2>
+        <button onclick="testCreateRule()">创建测试规则</button>
+        <div id="create-result"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000';
+        
+        // 测试后端健康检查
+        async function testBackendHealth() {
+            const resultDiv = document.getElementById('health-result');
+            resultDiv.innerHTML = '<div class="loading">🔄 正在检查后端服务...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/health`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="success">✅ 后端服务正常</div>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<div class="error">❌ 后端响应错误: ${response.status}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">❌ 无法连接后端服务</div>
+                    <div>错误: ${error.message}</div>
+                    <div>💡 请确保后端服务已启动 (在backend目录运行: npm run dev)</div>
+                `;
+            }
+        }
+        
+        // 测试获取排课规则列表
+        async function testGetRules() {
+            const resultDiv = document.getElementById('rules-result');
+            resultDiv.innerHTML = '<div class="loading">🔄 正在获取排课规则列表...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/scheduling-rules`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="success">✅ 获取规则列表成功</div>
+                        <div>规则数量: ${data.data?.items?.length || 0}</div>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">❌ 获取规则列表失败: ${response.status}</div>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ 请求失败: ${error.message}</div>`;
+            }
+        }
+        
+        // 测试创建排课规则
+        async function testCreateRule() {
+            const resultDiv = document.getElementById('create-result');
+            resultDiv.innerHTML = '<div class="loading">🔄 正在创建测试排课规则...</div>';
+            
+            const testRule = {
+                name: '测试排课规则 - ' + new Date().getTime(),
+                description: '用于API测试的排课规则',
+                schoolType: 'high',
+                academicYear: '2024-2025',
+                semester: 1,
+                timeRules: {
+                    dailyPeriods: 8,
+                    workingDays: [1, 2, 3, 4, 5],
+                    periodDuration: 45,
+                    breakDuration: 10,
+                    lunchBreakStart: 4,
+                    lunchBreakDuration: 90,
+                    morningPeriods: [1, 2, 3, 4],
+                    afternoonPeriods: [5, 6, 7, 8]
+                },
+                teacherConstraints: {
+                    maxDailyHours: 6,
+                    maxContinuousHours: 3,
+                    minRestBetweenCourses: 1,
+                    avoidFridayAfternoon: true,
+                    respectTeacherPreferences: true,
+                    allowCrossGradeTeaching: true
+                },
+                roomConstraints: {
+                    respectCapacityLimits: true,
+                    allowRoomSharing: false,
+                    preferFixedClassrooms: true,
+                    specialRoomPriority: 'preferred'
+                },
+                courseArrangementRules: {
+                    allowContinuousCourses: true,
+                    maxContinuousHours: 2,
+                    distributionPolicy: 'balanced',
+                    avoidFirstLastPeriod: [],
+                    coreSubjectPriority: true,
+                    labCoursePreference: 'morning'
+                },
+                conflictResolutionRules: {
+                    teacherConflictResolution: 'strict',
+                    roomConflictResolution: 'strict',
+                    classConflictResolution: 'strict',
+                    allowOverride: false,
+                    priorityOrder: ['teacher', 'room', 'time']
+                },
+                isDefault: false
+            };
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/scheduling-rules`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(testRule)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="success">✅ 创建排课规则成功</div>
+                        <div>规则ID: ${data.data?.id}</div>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">❌ 创建排课规则失败: ${response.status}</div>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ 创建请求失败: ${error.message}</div>`;
+            }
+        }
+        
+        // 页面加载时自动测试后端连接
+        window.onload = function() {
+            testBackendHealth();
+        };
+    </script>
+</body>
+</html>

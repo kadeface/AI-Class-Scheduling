@@ -244,6 +244,8 @@ export default function RoomsPage() {
    */
   const handleSearch = () => {
     setPagination(prev => ({ ...prev, current: 1 }));
+    // 强制重新获取数据
+    fetchRooms();
   };
 
   /**
@@ -404,9 +406,10 @@ export default function RoomsPage() {
    * 处理设备选择
    */
   const handleEquipmentToggle = (equipment: string) => {
-    const newEquipment = formData.equipment.includes(equipment)
-      ? formData.equipment.filter(e => e !== equipment)
-      : [...formData.equipment, equipment];
+    const currentEquipment = formData.equipment || [];
+    const newEquipment = currentEquipment.includes(equipment)
+      ? currentEquipment.filter(e => e !== equipment)
+      : [...currentEquipment, equipment];
     
     setFormData(prev => ({ ...prev, equipment: newEquipment }));
   };
@@ -452,7 +455,7 @@ export default function RoomsPage() {
         
         <Select
           value={searchParams.type}
-          onChange={(value) => setSearchParams(prev => ({ ...prev, type: value }))}
+          onValueChange={(value) => setSearchParams(prev => ({ ...prev, type: value }))}
           options={[
             { value: '', label: '全部类型' },
             ...ROOM_TYPES.map(type => ({ value: type, label: type }))
@@ -462,7 +465,7 @@ export default function RoomsPage() {
         
         <Select
           value={searchParams.building}
-          onChange={(value) => setSearchParams(prev => ({ ...prev, building: value }))}
+          onValueChange={(value) => setSearchParams(prev => ({ ...prev, building: value }))}
           options={[
             { value: '', label: '全部建筑' },
             ...buildingOptions
@@ -472,7 +475,7 @@ export default function RoomsPage() {
         
         <Select
           value={searchParams.isActive}
-          onChange={(value) => setSearchParams(prev => ({ ...prev, isActive: value }))}
+          onValueChange={(value) => setSearchParams(prev => ({ ...prev, isActive: value }))}
           options={[
             { value: '', label: '全部状态' },
             { value: 'true', label: '可用' },
@@ -547,7 +550,7 @@ export default function RoomsPage() {
                 <Select
                   label="场室类型"
                   value={formData.type}
-                  onChange={(value) => setFormData(prev => ({ ...prev, type: value }))}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, type: value }))}
                   options={ROOM_TYPES.map(type => ({ value: type, label: type }))}
                   error={!!formErrors.type}
                   helperText={formErrors.type}
@@ -604,7 +607,7 @@ export default function RoomsPage() {
               <Select
                 label="分配班级"
                 value={formData.assignedClass}
-                onChange={(value) => setFormData(prev => ({ ...prev, assignedClass: value }))}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, assignedClass: value }))}
                 options={[
                   { value: '', label: '无分配班级' },
                   ...classes.map(classItem => ({
@@ -629,7 +632,7 @@ export default function RoomsPage() {
                   >
                     <input
                       type="checkbox"
-                      checked={formData.equipment.includes(equipment)}
+                      checked={(formData.equipment || []).includes(equipment)}
                       onChange={() => handleEquipmentToggle(equipment)}
                       className="mr-2"
                     />

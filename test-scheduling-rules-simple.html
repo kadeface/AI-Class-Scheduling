@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>排课规则调试工具</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            padding: 20px; 
+            max-width: 1200px; 
+            margin: 0 auto; 
+        }
+        .section { 
+            margin: 20px 0; 
+            padding: 15px; 
+            border: 1px solid #ddd; 
+            border-radius: 5px; 
+        }
+        .section h3 { 
+            margin-top: 0; 
+            color: #333; 
+        }
+        button { 
+            background: #007bff; 
+            color: white; 
+            padding: 10px 20px; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            margin: 5px; 
+        }
+        button:hover { 
+            background: #0056b3; 
+        }
+        button:disabled { 
+            background: #ccc; 
+            cursor: not-allowed; 
+        }
+        .result { 
+            margin: 10px 0; 
+            padding: 10px; 
+            border-radius: 4px; 
+        }
+        .success { 
+            background: #d4edda; 
+            color: #155724; 
+            border: 1px solid #c3e6cb; 
+        }
+        .error { 
+            background: #f8d7da; 
+            color: #721c24; 
+            border: 1px solid #f5c6cb; 
+        }
+        .warning { 
+            background: #fff3cd; 
+            color: #856404; 
+            border: 1px solid #ffeaa7; 
+        }
+        pre { 
+            background: #f8f9fa; 
+            padding: 10px; 
+            border-radius: 4px; 
+            overflow-x: auto; 
+            max-height: 300px; 
+        }
+        .rules-list {
+            display: grid;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .rule-item {
+            padding: 10px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            background: #f9f9f9;
+        }
+        .stats {
+            display: flex;
+            gap: 20px;
+            margin: 10px 0;
+        }
+        .stat-item {
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 排课规则调试工具</h1>
+    <p>用于诊断排课规则创建和显示问题</p>
+
+    <!-- 连接测试 -->
+    <div class="section">
+        <h3>1. 📡 连接测试</h3>
+        <button onclick="testConnection()">测试后端连接</button>
+        <div id="connection-result"></div>
+    </div>
+
+    <!-- 列表查询 -->
+    <div class="section">
+        <h3>2. 📋 列表查询</h3>
+        <button onclick="getRulesList()">获取排课规则列表</button>
+        <button onclick="getRulesListWithParams()">带参数查询</button>
+        <button onclick="clearResults()">清空结果</button>
+        
+        <div class="stats" id="rules-stats"></div>
+        <div id="rules-result"></div>
+    </div>
+
+    <!-- 创建测试 -->
+    <div class="section">
+        <h3>3. ✨ 创建测试</h3>
+        <button onclick="createTestRule()">创建测试规则</button>
+        <button onclick="createAndRefresh()">创建并刷新列表</button>
+        <div id="create-result"></div>
+    </div>
+
+    <!-- 完整流程测试 -->
+    <div class="section">
+        <h3>4. 🧪 完整流程测试</h3>
+        <button onclick="runFullTest()">运行完整测试</button>
+        <div id="full-test-result"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000';
+        let rulesList = [];
+
+        function showResult(elementId, type, message, data = null) {
+            const element = document.getElementById(elementId);
+            const icons = { success: '✅', error: '❌', warning: '⚠️' };
+            
+            element.innerHTML = `
+                <div class="result ${type}">
+                    ${icons[type] || 'ℹ️'} ${message}
+                    ${data ? `<pre>${typeof data === 'string' ? data : JSON.stringify(data, null, 2)}</pre>` : ''}
+                </div>
+            `;
+        }
+
+        function updateStats(total = 0, filtered = 0) {
+            const statsElement = document.getElementById('rules-stats');
+            statsElement.innerHTML = `
+                <div class="stat-item">
+                    <strong>${total}</strong><br>总规则数
+                </div>
+                <div class="stat-item">
+                    <strong>${filtered}</strong><br>当前显示
+                </div>
+                <div class="stat-item">
+                    <strong>${new Date().toLocaleTimeString()}</strong><br>最后更新
+                </div>
+            `;
+        }
+
+        async function testConnection() {
+            try {
+                const response = await fetch(`${API_BASE}/api/health`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult('connection-result', 'success', '后端连接正常', data);
+                } else {
+                    showResult('connection-result', 'error', `连接异常: ${response.status}`);
+                }
+            } catch (error) {
+                showResult('connection-result', 'error', `连接失败: ${error.message}`);
+            }
+        }
+
+        async function getRulesList() {
+            try {
+                const response = await fetch(`${API_BASE}/api/scheduling-rules`);
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    rulesList = data.data.items || [];
+                    updateStats(data.data.total, rulesList.length);
+                    
+                    if (rulesList.length > 0) {
+                        const listHtml = rulesList.map((rule, index) => `
+                            <div class="rule-item">
+                                <strong>${index + 1}. ${rule.name}</strong><br>
+                                <small>学年: ${rule.academicYear} | 学期: ${rule.semester} | 类型: ${rule.schoolType}</small><br>
+                                <small>创建: ${new Date(rule.createdAt).toLocaleString()}</small>
+                            </div>
+                        `).join('');
+                        
+                        document.getElementById('rules-result').innerHTML = `
+                            <div class="result success">
+                                获取成功，共 ${rulesList.length} 条规则
+                                <div class="rules-list">${listHtml}</div>
+                            </div>
+                        `;
+                    } else {
+                        showResult('rules-result', 'warning', '获取成功，但列表为空');
+                    }
+                } else {
+                    showResult('rules-result', 'error', '获取失败', data);
+                }
+            } catch (error) {
+                showResult('rules-result', 'error', `请求失败: ${error.message}`);
+                updateStats(0, 0);
+            }
+        }
+
+        async function getRulesListWithParams() {
+            try {
+                const params = new URLSearchParams({
+                    page: 1,
+                    limit: 10,
+                    keyword: '',
+                    academicYear: '',
+                    schoolType: ''
+                });
+                
+                const response = await fetch(`${API_BASE}/api/scheduling-rules?${params}`);
+                const data = await response.json();
+                
+                showResult('rules-result', 'success', '带参数查询结果', data);
+                
+                if (data.success && data.data) {
+                    updateStats(data.data.total, data.data.items?.length || 0);
+                }
+            } catch (error) {
+                showResult('rules-result', 'error', `查询失败: ${error.message}`);
+            }
+        }
+
+        async function createTestRule() {
+            const testData = {
+                name: `调试测试规则_${new Date().toISOString().slice(0, 16)}`,
+                description: '通过调试工具创建的测试规则',
+                schoolType: 'high',
+                academicYear: '2024-2025',
+                semester: 1,
+                timeRules: {
+                    dailyPeriods: 8,
+                    workingDays: [1, 2, 3, 4, 5],
+                    periodDuration: 45,
+                    breakDuration: 10,
+                    lunchBreakStart: 4,
+                    lunchBreakDuration: 90,
+                    morningPeriods: [1, 2, 3, 4],
+                    afternoonPeriods: [5, 6, 7, 8],
+                    forbiddenSlots: []
+                },
+                teacherConstraints: {
+                    maxDailyHours: 6,
+                    maxContinuousHours: 3,
+                    minRestBetweenCourses: 1,
+                    avoidFridayAfternoon: true,
+                    respectTeacherPreferences: true,
+                    allowCrossGradeTeaching: true
+                },
+                roomConstraints: {
+                    respectCapacityLimits: true,
+                    allowRoomSharing: false,
+                    preferFixedClassrooms: true,
+                    specialRoomPriority: 'preferred'
+                },
+                courseArrangementRules: {
+                    allowContinuousCourses: true,
+                    maxContinuousHours: 2,
+                    distributionPolicy: 'balanced',
+                    avoidFirstLastPeriod: [],
+                    coreSubjectPriority: true,
+                    labCoursePreference: 'morning'
+                },
+                conflictResolutionRules: {
+                    teacherConflictResolution: 'strict',
+                    roomConflictResolution: 'strict',
+                    classConflictResolution: 'strict',
+                    allowOverride: false,
+                    priorityOrder: ['teacher', 'room', 'time']
+                },
+                isDefault: false
+            };
+
+            try {
+                const response = await fetch(`${API_BASE}/api/scheduling-rules`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(testData)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    showResult('create-result', 'success', '创建成功！', data.data);
+                } else {
+                    showResult('create-result', 'error', '创建失败', data);
+                }
+            } catch (error) {
+                showResult('create-result', 'error', `创建失败: ${error.message}`);
+            }
+        }
+
+        async function createAndRefresh() {
+            // 记录创建前的数量
+            await getRulesList();
+            const beforeCount = rulesList.length;
+            
+            // 创建新规则
+            await createTestRule();
+            
+            // 等待1秒后刷新
+            setTimeout(async () => {
+                await getRulesList();
+                const afterCount = rulesList.length;
+                
+                const changeInfo = afterCount > beforeCount 
+                    ? `✅ 成功！规则数量从 ${beforeCount} 增加到 ${afterCount}`
+                    : `❌ 问题！规则数量没有变化 (${beforeCount} → ${afterCount})`;
+                
+                showResult('create-result', afterCount > beforeCount ? 'success' : 'error', changeInfo);
+            }, 1000);
+        }
+
+        async function runFullTest() {
+            const results = [];
+            
+            // 1. 测试连接
+            try {
+                const healthResponse = await fetch(`${API_BASE}/api/health`);
+                results.push(`连接测试: ${healthResponse.ok ? '✅ 成功' : '❌ 失败'}`);
+            } catch (error) {
+                results.push(`连接测试: ❌ 失败 - ${error.message}`);
+                showResult('full-test-result', 'error', '测试终止', results.join('\n'));
+                return;
+            }
+            
+            // 2. 测试获取列表
+            try {
+                const listResponse = await fetch(`${API_BASE}/api/scheduling-rules`);
+                const listData = await listResponse.json();
+                const beforeCount = listData.success ? listData.data.total : 0;
+                results.push(`列表查询: ${listResponse.ok ? `✅ 成功 (${beforeCount}条)` : '❌ 失败'}`);
+                
+                // 3. 测试创建
+                const testData = {
+                    name: `完整测试规则_${Date.now()}`,
+                    description: '完整流程测试',
+                    schoolType: 'high',
+                    academicYear: '2024-2025',
+                    semester: 1,
+                    timeRules: {
+                        dailyPeriods: 8,
+                        workingDays: [1, 2, 3, 4, 5],
+                        periodDuration: 45,
+                        breakDuration: 10,
+                        lunchBreakStart: 4,
+                        lunchBreakDuration: 90,
+                        morningPeriods: [1, 2, 3, 4],
+                        afternoonPeriods: [5, 6, 7, 8],
+                        forbiddenSlots: []
+                    },
+                    teacherConstraints: {
+                        maxDailyHours: 6,
+                        maxContinuousHours: 3,
+                        minRestBetweenCourses: 1,
+                        avoidFridayAfternoon: true,
+                        respectTeacherPreferences: true,
+                        allowCrossGradeTeaching: true
+                    },
+                    roomConstraints: {
+                        respectCapacityLimits: true,
+                        allowRoomSharing: false,
+                        preferFixedClassrooms: true,
+                        specialRoomPriority: 'preferred'
+                    },
+                    courseArrangementRules: {
+                        allowContinuousCourses: true,
+                        maxContinuousHours: 2,
+                        distributionPolicy: 'balanced',
+                        avoidFirstLastPeriod: [],
+                        coreSubjectPriority: true,
+                        labCoursePreference: 'morning'
+                    },
+                    conflictResolutionRules: {
+                        teacherConflictResolution: 'strict',
+                        roomConflictResolution: 'strict',
+                        classConflictResolution: 'strict',
+                        allowOverride: false,
+                        priorityOrder: ['teacher', 'room', 'time']
+                    },
+                    isDefault: false
+                };
+                
+                const createResponse = await fetch(`${API_BASE}/api/scheduling-rules`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(testData)
+                });
+                const createData = await createResponse.json();
+                results.push(`创建规则: ${createResponse.ok && createData.success ? '✅ 成功' : '❌ 失败'}`);
+                
+                // 4. 等待并重新查询
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                const listResponse2 = await fetch(`${API_BASE}/api/scheduling-rules`);
+                const listData2 = await listResponse2.json();
+                const afterCount = listData2.success ? listData2.data.total : 0;
+                
+                const countChange = afterCount - beforeCount;
+                results.push(`数据验证: ${countChange > 0 ? `✅ 成功增加${countChange}条` : '❌ 数据未增加'}`);
+                
+                showResult('full-test-result', countChange > 0 ? 'success' : 'error', '完整测试结果', results.join('\n'));
+                
+            } catch (error) {
+                results.push(`测试失败: ${error.message}`);
+                showResult('full-test-result', 'error', '测试异常', results.join('\n'));
+            }
+        }
+
+        function clearResults() {
+            ['connection-result', 'rules-result', 'create-result', 'full-test-result'].forEach(id => {
+                document.getElementById(id).innerHTML = '';
+            });
+            document.getElementById('rules-stats').innerHTML = '';
+        }
+
+        // 页面加载后自动测试连接
+        window.onload = function() {
+            testConnection();
+        };
+    </script>
+</body>
+</html> 

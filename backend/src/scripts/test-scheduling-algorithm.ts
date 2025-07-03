@@ -82,7 +82,7 @@ class TestDataGenerator {
     });
 
     await rules.save();
-    return rules._id;
+    return rules._id as mongoose.Types.ObjectId;
   }
 
   /**
@@ -107,7 +107,7 @@ class TestDataGenerator {
       });
       
       await classDoc.save();
-      classes.push(classDoc._id);
+      classes.push(classDoc._id as mongoose.Types.ObjectId);
     }
     
     return classes;
@@ -146,7 +146,7 @@ class TestDataGenerator {
       });
       
       await course.save();
-      courses.push(course._id);
+      courses.push(course._id as mongoose.Types.ObjectId);
     }
     
     return courses;
@@ -190,7 +190,7 @@ class TestDataGenerator {
       });
       
       await teacher.save();
-      teachers.push(teacher._id);
+      teachers.push(teacher._id as mongoose.Types.ObjectId);
     }
     
     return teachers;
@@ -229,7 +229,7 @@ class TestDataGenerator {
       });
       
       await room.save();
-      rooms.push(room._id);
+      rooms.push(room._id as mongoose.Types.ObjectId);
     }
     
     return rooms;
@@ -276,7 +276,7 @@ class TestDataGenerator {
       });
       
       await plan.save();
-      plans.push(plan._id);
+      plans.push(plan._id as mongoose.Types.ObjectId);
     }
     
     return plans;
@@ -423,7 +423,7 @@ class AlgorithmTester {
         
         console.log(`    ⏱️  执行时间: ${endTime - startTime}ms`);
         console.log(`    📊 成功率: ${result.statistics.assignedVariables}/${result.statistics.totalVariables} (${(result.statistics.assignedVariables/result.statistics.totalVariables*100).toFixed(1)}%)`);
-        console.log(`    🎯 算法效率: ${result.statistics.assignedVariables/(endTime - startTime)*1000:.1f} 分配/秒`);
+        console.log(`    🎯 算法效率: ${(result.statistics.assignedVariables/(endTime - startTime)*1000).toFixed(1)} 分配/秒`);
         
       } catch (error) {
         console.error(`    ❌ ${testCase.description} 测试失败:`, error);

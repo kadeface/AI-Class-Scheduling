@@ -28,6 +28,7 @@ import { roomRoutes } from './routes/room-routes';
 import teachingPlanRoutes from './routes/teaching-plan-routes';
 import schedulingRulesRoutes from './routes/scheduling-rules-routes';
 import schedulingRoutes from './routes/scheduling-routes';
+import scheduleViewRoutes from './routes/schedule-view-routes';
 
 // 加载环境变量
 dotenv.config();
@@ -114,6 +115,9 @@ function configureRoutes(): void {
   
   // 智能排课路由
   app.use('/api/scheduling', schedulingRoutes);
+  
+  // 课表查看路由
+  app.use('/api/schedule-view', scheduleViewRoutes);
 }
 
 /**

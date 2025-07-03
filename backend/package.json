@@ -8,6 +8,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "init-db": "ts-node src/scripts/init-database.ts",
+    "create-default-rules": "ts-node src/scripts/create-default-rules.ts",
+    "create-test-data": "ts-node src/scripts/create-test-data.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -20,6 +22,8 @@
   "author": "Your Name",
   "license": "MIT",
   "dependencies": {
+    "@types/axios": "^0.9.36",
+    "axios": "^1.10.0",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^17.0.0",

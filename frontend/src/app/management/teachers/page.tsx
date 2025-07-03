@@ -185,7 +185,8 @@ export default function TeachersPage() {
    */
   const handleSearch = () => {
     setPagination(prev => ({ ...prev, current: 1 }));
-    // searchParams 的变化会触发 useEffect 重新获取数据
+    // 强制重新获取数据
+    fetchTeachers();
   };
 
   /**
@@ -377,7 +378,7 @@ export default function TeachersPage() {
         
         <Select
           value={searchParams.subjects}
-          onChange={(value) => setSearchParams(prev => ({ ...prev, subjects: value }))}
+          onValueChange={(value) => setSearchParams(prev => ({ ...prev, subjects: value }))}
           options={[
             { value: '', label: '全部学科' },
             ...SUBJECTS.map(subject => ({ value: subject, label: subject }))
@@ -387,7 +388,7 @@ export default function TeachersPage() {
         
         <Select
           value={searchParams.isActive}
-          onChange={(value) => setSearchParams(prev => ({ ...prev, isActive: value }))}
+          onValueChange={(value) => setSearchParams(prev => ({ ...prev, isActive: value }))}
           options={[
             { value: '', label: '全部状态' },
             { value: 'true', label: '活跃' },

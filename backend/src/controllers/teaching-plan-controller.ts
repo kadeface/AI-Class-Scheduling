@@ -32,7 +32,7 @@ export const createTeachingPlan = async (req: Request, res: Response): Promise<v
     const planData: CreateTeachingPlanRequest = req.body;
     // TODO: 实现用户认证中间件后启用
     // const userId = req.user?.id; // 从认证中间件获取用户ID
-    const userId = 'temporary-user-id'; // 临时用户ID，待实现认证后修改
+    const userId = new mongoose.Types.ObjectId('6862641baff97ed1dbda1987'); // 使用系统管理员ID，待实现认证后修改
 
     // 检查是否已存在相同班级、学年、学期的教学计划
     const existingPlan = await TeachingPlan.findOne({
@@ -294,7 +294,7 @@ export const updateTeachingPlan = async (req: Request, res: Response): Promise<v
     const updateData: UpdateTeachingPlanRequest = req.body;
     // TODO: 实现用户认证中间件后启用
     // const userId = req.user?.id;
-    const userId = 'temporary-user-id'; // 临时用户ID，待实现认证后修改
+    const userId = new mongoose.Types.ObjectId('6862641baff97ed1dbda1987'); // 使用系统管理员ID，待实现认证后修改
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       const response: ApiResponse = {
@@ -518,7 +518,7 @@ export const approveTeachingPlan = async (req: Request, res: Response): Promise<
     const { approve, comments }: ApproveTeachingPlanRequest = req.body;
     // TODO: 实现用户认证中间件后启用
     // const userId = req.user?.id;
-    const userId = 'temporary-user-id'; // 临时用户ID，待实现认证后修改
+    const userId = new mongoose.Types.ObjectId('6862641baff97ed1dbda1987'); // 使用系统管理员ID，待实现认证后修改
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       const response: ApiResponse = {
@@ -675,51 +675,55 @@ function transformTeachingPlanToResponse(plan: any): TeachingPlanResponse {
   return {
     _id: plan._id.toString(),
     class: {
-      _id: plan.class._id.toString(),
-      name: plan.class.name,
-      grade: plan.class.grade
+      _id: plan.class?._id?.toString() || '',
+      name: plan.class?.name || '未知班级',
+      grade: plan.class?.grade || 0
     },
     academicYear: plan.academicYear,
     semester: plan.semester,
-    courseAssignments: plan.courseAssignments.map((assignment: any) => ({
+    courseAssignments: plan.courseAssignments?.map((assignment: any) => ({
       course: {
-        _id: assignment.course._id.toString(),
-        name: assignment.course.name,
-        subject: assignment.course.subject,
-        courseCode: assignment.course.courseCode,
-        weeklyHours: assignment.course.weeklyHours
+        _id: assignment.course?._id?.toString() || '',
+        name: assignment.course?.name || '未知课程',
+        subject: assignment.course?.subject || '未知学科',
+        courseCode: assignment.course?.courseCode || '',
+        weeklyHours: assignment.course?.weeklyHours || 0
       },
       teacher: {
-        _id: assignment.teacher._id.toString(),
-        name: assignment.teacher.name,
-        employeeId: assignment.teacher.employeeId,
-        subjects: assignment.teacher.subjects
+        _id: assignment.teacher?._id?.toString() || '',
+        name: assignment.teacher?.name || '未知教师',
+        employeeId: assignment.teacher?.employeeId || '',
+        subjects: assignment.teacher?.subjects || []
       },
       weeklyHours: assignment.weeklyHours,
       requiresContinuous: assignment.requiresContinuous,
       continuousHours: assignment.continuousHours,
-      preferredTimeSlots: assignment.preferredTimeSlots,
-      avoidTimeSlots: assignment.avoidTimeSlots,
+      preferredTimeSlots: assignment.preferredTimeSlots || [],
+      avoidTimeSlots: assignment.avoidTimeSlots || [],
       notes: assignment.notes
-    })),
+    })) || [],
     totalWeeklyHours: plan.totalWeeklyHours,
     status: plan.status,
     approvedBy: plan.approvedBy ? {
-      _id: plan.approvedBy._id.toString(),
-      username: plan.approvedBy.username,
-      profile: { name: plan.approvedBy.profile.name }
+      _id: plan.approvedBy._id?.toString() || '',
+      username: plan.approvedBy.username || '未知用户',
+      profile: { name: plan.approvedBy.profile?.name || '未知用户' }
     } : undefined,
     approvedAt: plan.approvedAt,
     notes: plan.notes,
-    createdBy: {
-      _id: plan.createdBy._id.toString(),
-      username: plan.createdBy.username,
-      profile: { name: plan.createdBy.profile.name }
+    createdBy: plan.createdBy ? {
+      _id: plan.createdBy._id?.toString() || '',
+      username: plan.createdBy.username || '未知用户',
+      profile: { name: plan.createdBy.profile?.name || '未知用户' }
+    } : {
+      _id: '',
+      username: '系统',
+      profile: { name: '系统' }
     },
     updatedBy: plan.updatedBy ? {
-      _id: plan.updatedBy._id.toString(),
-      username: plan.updatedBy.username,
-      profile: { name: plan.updatedBy.profile.name }
+      _id: plan.updatedBy._id?.toString() || '',
+      username: plan.updatedBy.username || '未知用户',
+      profile: { name: plan.updatedBy.profile?.name || '未知用户' }
     } : undefined,
     isActive: plan.isActive,
     createdAt: plan.createdAt,

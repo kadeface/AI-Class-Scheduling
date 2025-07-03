@@ -52,6 +52,32 @@ import {
 import { formatDateTime, cn } from '@/lib/utils';
 
 /**
+ * 生成学年选项列表
+ * 
+ * Returns:
+ *   Array<{value: string, label: string}>: 学年选项
+ */
+const generateAcademicYearOptions = () => {
+  const currentYear = new Date().getFullYear();
+  const options = [];
+  
+  // 生成前2年到后5年的学年选项
+  for (let i = -2; i <= 5; i++) {
+    const startYear = currentYear + i;
+    const endYear = startYear + 1;
+    const value = `${startYear}-${endYear}`;
+    options.push({
+      value,
+      label: `${startYear}-${endYear}学年`
+    });
+  }
+  
+  return options;
+};
+
+const ACADEMIC_YEAR_OPTIONS = generateAcademicYearOptions();
+
+/**
  * 排课规则管理页面组件
  * 
  * Returns:
@@ -74,6 +100,7 @@ export default function SchedulingRulesPage() {
     semester: undefined,
     schoolType: '',
     isDefault: undefined,
+    isActive: true, // 默认只显示活跃的规则
   });
 
   // 对话框状态
@@ -86,13 +113,18 @@ export default function SchedulingRulesPage() {
 
   // 当前操作的排课规则
   const [selectedRules, setSelectedRules] = useState<SchedulingRules | null>(null);
+  
+  // 操作状态
+  const [isCreating, setIsCreating] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [operationError, setOperationError] = useState<string>('');
 
   // 表单数据
   const [formData, setFormData] = useState<CreateSchedulingRulesRequest>({
     name: '',
     description: '',
     schoolType: 'high',
-    academicYear: new Date().getFullYear().toString(),
+    academicYear: `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
     semester: 1,
     timeRules: {
       dailyPeriods: 8,
@@ -156,16 +188,25 @@ export default function SchedulingRulesPage() {
         limit: pagination.pageSize,
       };
       
+      console.log('获取排课规则列表，参数:', params);
+      
       const response = await schedulingRulesApi.getList(params);
+      console.log('获取排课规则列表响应:', response);
+      
       if (response.success && response.data) {
+        console.log('设置排课规则数据:', response.data.items);
         setSchedulingRules(response.data.items);
         setPagination(prev => ({
           ...prev,
           total: response.data!.total,
         }));
+      } else {
+        console.warn('获取排课规则列表失败:', response);
+        setSchedulingRules([]);
       }
     } catch (error) {
       console.error('获取排课规则失败:', error);
+      setSchedulingRules([]);
     } finally {
       setLoading(false);
     }
@@ -196,8 +237,13 @@ export default function SchedulingRulesPage() {
       semester: undefined,
       schoolType: '',
       isDefault: undefined,
+      isActive: true, // 默认只显示活跃的规则
     });
     setPagination(prev => ({ ...prev, current: 1 }));
+    // 重置后立即刷新数据
+    setTimeout(() => {
+      fetchSchedulingRules();
+    }, 100);
   };
 
   /**
@@ -208,7 +254,7 @@ export default function SchedulingRulesPage() {
       name: '',
       description: '',
       schoolType: 'high',
-      academicYear: new Date().getFullYear().toString(),
+      academicYear: `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
       semester: 1,
       timeRules: {
         dailyPeriods: 8,
@@ -290,7 +336,7 @@ export default function SchedulingRulesPage() {
   const openCopyDialog = (rules: SchedulingRules) => {
     setSelectedRules(rules);
     setCopyFormData({
-      targetAcademicYear: (parseInt(rules.academicYear) + 1).toString(),
+      targetAcademicYear: '',
       targetSemester: rules.semester,
       newName: `${rules.name} (副本)`,
     });
@@ -308,20 +354,68 @@ export default function SchedulingRulesPage() {
       copy: false,
     });
     setSelectedRules(null);
+    setOperationError('');
+    setIsCreating(false);
+    setIsUpdating(false);
   };
 
   /**
    * 创建排课规则
    */
   const handleCreate = async () => {
+    if (!formData.name.trim()) {
+      setOperationError('请输入规则名称');
+      return;
+    }
+    
+    if (!formData.academicYear.trim()) {
+      setOperationError('请输入学年');
+      return;
+    }
+
+    setIsCreating(true);
+    setOperationError('');
+    
     try {
+      console.log('开始创建排课规则:', formData);
       const response = await schedulingRulesApi.create(formData);
+      
+      console.log('API响应:', response);
+      
       if (response.success) {
+        console.log('创建成功，关闭对话框并刷新列表');
+        
+        // 重置分页到第一页，确保能看到新创建的数据
+        setPagination(prev => ({ ...prev, current: 1 }));
+        
+        // 清空搜索条件，确保新数据不被过滤
+        setSearchParams({
+          keyword: '',
+          academicYear: '',
+          semester: undefined,
+          schoolType: '',
+          isDefault: undefined,
+          isActive: true, // 保持只显示活跃规则
+        });
+        
         closeDialogs();
-        fetchSchedulingRules();
+        
+        // 延迟刷新，确保状态更新完成
+        setTimeout(async () => {
+          await fetchSchedulingRules();
+          alert('排课规则创建成功！新规则已显示在列表中。');
+        }, 100);
+      } else {
+        setOperationError(response.message || '创建失败，请重试');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('创建排课规则失败:', error);
+      const errorMessage = error.response?.data?.message || 
+                          error.message || 
+                          '网络错误，请检查后端服务是否正常运行';
+      setOperationError(errorMessage);
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -331,14 +425,36 @@ export default function SchedulingRulesPage() {
   const handleUpdate = async () => {
     if (!selectedRules) return;
     
+    if (!formData.name.trim()) {
+      setOperationError('请输入规则名称');
+      return;
+    }
+    
+    if (!formData.academicYear.trim()) {
+      setOperationError('请输入学年');
+      return;
+    }
+
+    setIsUpdating(true);
+    setOperationError('');
+    
     try {
       const response = await schedulingRulesApi.update(selectedRules._id, formData);
       if (response.success) {
         closeDialogs();
-        fetchSchedulingRules();
+        await fetchSchedulingRules();
+        alert('排课规则更新成功！');
+      } else {
+        setOperationError(response.message || '更新失败，请重试');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('更新排课规则失败:', error);
+      const errorMessage = error.response?.data?.message || 
+                          error.message || 
+                          '网络错误，请检查后端服务是否正常运行';
+      setOperationError(errorMessage);
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -346,15 +462,27 @@ export default function SchedulingRulesPage() {
    * 删除排课规则
    */
   const handleDelete = async (id: string) => {
-    if (!confirm('确定要删除这个排课规则吗？')) return;
+    if (!confirm('确定要删除这个排课规则吗？\n注意：删除后规则将被停用，但不会从数据库中彻底删除。')) return;
     
     try {
+      console.log('开始删除排课规则:', id);
       const response = await schedulingRulesApi.delete(id);
+      
+      console.log('删除API响应:', response);
+      
       if (response.success) {
-        fetchSchedulingRules();
+        console.log('删除成功，刷新列表');
+        await fetchSchedulingRules();
+        alert('排课规则已成功删除（停用）');
+      } else {
+        alert(`删除失败: ${response.message || '未知错误'}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('删除排课规则失败:', error);
+      const errorMessage = error.response?.data?.message || 
+                          error.message || 
+                          '网络错误，请检查后端服务是否正常运行';
+      alert(`删除失败: ${errorMessage}`);
     }
   };
 
@@ -546,7 +674,7 @@ export default function SchedulingRulesPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
             <Input
               placeholder="搜索规则名称..."
               value={searchParams.keyword || ''}
@@ -555,14 +683,20 @@ export default function SchedulingRulesPage() {
                 keyword: e.target.value 
               }))}
             />
-            <Input
-              placeholder="学年 (如: 2024)"
+            <Select
               value={searchParams.academicYear || ''}
-              onChange={(e) => setSearchParams(prev => ({ 
+              onValueChange={(value) => setSearchParams(prev => ({ 
                 ...prev, 
-                academicYear: e.target.value 
+                academicYear: value 
               }))}
-            />
+            >
+              <option value="">全部学年</option>
+              {ACADEMIC_YEAR_OPTIONS.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
             <Select
               value={searchParams.semester?.toString() || ''}
               onValueChange={(value) => setSearchParams(prev => ({ 
@@ -599,6 +733,17 @@ export default function SchedulingRulesPage() {
               <option value="true">默认规则</option>
               <option value="false">非默认规则</option>
             </Select>
+            <Select
+              value={searchParams.isActive?.toString() || ''}
+              onValueChange={(value) => setSearchParams(prev => ({ 
+                ...prev, 
+                isActive: value === 'true' ? true : value === 'false' ? false : undefined 
+              }))}
+            >
+              <option value="">全部状态</option>
+              <option value="true">活跃规则</option>
+              <option value="false">已删除规则</option>
+            </Select>
             <div className="flex gap-2">
               <Button onClick={handleSearch} className="flex-1">
                 搜索
@@ -622,10 +767,10 @@ export default function SchedulingRulesPage() {
         <CardContent>
           <DataTable
             columns={columns}
-            data={schedulingRules}
+            dataSource={schedulingRules}
             loading={loading}
             pagination={pagination}
-            onPaginationChange={setPagination}
+            onPageChange={(page, pageSize) => setPagination(prev => ({ ...prev, current: page, pageSize }))}
           />
         </CardContent>
       </Card>
@@ -689,12 +834,16 @@ export default function SchedulingRulesPage() {
                     
                     <div>
                       <Label htmlFor="academicYear">学年 *</Label>
-                      <Input
-                        id="academicYear"
-                        placeholder="如：2024-2025"
+                      <Select
                         value={formData.academicYear}
-                        onChange={(e) => setFormData(prev => ({ ...prev, academicYear: e.target.value }))}
-                      />
+                        onValueChange={(value) => setFormData(prev => ({ ...prev, academicYear: value }))}
+                      >
+                        {ACADEMIC_YEAR_OPTIONS.map(option => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </Select>
                     </div>
                     
                     <div>
@@ -1218,18 +1367,39 @@ export default function SchedulingRulesPage() {
             </TabsContent>
           </Tabs>
 
+          {/* 错误信息显示 */}
+          {operationError && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+              <div className="flex items-center">
+                <AlertTriangle className="h-4 w-4 text-red-500 mr-2" />
+                <span className="text-red-700 text-sm">{operationError}</span>
+              </div>
+            </div>
+          )}
+
           <DialogFooter>
             <Button 
               variant="outline" 
-              onClick={() => setDialogState(prev => ({ ...prev, create: false }))}
+              onClick={() => {
+                setDialogState(prev => ({ ...prev, create: false }));
+                setOperationError('');
+              }}
+              disabled={isCreating}
             >
               取消
             </Button>
             <Button 
               onClick={handleCreate}
-              disabled={!formData.name || !formData.academicYear}
+              disabled={!formData.name || !formData.academicYear || isCreating}
             >
-              创建排课规则
+              {isCreating ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  创建中...
+                </>
+              ) : (
+                '创建排课规则'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1294,12 +1464,16 @@ export default function SchedulingRulesPage() {
                     
                     <div>
                       <Label htmlFor="edit-academicYear">学年 *</Label>
-                      <Input
-                        id="edit-academicYear"
-                        placeholder="如：2024-2025"
+                      <Select
                         value={formData.academicYear}
-                        onChange={(e) => setFormData(prev => ({ ...prev, academicYear: e.target.value }))}
-                      />
+                        onValueChange={(value) => setFormData(prev => ({ ...prev, academicYear: value }))}
+                      >
+                        {ACADEMIC_YEAR_OPTIONS.map(option => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </Select>
                     </div>
                     
                     <div>
@@ -1824,18 +1998,36 @@ export default function SchedulingRulesPage() {
             </TabsContent>
           </Tabs>
 
+          {/* 错误信息显示 */}
+          {operationError && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+              <div className="flex items-center">
+                <AlertTriangle className="h-4 w-4 text-red-500 mr-2" />
+                <span className="text-red-700 text-sm">{operationError}</span>
+              </div>
+            </div>
+          )}
+
           <DialogFooter>
             <Button 
               variant="outline" 
               onClick={closeDialogs}
+              disabled={isUpdating}
             >
               取消
             </Button>
             <Button 
               onClick={handleUpdate}
-              disabled={!formData.name || !formData.academicYear}
+              disabled={!formData.name || !formData.academicYear || isUpdating}
             >
-              保存修改
+              {isUpdating ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  保存中...
+                </>
+              ) : (
+                '保存修改'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2142,12 +2334,17 @@ export default function SchedulingRulesPage() {
           <div className="space-y-4">
             <div>
               <Label htmlFor="copy-targetAcademicYear">目标学年 *</Label>
-              <Input
-                id="copy-targetAcademicYear"
-                placeholder="如：2025-2026"
+              <Select
                 value={copyFormData.targetAcademicYear}
-                onChange={(e) => setCopyFormData(prev => ({ ...prev, targetAcademicYear: e.target.value }))}
-              />
+                onValueChange={(value) => setCopyFormData(prev => ({ ...prev, targetAcademicYear: value }))}
+              >
+                <option value="">请选择学年</option>
+                {ACADEMIC_YEAR_OPTIONS.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
             </div>
             
             <div>

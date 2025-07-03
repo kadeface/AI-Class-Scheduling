@@ -497,13 +497,83 @@
         "milestone": "V1.0 (MVP)",
         "dependencies": ["TKS-008"],
         "priority": "高",
-        "status": "To Do",
+        "status": "Done",
         "effort_points": 3,
         "tags": ["backend", "api"],
         "acceptance_criteria": [
-          "提供一个API触发排课任务",
-          "提供一个API查询排课进度和结果"
-        ]
+          "✅ 提供一个API触发排课任务",
+          "✅ 提供一个API查询排课进度和结果"
+        ],
+        "completion_summary": {
+          "completed_date": "2025-01-01",
+          "actual_effort": 0,
+          "deliverables": [
+            "异步排课API端点 (POST /api/scheduling/start)",
+            "任务状态查询API (GET /api/scheduling/tasks/:taskId)",
+            "任务列表查询API (GET /api/scheduling/tasks)",
+            "任务管理API (停止任务、删除任务记录)",
+            "排课验证API (POST /api/scheduling/validate)",
+            "排课统计API (GET /api/scheduling/statistics)",
+            "算法配置预设API (GET /api/scheduling/presets)",
+            "完整的任务状态管理系统（running/completed/failed）",
+            "实时进度回调和监控机制",
+            "异步任务执行框架和错误处理"
+          ],
+          "implementation_notes": [
+            "TKS-009的核心功能在TKS-008开发过程中已完全实现",
+            "SchedulingController提供了完整的RESTful API接口",
+            "SchedulingService实现了异步任务管理和进度监控",
+            "任务状态使用内存Map存储，支持并发访问和实时查询",
+            "进度回调机制支持细粒度的执行状态反馈",
+            "API设计符合RESTful规范，提供统一的响应格式"
+          ],
+          "technical_achievements": [
+            "实现完整的异步排课API，支持任务启动、状态查询、进度监控",
+            "设计了灵活的任务状态管理系统，支持running/completed/failed状态",
+            "提供了丰富的API接口：启动、查询、验证、统计、配置管理",
+            "实现了实时进度回调机制，用户可以监控排课算法执行进度",
+            "支持任务管理功能：停止任务、删除记录、批量清理",
+            "集成了排课验证和统计分析功能，便于结果评估",
+            "提供了算法配置预设（快速/均衡/精细），适应不同使用场景"
+          ],
+          "api_endpoints": [
+            "POST /api/scheduling/start - 启动异步排课任务",
+            "GET /api/scheduling/tasks/:taskId - 查询指定任务状态和进度",
+            "GET /api/scheduling/tasks - 获取所有任务列表",
+            "POST /api/scheduling/tasks/:taskId/stop - 停止指定任务",
+            "DELETE /api/scheduling/tasks/:taskId - 删除任务记录",
+            "POST /api/scheduling/validate - 验证现有排课结果",
+            "GET /api/scheduling/statistics - 获取排课统计信息",
+            "GET /api/scheduling/presets - 获取算法配置预设",
+            "POST /api/scheduling/cleanup - 清理已完成的任务"
+          ],
+          "challenges_and_solutions": [
+            {
+              "challenge": "异步任务的状态管理 - 需要支持并发访问和实时查询",
+              "solution": "使用Map数据结构存储任务状态，配合MongoDB ObjectId生成唯一任务ID"
+            },
+            {
+              "challenge": "进度回调的实现 - 长时间运行的算法需要实时进度反馈",
+              "solution": "设计ProgressCallback接口，支持stage、percentage、message等细粒度进度信息"
+            },
+            {
+              "challenge": "API的RESTful设计 - 需要符合标准HTTP语义和响应格式",
+              "solution": "采用统一的ApiResponse格式，合理使用HTTP方法和状态码"
+            },
+            {
+              "challenge": "任务生命周期管理 - 支持任务启动、监控、停止、清理",
+              "solution": "实现完整的任务管理接口，支持任务状态追踪和历史记录管理"
+            }
+          ],
+          "key_learnings": [
+            "异步API设计需要考虑任务状态管理、进度监控、错误处理等多个维度",
+            "RESTful API设计应该提供一致的接口风格和响应格式",
+            "实时进度反馈对于长时间运行的算法任务用户体验至关重要",
+            "任务管理系统的设计要平衡功能完整性和简洁性",
+            "API文档和测试指南是确保接口质量的重要保障",
+            "算法封装成API服务需要考虑并发性、可扩展性和可维护性"
+          ]
+        }
       },
       {
         "task_id": "TKS-010",

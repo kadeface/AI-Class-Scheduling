@@ -233,6 +233,8 @@ export default function ClassesPage() {
    */
   const handleSearch = () => {
     setPagination(prev => ({ ...prev, current: 1 }));
+    // 强制重新获取数据
+    fetchClasses();
   };
 
   /**
@@ -430,21 +432,21 @@ export default function ClassesPage() {
         
         <Select
           value={searchParams.grade}
-          onChange={(value) => setSearchParams(prev => ({ ...prev, grade: value }))}
+          onValueChange={(value) => setSearchParams(prev => ({ ...prev, grade: value }))}
           options={[{ value: '', label: '全部年级' }, ...gradeOptions]}
           className="w-32"
         />
         
         <Select
           value={searchParams.academicYear}
-          onChange={(value) => setSearchParams(prev => ({ ...prev, academicYear: value }))}
+          onValueChange={(value) => setSearchParams(prev => ({ ...prev, academicYear: value }))}
           options={[{ value: '', label: '全部学年' }, ...academicYearOptions]}
           className="w-40"
         />
         
         <Select
           value={searchParams.isActive}
-          onChange={(value) => setSearchParams(prev => ({ ...prev, isActive: value }))}
+          onValueChange={(value) => setSearchParams(prev => ({ ...prev, isActive: value }))}
           options={[
             { value: '', label: '全部状态' },
             { value: 'true', label: '活跃' },
@@ -504,7 +506,7 @@ export default function ClassesPage() {
               <Select
                 label="年级"
                 value={String(formData.grade)}
-                onChange={(value) => setFormData(prev => ({ ...prev, grade: parseInt(value) }))}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, grade: parseInt(value) }))}
                 options={gradeOptions}
                 required
               />
@@ -526,7 +528,7 @@ export default function ClassesPage() {
               <Select
                 label="学期"
                 value={String(formData.semester)}
-                onChange={(value) => setFormData(prev => ({ ...prev, semester: parseInt(value) }))}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, semester: parseInt(value) }))}
                 options={[
                   { value: '1', label: '上学期' },
                   { value: '2', label: '下学期' },
@@ -539,7 +541,7 @@ export default function ClassesPage() {
               <Select
                 label="学年"
                 value={formData.academicYear}
-                onChange={(value) => setFormData(prev => ({ ...prev, academicYear: value }))}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, academicYear: value }))}
                 options={academicYearOptions}
                 required
               />
@@ -547,7 +549,7 @@ export default function ClassesPage() {
               <Select
                 label="班主任"
                 value={formData.classTeacher}
-                onChange={(value) => setFormData(prev => ({ ...prev, classTeacher: value }))}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, classTeacher: value }))}
                 options={[
                   { value: '', label: '请选择班主任' },
                   ...teachers.map(teacher => ({
@@ -561,7 +563,7 @@ export default function ClassesPage() {
             <Select
               label="教室"
               value={formData.homeroom}
-              onChange={(value) => setFormData(prev => ({ ...prev, homeroom: value }))}
+              onValueChange={(value) => setFormData(prev => ({ ...prev, homeroom: value }))}
               options={[
                 { value: '', label: '请选择教室' },
                 ...rooms.map(room => ({

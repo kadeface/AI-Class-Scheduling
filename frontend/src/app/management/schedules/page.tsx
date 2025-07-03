@@ -36,7 +36,7 @@ export default function SchedulesPage() {
       </div>
 
       {/* 功能卡片网格 */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {/* 教学计划管理 */}
         <Card className="hover:shadow-lg transition-shadow">
           <CardHeader>
@@ -107,6 +107,45 @@ export default function SchedulesPage() {
                 <Link href="/management/schedules/scheduling-rules">
                   <Button className="gap-2">
                     管理规则
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 课表查看 */}
+        <Card className="hover:shadow-lg transition-shadow">
+          <CardHeader>
+            <div className="flex items-center space-x-2">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-100 dark:bg-purple-900">
+                <Calendar className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div>
+                <CardTitle>课表查看</CardTitle>
+                <CardDescription>
+                  查看课表网格，支持拖拽调课
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                可视化课表展示，支持拖拽操作调整课程时间，实时反馈冲突状态。
+              </p>
+              <div className="flex items-center justify-between">
+                <div className="text-sm">
+                  <div className="flex items-center space-x-4 text-muted-foreground">
+                    <span>• 网格化显示</span>
+                    <span>• 拖拽调课</span>
+                    <span>• 冲突检测</span>
+                  </div>
+                </div>
+                <Link href="/management/schedules/schedule-view">
+                  <Button className="gap-2">
+                    查看课表
                     <ArrowRight className="h-4 w-4" />
                   </Button>
                 </Link>

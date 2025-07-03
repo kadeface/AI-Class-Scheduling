@@ -92,8 +92,16 @@ const CourseAssignmentSchema = new Schema<ICourseAssignment>({
   
   continuousHours: {
     type: Number,
-    min: [2, '连排课时数至少为2'],
-    max: [4, '连排课时数不能超过4']
+    validate: {
+      validator: function(this: ICourseAssignment, value: number) {
+        // 只有当需要连排时才验证连排课时数
+        if (this.requiresContinuous) {
+          return value >= 2 && value <= 4;
+        }
+        return true; // 不需要连排时，不验证
+      },
+      message: '连排课时数必须在2-4之间'
+    }
   },
   
   preferredTimeSlots: [{
@@ -127,6 +135,15 @@ const CourseAssignmentSchema = new Schema<ICourseAssignment>({
     maxlength: [500, '备注信息不能超过500个字符']
   }
 }, { _id: false });
+
+// 添加文档级验证
+CourseAssignmentSchema.path('requiresContinuous').validate(function(this: ICourseAssignment) {
+  // 如果需要连排，必须设置连排课时数
+  if (this.requiresContinuous && (!this.continuousHours || this.continuousHours < 2)) {
+    return false;
+  }
+  return true;
+}, '需要连排时必须设置有效的连排课时数(2-4)');
 
 /**
  * 教学计划Schema定义

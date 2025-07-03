@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>排课规则删除功能测试</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            padding: 20px; 
+            max-width: 800px; 
+            margin: 0 auto; 
+        }
+        .section { 
+            margin: 20px 0; 
+            padding: 15px; 
+            border: 1px solid #ddd; 
+            border-radius: 5px; 
+        }
+        button { 
+            background: #007bff; 
+            color: white; 
+            padding: 10px 20px; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            margin: 5px; 
+        }
+        button:hover { 
+            background: #0056b3; 
+        }
+        button.danger {
+            background: #dc3545;
+        }
+        button.danger:hover {
+            background: #c82333;
+        }
+        .result { 
+            margin: 10px 0; 
+            padding: 10px; 
+            border-radius: 4px; 
+        }
+        .success { 
+            background: #d4edda; 
+            color: #155724; 
+            border: 1px solid #c3e6cb; 
+        }
+        .error { 
+            background: #f8d7da; 
+            color: #721c24; 
+            border: 1px solid #f5c6cb; 
+        }
+        pre { 
+            background: #f8f9fa; 
+            padding: 10px; 
+            border-radius: 4px; 
+            overflow-x: auto; 
+            max-height: 300px; 
+        }
+        .rule-item {
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            background: #f9f9f9;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .rule-info {
+            flex: 1;
+        }
+        .rule-actions {
+            display: flex;
+            gap: 5px;
+        }
+        .status-badge {
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        .status-active {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status-inactive {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>🗑️ 排课规则删除功能测试</h1>
+
+    <div class="section">
+        <h3>1. 📋 获取规则列表</h3>
+        <button onclick="getAllRules()">获取所有规则</button>
+        <button onclick="getActiveRules()">获取活跃规则</button>
+        <button onclick="getInactiveRules()">获取已删除规则</button>
+        
+        <div id="rules-list"></div>
+    </div>
+
+    <div class="section">
+        <h3>2. ➕ 创建测试规则</h3>
+        <button onclick="createTestRule()">创建测试规则</button>
+        <div id="create-result"></div>
+    </div>
+
+    <div class="section">
+        <h3>3. 🧪 删除功能测试</h3>
+        <p>选择上面列表中的规则进行删除测试</p>
+        <div id="delete-result"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000';
+        let currentRules = [];
+
+        function showResult(elementId, type, message, data = null) {
+            const element = document.getElementById(elementId);
+            const icons = { success: '✅', error: '❌', warning: '⚠️' };
+            
+            element.innerHTML = `
+                <div class="result ${type}">
+                    ${icons[type] || 'ℹ️'} ${message}
+                    ${data ? `<pre>${typeof data === 'string' ? data : JSON.stringify(data, null, 2)}</pre>` : ''}
+                </div>
+            `;
+        }
+
+        function renderRulesList(rules, containerId) {
+            const container = document.getElementById(containerId);
+            
+            if (!rules || rules.length === 0) {
+                container.innerHTML = '<p>暂无规则</p>';
+                return;
+            }
+
+            const rulesHtml = rules.map(rule => `
+                <div class="rule-item">
+                    <div class="rule-info">
+                        <strong>${rule.name}</strong>
+                        <span class="status-badge ${rule.isActive ? 'status-active' : 'status-inactive'}">
+                            ${rule.isActive ? '活跃' : '已删除'}
+                        </span>
+                        <br>
+                        <small>学年: ${rule.academicYear} | 学期: ${rule.semester} | ID: ${rule._id}</small>
+                    </div>
+                    <div class="rule-actions">
+                        ${rule.isActive ? `
+                            <button class="danger" onclick="deleteRule('${rule._id}', '${rule.name}')">
+                                删除
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+            `).join('');
+
+            container.innerHTML = rulesHtml;
+        }
+
+        async function getAllRules() {
+            try {
+                const response = await fetch(`${API_BASE}/api/scheduling-rules`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentRules = data.data.items;
+                    renderRulesList(currentRules, 'rules-list');
+                    showResult('rules-list', 'success', `获取成功，共 ${currentRules.length} 条规则`);
+                } else {
+                    showResult('rules-list', 'error', '获取失败', data);
+                }
+            } catch (error) {
+                showResult('rules-list', 'error', `请求失败: ${error.message}`);
+            }
+        }
+
+        async function getActiveRules() {
+            try {
+                const response = await fetch(`${API_BASE}/api/scheduling-rules?isActive=true`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    const activeRules = data.data.items;
+                    renderRulesList(activeRules, 'rules-list');
+                    showResult('rules-list', 'success', `获取活跃规则成功，共 ${activeRules.length} 条`);
+                } else {
+                    showResult('rules-list', 'error', '获取失败', data);
+                }
+            } catch (error) {
+                showResult('rules-list', 'error', `请求失败: ${error.message}`);
+            }
+        }
+
+        async function getInactiveRules() {
+            try {
+                const response = await fetch(`${API_BASE}/api/scheduling-rules?isActive=false`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    const inactiveRules = data.data.items;
+                    renderRulesList(inactiveRules, 'rules-list');
+                    showResult('rules-list', 'success', `获取已删除规则成功，共 ${inactiveRules.length} 条`);
+                } else {
+                    showResult('rules-list', 'error', '获取失败', data);
+                }
+            } catch (error) {
+                showResult('rules-list', 'error', `请求失败: ${error.message}`);
+            }
+        }
+
+        async function createTestRule() {
+            const testData = {
+                name: `删除测试规则_${new Date().toISOString().slice(0, 16)}`,
+                description: '用于测试删除功能的规则',
+                schoolType: 'high',
+                academicYear: '2024-2025',
+                semester: 1,
+                timeRules: {
+                    dailyPeriods: 8,
+                    workingDays: [1, 2, 3, 4, 5],
+                    periodDuration: 45,
+                    breakDuration: 10,
+                    lunchBreakStart: 4,
+                    lunchBreakDuration: 90,
+                    morningPeriods: [1, 2, 3, 4],
+                    afternoonPeriods: [5, 6, 7, 8],
+                    forbiddenSlots: []
+                },
+                teacherConstraints: {
+                    maxDailyHours: 6,
+                    maxContinuousHours: 3,
+                    minRestBetweenCourses: 1,
+                    avoidFridayAfternoon: true,
+                    respectTeacherPreferences: true,
+                    allowCrossGradeTeaching: true
+                },
+                roomConstraints: {
+                    respectCapacityLimits: true,
+                    allowRoomSharing: false,
+                    preferFixedClassrooms: true,
+                    specialRoomPriority: 'preferred'
+                },
+                courseArrangementRules: {
+                    allowContinuousCourses: true,
+                    maxContinuousHours: 2,
+                    distributionPolicy: 'balanced',
+                    avoidFirstLastPeriod: [],
+                    coreSubjectPriority: true,
+                    labCoursePreference: 'morning'
+                },
+                conflictResolutionRules: {
+                    teacherConflictResolution: 'strict',
+                    roomConflictResolution: 'strict',
+                    classConflictResolution: 'strict',
+                    allowOverride: false,
+                    priorityOrder: ['teacher', 'room', 'time']
+                },
+                isDefault: false
+            };
+
+            try {
+                const response = await fetch(`${API_BASE}/api/scheduling-rules`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(testData)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showResult('create-result', 'success', '测试规则创建成功！', data.data);
+                    // 自动刷新规则列表
+                    getAllRules();
+                } else {
+                    showResult('create-result', 'error', '创建失败', data);
+                }
+            } catch (error) {
+                showResult('create-result', 'error', `创建失败: ${error.message}`);
+            }
+        }
+
+        async function deleteRule(ruleId, ruleName) {
+            if (!confirm(`确定要删除规则 "${ruleName}" 吗？`)) {
+                return;
+            }
+
+            showResult('delete-result', 'warning', `正在删除规则: ${ruleName}...`);
+
+            try {
+                // 记录删除前的状态
+                const beforeResponse = await fetch(`${API_BASE}/api/scheduling-rules/${ruleId}`);
+                const beforeData = await beforeResponse.json();
+                
+                console.log('删除前规则状态:', beforeData);
+
+                // 执行删除
+                const deleteResponse = await fetch(`${API_BASE}/api/scheduling-rules/${ruleId}`, {
+                    method: 'DELETE'
+                });
+                
+                const deleteData = await deleteResponse.json();
+                
+                console.log('删除API响应:', deleteData);
+
+                if (deleteData.success) {
+                    // 验证删除后的状态
+                    const afterResponse = await fetch(`${API_BASE}/api/scheduling-rules/${ruleId}`);
+                    const afterData = await afterResponse.json();
+                    
+                    console.log('删除后规则状态:', afterData);
+
+                    if (afterData.success && !afterData.data.isActive) {
+                        showResult('delete-result', 'success', 
+                            `删除成功！规则 "${ruleName}" 已被标记为非活跃状态`, 
+                            {
+                                删除前: beforeData.data?.isActive,
+                                删除后: afterData.data?.isActive,
+                                删除操作: deleteData
+                            }
+                        );
+                    } else {
+                        showResult('delete-result', 'error', 
+                            '删除可能失败：规则状态未改变', 
+                            { 删除前: beforeData, 删除后: afterData }
+                        );
+                    }
+
+                    // 刷新规则列表
+                    getAllRules();
+                } else {
+                    showResult('delete-result', 'error', '删除失败', deleteData);
+                }
+            } catch (error) {
+                showResult('delete-result', 'error', `删除操作失败: ${error.message}`);
+            }
+        }
+
+        // 页面加载时自动获取规则列表
+        window.onload = function() {
+            getAllRules();
+        };
+    </script>
+</body>
+</html> 

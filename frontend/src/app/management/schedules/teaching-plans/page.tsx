@@ -92,6 +92,17 @@ export default function TeachingPlansPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
 
+  // 学年选项
+  const generateAcademicYears = () => {
+    const currentYear = new Date().getFullYear();
+    const years = [];
+    for (let i = -2; i <= 3; i++) {
+      const startYear = currentYear + i;
+      years.push(`${startYear}-${startYear + 1}`);
+    }
+    return years;
+  };
+
   // 表单数据
   const [formData, setFormData] = useState<CreateTeachingPlanRequest>({
     class: '',
@@ -283,13 +294,30 @@ export default function TeachingPlansPage() {
    */
   const handleCreate = async () => {
     try {
-      const response = await teachingPlanApi.create(formData);
+      // 计算总周课时数
+      const totalWeeklyHours = formData.courseAssignments.reduce(
+        (sum, assignment) => sum + (assignment.weeklyHours || 0), 
+        0
+      );
+      
+      const payload = {
+        ...formData,
+        totalWeeklyHours
+      };
+      
+      console.log('创建教学计划数据:', payload);
+      
+      const response = await teachingPlanApi.create(payload);
       if (response.success) {
+        alert('教学计划创建成功！');
         closeDialogs();
         fetchTeachingPlans();
+      } else {
+        alert('创建失败：' + (response.error || '未知错误'));
       }
     } catch (error) {
       console.error('创建教学计划失败:', error);
+      alert('创建失败，请检查网络连接或联系管理员');
     }
   };
 
@@ -540,13 +568,15 @@ export default function TeachingPlansPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <DataTable
-            columns={columns}
-            data={teachingPlans}
-            loading={loading}
-            pagination={pagination}
-            onPaginationChange={setPagination}
-          />
+                  <DataTable
+          columns={columns}
+          dataSource={teachingPlans}
+          loading={loading}
+          pagination={pagination}
+          onPageChange={(page, pageSize) => 
+            setPagination(prev => ({ ...prev, current: page, pageSize }))
+          }
+        />
         </CardContent>
       </Card>
 
@@ -569,19 +599,23 @@ export default function TeachingPlansPage() {
                 <div className="grid gap-4 md:grid-cols-3">
                   <div>
                     <Label htmlFor="academicYear">学年 *</Label>
-                    <Input
-                      id="academicYear"
-                      placeholder="如：2024-2025"
+                    <Select
                       value={formData.academicYear}
-                      onChange={(e) => {
-                        const newAcademicYear = e.target.value;
-                        setFormData(prev => ({ ...prev, academicYear: newAcademicYear, class: '' }));
+                      onValueChange={(value) => {
+                        setFormData(prev => ({ ...prev, academicYear: value, class: '' }));
                         // 当学年和学期都有值时，获取对应的班级列表
-                        if (newAcademicYear && formData.semester) {
-                          fetchClassesForAcademicYear(newAcademicYear, formData.semester);
+                        if (value && formData.semester) {
+                          fetchClassesForAcademicYear(value, formData.semester);
                         }
                       }}
-                    />
+                    >
+                      <option value="">请选择学年</option>
+                      {generateAcademicYears().map((year) => (
+                        <option key={year} value={year}>
+                          {year}
+                        </option>
+                      ))}
+                    </Select>
                   </div>
                   
                   <div>
@@ -650,7 +684,7 @@ export default function TeachingPlansPage() {
                             teacher: '',
                             weeklyHours: 2,
                             requiresContinuous: false,
-                            continuousHours: 1,
+                            continuousHours: 2,
                             preferredTimeSlots: [],
                             avoidTimeSlots: [],
                             notes: ''
@@ -721,7 +755,7 @@ export default function TeachingPlansPage() {
                               <option value="">请选择教师</option>
                               {teachers.map((teacher) => (
                                 <option key={teacher._id} value={teacher._id}>
-                                  {teacher.name} - {teacher.subject}
+                                  {teacher.name} - {teacher.subjects?.join(', ') || '未设置科目'}
                                 </option>
                               ))}
                             </Select>
@@ -752,6 +786,10 @@ export default function TeachingPlansPage() {
                               onChange={(e) => {
                                 const newAssignments = [...formData.courseAssignments];
                                 newAssignments[index].requiresContinuous = e.target.checked;
+                                // 当勾选连续排课时，自动设置连续课时数为2
+                                if (e.target.checked && (!newAssignments[index].continuousHours || newAssignments[index].continuousHours < 2)) {
+                                  newAssignments[index].continuousHours = 2;
+                                }
                                 setFormData(prev => ({ ...prev, courseAssignments: newAssignments }));
                               }}
                             />
