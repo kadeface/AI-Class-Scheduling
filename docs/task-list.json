@@ -843,14 +843,17 @@
         "milestone": "V1.0 (MVP)",
         "dependencies": ["TKS-012"],
         "priority": "高",
-        "status": "To Do",
+        "status": "Done",
         "effort_points": 5,
         "tags": ["frontend", "feature"],
         "acceptance_criteria": [
           "可以按班级或教师查看课表",
           "打印预览样式干净整洁",
           "导出的Excel文件格式正确"
-        ]
+        ],
+        "completed_date": "2024-07-01",
+        "actual_effort": 5,
+        "completion_summary": "已实现班级、教师、教室多维度课表查询，支持Excel/CSV导出和专业打印，包含统计分析和现代化UI设计。功能集成于报表模块，满足多场景课表输出需求。导出功能已通过测试，打印功能已修复兼容性问题，现可在各主流浏览器正常使用。"
       },
       {
         "task_id": "TKS-014",

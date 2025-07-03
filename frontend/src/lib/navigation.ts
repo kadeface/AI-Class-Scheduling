@@ -14,7 +14,10 @@ import {
   MapPin,
   Calendar,
   Settings,
-  BarChart3
+  BarChart3,
+  FileText,
+  UserCheck,
+  Building2
 } from 'lucide-react';
 
 /**
@@ -80,17 +83,20 @@ export const navigationItems: NavigationItem[] = [
       {
         id: 'manual-schedule',
         label: '手动排课',
-        href: '/management/schedules/manual'
+        href: '/management/schedules/manual',
+        icon: Calendar
       },
       {
         id: 'auto-schedule',
         label: '智能排课',
-        href: '/management/schedules/integrated'
+        href: '/management/schedules/integrated',
+        icon: Settings
       },
       {
         id: 'view-schedule',
         label: '查看课表',
-        href: '/management/schedules/schedule-view'
+        href: '/management/schedules/schedule-view',
+        icon: BookOpen
       }
     ]
   },
@@ -103,17 +109,20 @@ export const navigationItems: NavigationItem[] = [
       {
         id: 'teacher-workload',
         label: '教师工作量',
-        href: '/reports/teacher-workload'
+        href: '/reports/teacher-workload',
+        icon: UserCheck
       },
       {
         id: 'room-utilization',
         label: '场室利用率',
-        href: '/reports/room-utilization'
+        href: '/reports/room-utilization',
+        icon: Building2
       },
       {
         id: 'class-schedule',
         label: '班级课表',
-        href: '/reports/class-schedule'
+        href: '/reports/class-schedule',
+        icon: FileText
       }
     ]
   }
