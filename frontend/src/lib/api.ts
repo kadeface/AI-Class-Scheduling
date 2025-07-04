@@ -94,10 +94,13 @@ export interface Teacher {
   _id: string;
   name: string;
   employeeId: string;
+  department: string;
+  position: string;
   subjects: string[];
   maxWeeklyHours: number;
-  unavailableSlots: TimeSlot[];
-  preferences: TeacherPreferences;
+  status: string;
+  unavailableSlots: any[];
+  preferences: Record<string, any>;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -119,10 +122,13 @@ export interface TeacherPreferences {
 export interface CreateTeacherRequest {
   name: string;
   employeeId: string;
+  department: string;
+  position: string;
   subjects: string[];
   maxWeeklyHours: number;
-  unavailableSlots?: TimeSlot[];
-  preferences?: TeacherPreferences;
+  status: string;
+  unavailableSlots?: any[];
+  preferences?: Record<string, any>;
 }
 
 /**

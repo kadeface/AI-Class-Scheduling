@@ -26,7 +26,7 @@ import {
   formatSemester,
   PaginatedResponse 
 } from '@/lib/api';
-import { formatDateTime } from '@/lib/utils';
+import { formatDateTime, safeTrim } from '@/lib/utils';
 
 /**
  * 班级管理页面组件
@@ -60,6 +60,8 @@ export default function ClassesPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingClass, setDeletingClass] = useState<Class | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [clearing, setClearing] = useState(false);
   
   // 表单状态
   const [formData, setFormData] = useState<CreateClassRequest>({
@@ -299,15 +301,15 @@ export default function ClassesPage() {
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
 
-    if (!formData.name.trim()) {
+    if (!safeTrim(formData.name)) {
       errors.name = '请输入班级名称';
     }
 
-    if (formData.grade < 1 || formData.grade > 12) {
+    if (isNaN(formData.grade) || formData.grade < 1 || formData.grade > 12) {
       errors.grade = '年级必须在1-12之间';
     }
 
-    if (formData.studentCount < 1 || formData.studentCount > 60) {
+    if (isNaN(formData.studentCount) || formData.studentCount < 1 || formData.studentCount > 60) {
       errors.studentCount = '学生人数必须在1-60之间';
     }
 
@@ -382,6 +384,26 @@ export default function ClassesPage() {
     }
   };
 
+  // 一键清除处理函数
+  const handleClearAll = async () => {
+    setClearing(true);
+    try {
+      const res = await fetch('/api/import/classes/clear', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        alert('已清空全部班级数据');
+        // 这里可以触发刷新列表
+      } else {
+        alert(data.message || '清空失败');
+      }
+    } catch (err) {
+      alert('清空失败，请重试');
+    } finally {
+      setClearing(false);
+      setClearDialogOpen(false);
+    }
+  };
+
   // 年级选项
   const gradeOptions = Array.from({ length: 12 }, (_, i) => ({
     value: String(i + 1),
@@ -413,6 +435,9 @@ export default function ClassesPage() {
           <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
             <Upload className="h-4 w-4 mr-2" />
             批量导入
+          </Button>
+          <Button variant="destructive" onClick={() => setClearDialogOpen(true)}>
+            一键清除全部
           </Button>
         </div>
       </div>
@@ -621,6 +646,30 @@ export default function ClassesPage() {
         resourceType="class"
         onImport={handleBatchImport}
       />
+
+      {/* 二次确认对话框 */}
+      <Dialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>危险操作：清空全部班级数据</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 text-red-600">
+            此操作将删除所有班级数据，且不可恢复。确定要继续吗？
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setClearDialogOpen(false)}>
+              取消
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleClearAll}
+              disabled={clearing}
+            >
+              {clearing ? '正在清空...' : '确认清空'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

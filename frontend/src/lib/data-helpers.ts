@@ -6,6 +6,8 @@
  */
 
 import { ScheduleItem } from '@/types/schedule';
+import * as XLSX from 'xlsx';
+import { ImportTemplate } from './import-templates';
 
 /**
  * 安全获取班级名称
@@ -191,3 +193,10 @@ export function isValidOption(item: any): item is { _id: string; name: string } 
          typeof item._id === 'string' && 
          typeof item.name === 'string';
 } 
+
+function downloadXlsxTemplate(template: ImportTemplate<any>) {
+  const ws = XLSX.utils.json_to_sheet(template.exampleData, { header: template.headers });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, template.name);
+  XLSX.writeFile(wb, `${template.name}导入模板.xlsx`);
+}

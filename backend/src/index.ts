@@ -31,6 +31,7 @@ import schedulingRoutes from './routes/scheduling-routes';
 import scheduleViewRoutes from './routes/schedule-view-routes';
 import manualSchedulingRoutes from './routes/manual-scheduling-routes';
 import scheduleRoutes from './routes/schedule-routes';
+import importRoutes from './routes/import-routes';
 
 // 加载环境变量
 dotenv.config();
@@ -130,6 +131,9 @@ function configureRoutes(): void {
   
   // 课程安排管理路由
   app.use('/api/schedules', scheduleRoutes);
+
+  // 导入路由
+  app.use('/api', importRoutes);
 }
 
 /**

@@ -33,7 +33,9 @@
     "jsonwebtoken": "^9.0.2",
     "mongodb": "^6.17.0",
     "mongoose": "^8.16.1",
-    "morgan": "^1.10.0"
+    "morgan": "^1.10.0",
+    "multer": "^2.0.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -42,7 +44,9 @@
     "@types/helmet": "^0.0.48",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.10",
+    "@types/multer": "^2.0.0",
     "@types/node": "^24.0.7",
+    "@types/xlsx": "^0.0.35",
     "nodemon": "^3.1.10",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"

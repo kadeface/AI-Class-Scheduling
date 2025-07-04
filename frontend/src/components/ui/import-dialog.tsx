@@ -20,7 +20,7 @@ import {
   RotateCcw,
   Loader2
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, safeTrim } from '@/lib/utils';
 import { 
   parseCsv, 
   generateCsv, 
@@ -31,8 +31,10 @@ import {
 import { 
   importTemplates, 
   ImportResourceType, 
-  ImportTemplate 
+  ImportTemplate, 
+  teacherFieldDescriptions
 } from '@/lib/import-templates';
+import * as XLSX from 'xlsx';
 
 /**
  * 导入状态枚举
@@ -81,7 +83,7 @@ interface ImportDialogProps<T> {
   onImport,
   title,
 }: ImportDialogProps<T>) {
-  const template = importTemplates[resourceType] as ImportTemplate<T>;
+  const template = importTemplates[resourceType] as unknown as ImportTemplate<T>;
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // 状态管理
@@ -134,11 +136,11 @@ interface ImportDialogProps<T> {
     if (!file) return;
 
     // 验证文件类型
-    const validTypes = ['.csv', '.txt'];
+    const validTypes = ['.csv', '.xlsx'];
     const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
     
     if (!validTypes.includes(fileExtension)) {
-      alert('请选择CSV格式的文件');
+      alert('请选择CSV或Excel格式的文件');
       return;
     }
 
@@ -152,14 +154,56 @@ interface ImportDialogProps<T> {
     if (!selectedFile) return;
 
     try {
-      const content = await readFileContent(selectedFile);
-      const result = await parseCsv(
-        content,
-        template.headers,
-        template.validator
-      );
-      
-      setParseResult(result);
+      let rows: any[] = [];
+      if (selectedFile.name.endsWith('.xlsx')) {
+        // 解析 xlsx
+        const arrayBuffer = await selectedFile.arrayBuffer();
+        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        rows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+      } else {
+        // 解析 csv
+        const content = await readFileContent(selectedFile);
+        const result = await parseCsv(content, template.headers, template.validator);
+        rows = result.data;
+      }
+
+      // 表头校验
+      const fileHeaders = Object.keys(rows[0] || {}).map(h => safeTrim(h));
+      const expectedHeaders = template.headers.map(h => safeTrim(h));
+      const missingHeaders = expectedHeaders.filter(h => !fileHeaders.includes(h));
+      if (missingHeaders.length > 0) {
+        alert(`缺少必需的列: ${missingHeaders.join(', ')}`);
+        return;
+      }
+
+      // 统一校验和格式化（无论 xlsx 还是 csv，rows 都要经过 validator）
+      const errors: { row: number; message: string }[] = [];
+      const validData: T[] = [];
+      rows.forEach((row, idx) => {
+        const validationResult = template.validator(row, idx + 2);
+        if (typeof validationResult === 'string') {
+          errors.push({ row: idx + 2, message: validationResult });
+        } else if (validationResult && Array.isArray(validationResult.errors)) {
+          if (validationResult.errors.length > 0) {
+            validationResult.errors.forEach(msg =>
+              errors.push({ row: idx + 2, message: msg })
+            );
+          } else {
+            validData.push(validationResult.data ?? row);
+          }
+        } else {
+          validData.push(row);
+        }
+      });
+      console.log('parseResult.data:', validData);
+      setParseResult({
+        data: validData,
+        errors,
+        totalRows: rows.length,
+        validRows: validData.length,
+      });
       setStage('preview');
     } catch (error) {
       console.error('文件解析失败:', error);
@@ -171,24 +215,65 @@ interface ImportDialogProps<T> {
    * 执行数据导入
    */
   const handleImport = async () => {
-    if (!parseResult || parseResult.data.length === 0) return;
+    if (!parseResult || !parseResult.data.length) return;
 
     setImporting(true);
     setStage('importing');
 
     try {
-      await onImport(parseResult.data);
-      
-      setImportResult({
-        successCount: parseResult.validRows,
-        errorCount: 0,
-        errors: [],
+      // parseResult.data 已经是拍平结构
+      const flatData = parseResult.data.map(item => {
+        const row = item as Record<string, string>;
+        return {
+          name: row['课程名称*'],
+          courseCode: row['课程代码*'],
+          subject: row['学科*'],
+          weeklyHours: row['周课时*'],
+          requiresContinuous: row['需要连排*'] === '是' ? 'true' : 'false',
+          continuousHours: row['连排课时'],
+          roomTypes: row['教室类型要求'],
+          equipment: row['设备要求'],
+          description: row['描述'],
+        };
       });
+      const ws = XLSX.utils.json_to_sheet(flatData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const file = new File([wbout], 'import.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+      // 调试：解析刚生成的 wbout，看看内容
+      const debugWb = XLSX.read(wbout, { type: 'array' });
+      const debugSheet = debugWb.Sheets[debugWb.SheetNames[0]];
+      const debugData = XLSX.utils.sheet_to_json(debugSheet, { defval: '' });
+      console.log('【导出内容】', debugData);
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('/api/import/courses', {
+        method: 'POST',
+        body: formData,
+      });
+      const result = await res.json();
+
+      if (result.success) {
+        setImportResult({
+          successCount: result.inserted || 0,
+          errorCount: 0,
+          errors: [],
+        });
+      } else {
+        setImportResult({
+          successCount: 0,
+          errorCount: parseResult?.data.length || 0,
+          errors: [{ message: result.message || '导入失败' }],
+        });
+      }
     } catch (error) {
-      console.error('导入失败:', error);
       setImportResult({
         successCount: 0,
-        errorCount: parseResult.data.length,
+        errorCount: parseResult?.data.length || 0,
         errors: [{ message: error instanceof Error ? error.message : '导入失败' }],
       });
     } finally {
@@ -224,18 +309,18 @@ interface ImportDialogProps<T> {
       <div className="space-y-4">
         <Button 
           variant="outline" 
-          onClick={handleDownloadTemplate}
+          onClick={() => downloadXlsxTemplate(template)}
           className="w-full"
         >
           <Download className="h-4 w-4 mr-2" />
-          下载导入模板
+          下载导入模板（Excel）
         </Button>
 
         <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center hover:border-blue-500 transition-colors">
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,.txt"
+            accept=".csv,.xlsx"
             onChange={handleFileSelect}
             className="hidden"
           />
@@ -497,4 +582,11 @@ interface ImportDialogProps<T> {
       </DialogContent>
     </Dialog>
   );
+}
+
+function downloadXlsxTemplate(template: ImportTemplate<any>) {
+  const ws = XLSX.utils.json_to_sheet(template.exampleData, { header: template.headers });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, template.name);
+  XLSX.writeFile(wb, `${template.name}导入模板.xlsx`);
 }

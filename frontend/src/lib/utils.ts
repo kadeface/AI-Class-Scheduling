@@ -57,3 +57,17 @@ export function formatDateTime(date: Date | string): string {
     minute: '2-digit'
   });
 }
+
+/**
+ * 安全字符串去空格
+ * 兼容 null/undefined/数字/字符串
+ *
+ * Args:
+ *   val: 任意类型的值
+ *
+ * Returns:
+ *   去除首尾空格后的字符串
+ */
+export function safeTrim(val: any): string {
+  return val == null ? '' : String(val).trim();
+}

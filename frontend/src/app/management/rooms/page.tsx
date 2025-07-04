@@ -25,7 +25,7 @@ import {
   WEEKDAYS,
   PaginatedResponse 
 } from '@/lib/api';
-import { formatDateTime } from '@/lib/utils';
+import { formatDateTime, safeTrim } from '@/lib/utils';
 
 /**
  * 场室管理页面组件
@@ -58,6 +58,8 @@ export default function RoomsPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingRoom, setDeletingRoom] = useState<Room | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [clearing, setClearing] = useState(false);
   
   // 表单状态
   const [formData, setFormData] = useState<CreateRoomRequest>({
@@ -314,7 +316,7 @@ export default function RoomsPage() {
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
 
-    if (!formData.name.trim()) {
+    if (!safeTrim(formData.name)) {
       errors.name = '请输入场室名称';
     }
 
@@ -326,11 +328,16 @@ export default function RoomsPage() {
       errors.type = '请选择场室类型';
     }
 
-    if (formData.capacity < 1 || formData.capacity > 500) {
+    if (isNaN(formData.capacity) || formData.capacity < 1 || formData.capacity > 500) {
       errors.capacity = '容量必须在1-500之间';
     }
 
-    if (formData.floor && (formData.floor < 1 || formData.floor > 50)) {
+    if (
+      formData.floor === undefined ||
+      isNaN(formData.floor) ||
+      formData.floor < 1 ||
+      formData.floor > 50
+    ) {
       errors.floor = '楼层必须在1-50之间';
     }
 
@@ -418,6 +425,26 @@ export default function RoomsPage() {
   const buildingOptions = Array.from(new Set(rooms.map(room => room.building).filter(Boolean)))
     .map(building => ({ value: building!, label: building! }));
 
+  // 一键清除处理函数
+  const handleClearAll = async () => {
+    setClearing(true);
+    try {
+      const res = await fetch('/api/import/rooms/clear', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        alert('已清空全部场室数据');
+        // 这里可以触发刷新列表
+      } else {
+        alert(data.message || '清空失败');
+      }
+    } catch (err) {
+      alert('清空失败，请重试');
+    } finally {
+      setClearing(false);
+      setClearDialogOpen(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* 页面头部 */}
@@ -436,6 +463,9 @@ export default function RoomsPage() {
           <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
             <Upload className="h-4 w-4 mr-2" />
             批量导入
+          </Button>
+          <Button variant="destructive" onClick={() => setClearDialogOpen(true)}>
+            一键清除全部
           </Button>
         </div>
       </div>
@@ -690,6 +720,30 @@ export default function RoomsPage() {
         resourceType="room"
         onImport={handleBatchImport}
       />
+
+      {/* 二次确认对话框 */}
+      <Dialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>危险操作：清空全部场室数据</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 text-red-600">
+            此操作将删除所有场室数据，且不可恢复。确定要继续吗？
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setClearDialogOpen(false)}>
+              取消
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleClearAll}
+              disabled={clearing}
+            >
+              {clearing ? '正在清空...' : '确认清空'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

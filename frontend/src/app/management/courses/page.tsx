@@ -23,7 +23,7 @@ import {
   EQUIPMENT_TYPES,
   PaginatedResponse 
 } from '@/lib/api';
-import { formatDateTime } from '@/lib/utils';
+import { formatDateTime, safeTrim } from '@/lib/utils';
 
 /**
  * 课程管理页面组件
@@ -45,7 +45,7 @@ export default function CoursesPage() {
   const [searchParams, setSearchParams] = useState({
     keyword: '',
     subject: '',
-    isActive: '',
+    isActive: 'true',
   });
   
   // 对话框状态
@@ -54,6 +54,8 @@ export default function CoursesPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingCourse, setDeletingCourse] = useState<Course | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [clearing, setClearing] = useState(false);
   
   // 表单状态
   const [formData, setFormData] = useState<CreateCourseRequest>({
@@ -234,7 +236,7 @@ export default function CoursesPage() {
     setSearchParams({
       keyword: '',
       subject: '',
-      isActive: '',
+      isActive: 'true',
     });
   };
 
@@ -296,7 +298,7 @@ export default function CoursesPage() {
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
 
-    if (!formData.name.trim()) {
+    if (!safeTrim(formData.name)) {
       errors.name = '请输入课程名称';
     }
 
@@ -308,15 +310,26 @@ export default function CoursesPage() {
       errors.courseCode = '请输入课程代码';
     }
 
-    if (formData.weeklyHours < 1 || formData.weeklyHours > 20) {
+    if (isNaN(formData.weeklyHours) || formData.weeklyHours < 1 || formData.weeklyHours > 20) {
       errors.weeklyHours = '周课时必须在1-20之间';
     }
 
-    if (formData.requiresContinuous && (!formData.continuousHours || formData.continuousHours < 2)) {
-      errors.continuousHours = '连排课时必须至少2课时';
+    if (formData.requiresContinuous) {
+      if (
+        formData.continuousHours === undefined ||
+        isNaN(formData.continuousHours) ||
+        formData.continuousHours < 2
+      ) {
+        errors.continuousHours = '连排课时必须至少2课时';
+      }
     }
 
-    if (formData.roomRequirements.capacity && (formData.roomRequirements.capacity < 1 || formData.roomRequirements.capacity > 200)) {
+    if (
+      formData.roomRequirements.capacity === undefined ||
+      isNaN(formData.roomRequirements.capacity) ||
+      formData.roomRequirements.capacity < 1 ||
+      formData.roomRequirements.capacity > 200
+    ) {
       errors.capacity = '容量要求必须在1-200之间';
     }
 
@@ -367,18 +380,9 @@ export default function CoursesPage() {
   /**
    * 处理批量导入
    */
-  const handleBatchImport = async (data: CreateCourseRequest[]) => {
-    try {
-      // 批量创建课程
-      const promises = data.map(courseData => courseApi.create(courseData));
-      await Promise.all(promises);
-      
-      fetchCourses(); // 重新获取数据
-      // TODO: 显示成功提示
-    } catch (error) {
-      console.error('批量导入失败:', error);
-      throw error; // 让导入组件处理错误显示
-    }
+  const handleBatchImport = async () => {
+    // 这里什么都不用做，或者只刷新课程列表
+    fetchCourses();
   };
 
   /**
@@ -415,6 +419,29 @@ export default function CoursesPage() {
     }));
   };
 
+  // 一键清除处理函数
+  const handleClearAll = async () => {
+    setClearing(true);
+    try {
+      console.log('handleClearAll called');
+      const res = await fetch('/api/import/courses/clear', { method: 'POST' });
+      const data = await res.json();
+      console.log('清空返回:', data);
+      if (data.success) {
+        alert('已清空全部课程数据');
+        fetchCourses(); // 刷新列表
+      } else {
+        alert(data.message || '清空失败');
+      }
+    } catch (err) {
+      console.error('清空异常:', err);
+      alert('清空失败，请重试');
+    } finally {
+      setClearing(false);
+      setClearDialogOpen(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* 页面头部 */}
@@ -433,6 +460,9 @@ export default function CoursesPage() {
           <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
             <Upload className="h-4 w-4 mr-2" />
             批量导入
+          </Button>
+          <Button variant="destructive" onClick={() => setClearDialogOpen(true)}>
+            一键清除全部
           </Button>
         </div>
       </div>
@@ -738,6 +768,30 @@ export default function CoursesPage() {
         resourceType="course"
         onImport={handleBatchImport}
       />
+
+      {/* 二次确认对话框 */}
+      <Dialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>危险操作：清空全部课程数据</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 text-red-600">
+            此操作将删除所有课程数据，且不可恢复。确定要继续吗？
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setClearDialogOpen(false)}>
+              取消
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleClearAll}
+              disabled={clearing}
+            >
+              {clearing ? '正在清空...' : '确认清空'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

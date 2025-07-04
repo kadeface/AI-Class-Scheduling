@@ -52,7 +52,7 @@ export async function parseCsv<T>(
 
   // 解析标题行
   const headerLine = lines[0];
-  const csvHeaders = parseCsvRow(headerLine);
+  const csvHeaders = parseCsvRow(headerLine).map(h => h.trim());
   
   // 验证标题行
   const missingHeaders = headers.filter(header => !csvHeaders.includes(header));
