@@ -37,7 +37,7 @@ const IMPORT_SCHEMAS = {
   },
   rooms: {
     required: [
-      'name', 'roomNumber', 'type', 'capacity', 'equipment', 'isActive'
+      'name', 'roomNumber', 'type', 'capacity', 'equipment'
     ],
     all: [
       'name', 'roomNumber', 'type', 'capacity', 'building', 'floor', 'equipment',

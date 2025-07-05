@@ -322,31 +322,31 @@ export const courseImportTemplate: ImportTemplate<Record<string, string>> = {
       return { errors };
     }
     
-    // 只返回拍平字段
-    const data = {
-      '课程名称*': safeTrim(rowData['课程名称*']),
-      '课程代码*': safeTrim(rowData['课程代码*']),
-      '学科*': subject,
-      '周课时*': weeklyHours.toString(),
-      '需要连排*': isContinuous ? '是' : '否',
-      '连排课时': isContinuous ? continuousHours.toString() : '',
-      '教室类型要求': roomTypes.join(','),
-      '设备要求': equipment.join(','),
-      '描述': safeTrim(rowData['描述']) || '',
+    // 只返回结构化英文 key 字段，所有值都转为字符串
+    const data: Record<string, string> = {
+      name: safeTrim(rowData['课程名称*']),
+      courseCode: safeTrim(rowData['课程代码*']),
+      subject: subject,
+      weeklyHours: weeklyHours.toString(),
+      requiresContinuous: isContinuous ? 'true' : 'false',
+      continuousHours: isContinuous ? continuousHours.toString() : '',
+      roomTypes: roomTypes.join(','),
+      equipment: equipment.join(','),
+      description: safeTrim(rowData['描述']) || '',
     };
     
     return { data, errors: [] };
   },
   formatter: (item: any) => [
-    item['课程名称*'],
-    item['课程代码*'],
-    item['学科*'],
-    item['周课时*'],
-    item['需要连排*'],
-    item['连排课时'],
-    item['教室类型要求'],
-    item['设备要求'],
-    item['描述'],
+    item.name,
+    item.courseCode,
+    item.subject,
+    item.weeklyHours,
+    item.requiresContinuous,
+    item.continuousHours,
+    item.roomTypes,
+    item.equipment,
+    item.description,
   ],
 };
 
@@ -437,28 +437,34 @@ export const roomImportTemplate: ImportTemplate<CreateRoomRequest> = {
       return { errors };
     }
     
-    const data: CreateRoomRequest = {
+    const data: Record<string, string> = {
       name: safeTrim(rowData['场室名称*']),
       roomNumber: safeTrim(rowData['房间号*']),
       type: type,
-      capacity: capacity,
-      building: safeTrim(rowData['建筑']) || undefined,
-      floor: rowData['楼层'] ? parseInt(safeTrim(rowData['楼层'])) : undefined,
-      equipment: equipment,
+      capacity: capacity.toString(),
+      status: safeTrim(rowData['状态*']),
+      building: safeTrim(rowData['建筑']) || '',
+      floor: rowData['楼层'] ? safeTrim(rowData['楼层']) : '',
+      equipment: equipment.join(','),
+      remarks: safeTrim(rowData['备注']) || '',
     };
     
     return { data, errors: [] };
   },
-  formatter: (item) => [
-    item.name,
-    item.roomNumber,
-    item.type,
-    item.capacity.toString(),
-    item.building || '',
-    item.floor?.toString() || '',
-    item.equipment?.join(',') || '',
-    '',
-  ],
+  formatter: (item) => {
+    const row = item as any;
+    return [
+      row.name,
+      row.roomNumber,
+      row.type,
+      row.capacity,
+      row.status,
+      row.building,
+      row.floor,
+      row.equipment,
+      row.remarks,
+    ];
+  },
 };
 
 /**

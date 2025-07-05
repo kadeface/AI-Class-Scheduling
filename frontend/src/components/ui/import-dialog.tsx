@@ -221,22 +221,8 @@ interface ImportDialogProps<T> {
     setStage('importing');
 
     try {
-      // parseResult.data 已经是拍平结构
-      const flatData = parseResult.data.map(item => {
-        const row = item as Record<string, string>;
-        return {
-          name: row['课程名称*'],
-          courseCode: row['课程代码*'],
-          subject: row['学科*'],
-          weeklyHours: row['周课时*'],
-          requiresContinuous: row['需要连排*'] === '是' ? 'true' : 'false',
-          continuousHours: row['连排课时'],
-          roomTypes: row['教室类型要求'],
-          equipment: row['设备要求'],
-          description: row['描述'],
-        };
-      });
-      const ws = XLSX.utils.json_to_sheet(flatData);
+      // parseResult.data 已经是结构化英文 key
+      const ws = XLSX.utils.json_to_sheet(parseResult.data);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
       const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
@@ -251,7 +237,8 @@ interface ImportDialogProps<T> {
       const formData = new FormData();
       formData.append('file', file);
 
-      const res = await fetch('/api/import/courses', {
+      // 动态选择接口路径
+      const res = await fetch(`/api/import/${resourceType}s`, {
         method: 'POST',
         body: formData,
       });
@@ -259,7 +246,7 @@ interface ImportDialogProps<T> {
 
       if (result.success) {
         setImportResult({
-          successCount: result.inserted || 0,
+          successCount: result.inserted || result.rowCount || 0,
           errorCount: 0,
           errors: [],
         });
