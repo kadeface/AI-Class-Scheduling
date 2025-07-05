@@ -11,16 +11,16 @@ type ImportType = 'teachers' | 'classes' | 'courses' | 'rooms';
 const IMPORT_SCHEMAS = {
   teachers: {
     required: [
-      'name', 'employeeId', 'department', 'position', 'subjects', 'maxHoursPerWeek', 'status'
+      'name', 'employeeId', 'department', 'position', 'subjects', 'maxWeeklyHours', 'status'
     ],
     all: [
-      'name', 'employeeId', 'department', 'position', 'subjects', 'maxHoursPerWeek',
+      'name', 'employeeId', 'department', 'position', 'subjects', 'maxWeeklyHours',
       'unavailableSlots', 'phone', 'email', 'status', 'createdAt', 'updatedAt', 'user'
     ],
   },
   classes: {
     required: [
-      'name', 'grade', 'studentCount', 'academicYear', 'status'
+      'name', 'grade', 'studentCount', 'academicYear', 'classTeacher'
     ],
     all: [
       'name', 'grade', 'studentCount', 'classTeacher', 'academicYear', 'status', 'createdAt', 'updatedAt'
@@ -60,7 +60,7 @@ const FIELD_TYPES: Record<ImportType, Record<string, string | string[] | object>
     department: 'string',
     position: 'string',
     subjects: 'array',
-    maxHoursPerWeek: 'number',
+    maxWeeklyHours: 'number',
     status: ['active', 'inactive'],
     unavailableSlots: 'string', // 可进一步细化
     phone: 'string',
@@ -107,41 +107,42 @@ export class ImportController {
    * 批量导入数据（支持校验模式）
    */
   static async importData(req: Request, res: Response) {
-    const file = req.file;
-    if (!file) {
+    let data: any[] = [];
+    let type: ImportType = req.params.type as ImportType;
+    console.log("req.body",req.body)
+    // 1. 优先处理结构化 JSON 数据
+    if (Array.isArray(req.body)) {
+      data = req.body;
+    } else if (req.file) {
+      // 文件上传处理
+      let workbook;
+      try {
+        workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+      } catch (err) {
+        res.status(400).json({
+          success: false,
+          message: '文件解析失败，请确认文件格式正确。',
+          error: (err as Error).message,
+        });
+        return;
+      }
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      if (!worksheet) {
+        res.status(400).json({
+          success: false,
+          message: '未检测到有效数据表，请检查文件内容。',
+        });
+        return;
+      }
+      data = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+    } else {
       res.status(400).json({
         success: false,
-        message: '未检测到上传文件，请选择CSV或XLSX文件后重试。',
+        message: '未检测到有效数据，请上传结构化JSON或表格文件。',
       });
       return;
     }
-
-    // 1. 解析文件内容
-    let workbook;
-    try {
-      workbook = XLSX.read(file.buffer, { type: 'buffer' });
-    } catch (err) {
-      res.status(400).json({
-        success: false,
-        message: '文件解析失败，请确认文件格式正确。',
-        error: (err as Error).message,
-      });
-      return;
-    }
-
-    // 2. 获取第一个sheet
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
-    if (!worksheet) {
-      res.status(400).json({
-        success: false,
-        message: '未检测到有效数据表，请检查文件内容。',
-      });
-      return;
-    }
-
-    // 3. 转为JSON数组
-    const data: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
 
     // 在这里加一行日志
     console.log('【导入收到的数据】', JSON.stringify(data, null, 2));
@@ -158,7 +159,6 @@ export class ImportController {
     // 5. 获取表头
     const headers = Object.keys(data[0]);
 
-    const type = req.params.type as ImportType;
     const schema = IMPORT_SCHEMAS[type];
     if (!schema) {
       res.status(400).json({ success: false, message: '不支持的导入类型' });
@@ -178,6 +178,27 @@ export class ImportController {
 
     const errors: { row: number; error: string }[] = [];
     const typeDefs = FIELD_TYPES[type];
+
+    // 1. 收集所有班主任姓名
+    const teacherNames = Array.from(
+      new Set(data.map(row => row.classTeacher).filter(Boolean))
+    );
+
+    // 2. 一次性查找所有教师
+    const teachers = await Teacher.find({ name: { $in: teacherNames } }, { _id: 1, name: 1 }).lean();
+    const teacherMap = new Map(teachers.map(t => [t.name, t._id]));
+
+    // 3. 替换 classTeacher 字段为 ObjectId
+    data.forEach(row => {
+      if (row.classTeacher && teacherMap.has(row.classTeacher)) {
+        row.classTeacher = teacherMap.get(row.classTeacher);
+      } else if (row.classTeacher) {
+        // 如果找不到，建议置为 undefined 或报错
+        row.classTeacher = undefined;
+        // 或者收集错误信息
+        // errors.push({ row: ..., error: `班主任 ${row.classTeacher} 不存在` });
+      }
+    });
 
     data.forEach((row, idx) => {
       // 1. 先组装 roomRequirements
@@ -335,6 +356,7 @@ export class ImportController {
           }
         });
       });
+      console.log('【实际插入数据库的数据】', JSON.stringify(data, null, 2));
       let insertCount = 0;
       let updateCount = 0;
       if (type === 'courses') {
@@ -387,17 +409,14 @@ export class ImportController {
       return;
     }
 
-    let update: any = {};
-    if (type === 'teachers' || type === 'classes') {
-      update = { status: 'inactive' };
-    } else if (type === 'courses' || type === 'rooms') {
-      update = { isActive: false };
-    }
-    const result = await Model.updateMany({}, update);
-    res.json({
-      success: true,
-      message: `已软删除${result.modifiedCount ?? 0}条${type}数据`,
-      modifiedCount: result.modifiedCount ?? 0,
-    });
+    let result;
+      result = await Model.deleteMany({});
+      res.json({
+        success: true,
+        message: `已彻底删除${result.deletedCount ?? 0}条${type}数据`,
+        deletedCount: result.deletedCount ?? 0,
+      });
+      return;
+   
   }
 }

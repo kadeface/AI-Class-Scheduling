@@ -93,6 +93,15 @@ interface ImportDialogProps<T> {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [importing, setImporting] = useState(false);
 
+  const typeMap = {
+    teacher: 'teachers',
+    class: 'classes',
+    course: 'courses',
+    room: 'rooms',
+  } as const;
+
+  const apiType = typeMap[resourceType];
+
   /**
    * 重置状态
    */
@@ -219,28 +228,13 @@ interface ImportDialogProps<T> {
 
     setImporting(true);
     setStage('importing');
-
+    console.log(resourceType) 
     try {
-      // parseResult.data 已经是结构化英文 key
-      const ws = XLSX.utils.json_to_sheet(parseResult.data);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-      const file = new File([wbout], 'import.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-
-      // 调试：解析刚生成的 wbout，看看内容
-      const debugWb = XLSX.read(wbout, { type: 'array' });
-      const debugSheet = debugWb.Sheets[debugWb.SheetNames[0]];
-      const debugData = XLSX.utils.sheet_to_json(debugSheet, { defval: '' });
-      console.log('【导出内容】', debugData);
-
-      const formData = new FormData();
-      formData.append('file', file);
-
-      // 动态选择接口路径
-      const res = await fetch(`/api/import/${resourceType}s`, {
+      // 直接上传结构化数据到后端
+      const res = await fetch(`/api/import/${apiType}`, {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(parseResult.data),
       });
       const result = await res.json();
 

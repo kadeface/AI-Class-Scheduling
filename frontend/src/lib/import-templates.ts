@@ -77,7 +77,13 @@ export const teacherImportTemplate: ImportTemplate<CreateTeacherRequest> = {
       errors.push('职务不能为空');
     }
     
-    if (!safeTrim(rowData['任教学科*'])) {
+    // 解析 subjects 字段
+    const subjectsRaw = safeTrim(rowData['任教学科*']);
+    const subjects = subjectsRaw
+      ? subjectsRaw.split(',').map(safeTrim).filter(Boolean)
+      : [];
+
+    if (subjects.length === 0) {
       errors.push('任教学科不能为空');
     }
     
@@ -85,21 +91,20 @@ export const teacherImportTemplate: ImportTemplate<CreateTeacherRequest> = {
       errors.push('周最大课时不能为空');
     }
     
-    if (!safeTrim(rowData['状态*'])) {
-      errors.push('状态不能为空');
+    let status = safeTrim(rowData['状态*']);
+    if (status === 'true' || status === '在职' || status === '启用' || status === '1') {
+      status = 'active';
+    } else if (status === 'false' || status === '离职' || status === '禁用' || status === '0') {
+      status = 'inactive';
     }
     
     // 验证数据格式
-    const maxWeeklyHours = parseInt(safeTrim(rowData['周最大课时*']));
-    if (isNaN(maxWeeklyHours) || maxWeeklyHours < 1 || maxWeeklyHours > 40) {
+    const maxHoursPerWeek = parseInt(safeTrim(rowData['周最大课时*']));
+    if (isNaN(maxHoursPerWeek) || maxHoursPerWeek < 1 || maxHoursPerWeek > 40) {
       errors.push('周最大课时必须是1-40之间的数字');
     }
     
     // 验证学科
-    const subjects = safeTrim(rowData['任教学科*'])
-      .split(',')
-      .map(safeTrim)
-      .filter(Boolean);
     const invalidSubjects = subjects.filter(subject => !SUBJECTS.includes(subject));
     if (invalidSubjects.length > 0) {
       errors.push(`无效的学科: ${invalidSubjects.join(', ')}。可选学科: ${SUBJECTS.join(', ')}`);
@@ -115,8 +120,8 @@ export const teacherImportTemplate: ImportTemplate<CreateTeacherRequest> = {
       department: safeTrim(rowData['部门*']),
       position: safeTrim(rowData['职务*']),
       subjects: subjects,
-      maxWeeklyHours: maxWeeklyHours,
-      status: safeTrim(rowData['状态*']),
+      maxWeeklyHours: maxHoursPerWeek,
+      status: status,
       unavailableSlots: [],
       preferences: {},
     };
@@ -128,7 +133,7 @@ export const teacherImportTemplate: ImportTemplate<CreateTeacherRequest> = {
     item.employeeId,
     item.department,
     item.position,
-    item.subjects.join(','),
+    Array.isArray(item.subjects) ? item.subjects.join(',') : item.subjects || '',
     item.maxWeeklyHours.toString(),
     item.status,
     '',
@@ -214,6 +219,7 @@ export const classImportTemplate: ImportTemplate<CreateClassRequest> = {
       studentCount: studentCount,
       academicYear: academicYear,
       semester: 1,
+      classTeacher: safeTrim(rowData['班主任']) || undefined,
     };
     
     return { data, errors: [] };
@@ -224,6 +230,7 @@ export const classImportTemplate: ImportTemplate<CreateClassRequest> = {
     item.studentCount.toString(),
     item.academicYear,
     item.semester.toString(),
+    item.classTeacher || '',
     '',
   ],
 };
@@ -437,16 +444,14 @@ export const roomImportTemplate: ImportTemplate<CreateRoomRequest> = {
       return { errors };
     }
     
-    const data: Record<string, string> = {
+    const data: CreateRoomRequest = {
       name: safeTrim(rowData['场室名称*']),
       roomNumber: safeTrim(rowData['房间号*']),
       type: type,
-      capacity: capacity.toString(),
-      status: safeTrim(rowData['状态*']),
-      building: safeTrim(rowData['建筑']) || '',
-      floor: rowData['楼层'] ? safeTrim(rowData['楼层']) : '',
-      equipment: equipment.join(','),
-      remarks: safeTrim(rowData['备注']) || '',
+      capacity: capacity,
+      building: safeTrim(rowData['建筑']) || undefined,
+      floor: rowData['楼层'] ? parseInt(safeTrim(rowData['楼层'])) : undefined,
+      equipment: equipment,
     };
     
     return { data, errors: [] };
@@ -462,7 +467,7 @@ export const roomImportTemplate: ImportTemplate<CreateRoomRequest> = {
       row.building,
       row.floor,
       row.equipment,
-      row.remarks,
+      '',
     ];
   },
 };
