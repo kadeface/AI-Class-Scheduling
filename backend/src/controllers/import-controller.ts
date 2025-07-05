@@ -109,37 +109,13 @@ export class ImportController {
   static async importData(req: Request, res: Response) {
     let data: any[] = [];
     let type: ImportType = req.params.type as ImportType;
-    console.log("req.body",req.body)
-    // 1. 优先处理结构化 JSON 数据
+
     if (Array.isArray(req.body)) {
       data = req.body;
-    } else if (req.file) {
-      // 文件上传处理
-      let workbook;
-      try {
-        workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
-      } catch (err) {
-        res.status(400).json({
-          success: false,
-          message: '文件解析失败，请确认文件格式正确。',
-          error: (err as Error).message,
-        });
-        return;
-      }
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      if (!worksheet) {
-        res.status(400).json({
-          success: false,
-          message: '未检测到有效数据表，请检查文件内容。',
-        });
-        return;
-      }
-      data = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
     } else {
       res.status(400).json({
         success: false,
-        message: '未检测到有效数据，请上传结构化JSON或表格文件。',
+        message: '请直接上传结构化JSON数组数据，不支持文件上传。',
       });
       return;
     }
@@ -313,7 +289,7 @@ export class ImportController {
       return;
     }
 
-    const validateOnly = req.query.validateOnly === 'true' || req.body.validateOnly === true;
+    const validateOnly = req.query.validateOnly === 'true';
 
     // 6. 返回解析结果（后续可在此处做字段校验、数据校验等）
     if (validateOnly) {
@@ -413,10 +389,7 @@ export class ImportController {
       result = await Model.deleteMany({});
       res.json({
         success: true,
-        message: `已彻底删除${result.deletedCount ?? 0}条${type}数据`,
-        deletedCount: result.deletedCount ?? 0,
+        message: '已彻底删除数据',
       });
-      return;
-   
   }
 }
