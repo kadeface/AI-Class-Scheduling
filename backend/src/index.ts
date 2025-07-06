@@ -25,19 +25,20 @@ import { teacherRoutes } from './routes/teacher-routes';
 import { classRoutes } from './routes/class-routes';
 import { courseRoutes } from './routes/course-routes';
 import { roomRoutes } from './routes/room-routes';
-import teachingPlanRoutes from './routes/teaching-plan-routes';
-import schedulingRulesRoutes from './routes/scheduling-rules-routes';
-import schedulingRoutes from './routes/scheduling-routes';
-import scheduleViewRoutes from './routes/schedule-view-routes';
-import manualSchedulingRoutes from './routes/manual-scheduling-routes';
-import scheduleRoutes from './routes/schedule-routes';
-import importRoutes from './routes/import-routes';
+import { default as teachingPlanRoutes } from './routes/teaching-plan-routes';
+import { default as schedulingRulesRoutes } from './routes/scheduling-rules-routes';
+import { default as schedulingRoutes } from './routes/scheduling-routes';
+import { default as scheduleViewRoutes } from './routes/schedule-view-routes';
+import { default as manualSchedulingRoutes } from './routes/manual-scheduling-routes';
+import { default as scheduleRoutes } from './routes/schedule-routes';
+import { default as importRoutes } from './routes/import-routes';
+import statisticsRoutes from './routes/statistics-routes';
 
 // 加载环境变量
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = 3001; // 强制使用3001端口，避免与macOS AirTunes服务冲突
 
 /**
  * 配置应用中间件
@@ -46,20 +47,11 @@ const PORT = process.env.PORT || 5000;
  */
 function configureMiddleware(): void {
   // 安全中间件
-  app.use(helmet());
+  //app.use(helmet());
   
   // 跨域中间件
-  const allowedOrigins = [
-    'http://localhost:3000', 
-    'http://localhost:3001', 
-    'http://localhost:3003'  // 添加3003端口支持
-  ];
-  if (process.env.CORS_ORIGIN) {
-    allowedOrigins.push(process.env.CORS_ORIGIN);
-  }
-  
   app.use(cors({
-    origin: allowedOrigins,
+    origin: true,
     credentials: true
   }));
   
@@ -71,6 +63,9 @@ function configureMiddleware(): void {
   // 请求体解析中间件
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true }));
+  
+  // 处理OPTIONS预检请求
+  // app.options('*', cors());
 }
 
 /**
@@ -100,40 +95,43 @@ function configureRoutes(): void {
   });
 
   // 用户管理路由
-  app.use('/api/users', userRoutes);
+   app.use('/api/users', userRoutes);
   
   // 教师管理路由
-  app.use('/api/teachers', teacherRoutes);
+   app.use('/api/teachers', teacherRoutes);
   
   // 班级管理路由
-  app.use('/api/classes', classRoutes);
+   app.use('/api/classes', classRoutes);
   
   // 课程管理路由
-  app.use('/api/courses', courseRoutes);
+   app.use('/api/courses', courseRoutes);
   
   // 场室管理路由
-  app.use('/api/rooms', roomRoutes);
+   app.use('/api/rooms', roomRoutes);
   
   // 教学计划路由
-  app.use('/api/teaching-plans', teachingPlanRoutes);
+   app.use('/api/teaching-plans', teachingPlanRoutes);
   
   // 排课规则路由
-  app.use('/api/scheduling-rules', schedulingRulesRoutes);
+   app.use('/api/scheduling-rules', schedulingRulesRoutes);
   
   // 智能排课路由
-  app.use('/api/scheduling', schedulingRoutes);
+   app.use('/api/scheduling', schedulingRoutes);
   
   // 手动调课路由
-  app.use('/api/manual-scheduling', manualSchedulingRoutes);
+   app.use('/api/manual-scheduling', manualSchedulingRoutes);
   
   // 课表查看路由
-  app.use('/api/schedule-view', scheduleViewRoutes);
+   app.use('/api/schedule-view', scheduleViewRoutes);
   
   // 课程安排管理路由
-  app.use('/api/schedules', scheduleRoutes);
+   app.use('/api/schedules', scheduleRoutes);
 
   // 导入路由
-  app.use('/api', importRoutes);
+   app.use('/api', importRoutes);
+
+  // 统计路由
+   app.use('/api/statistics', statisticsRoutes);
 }
 
 /**

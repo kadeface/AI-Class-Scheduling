@@ -160,21 +160,27 @@ async function createTestClasses(teachers: any[]): Promise<any[]> {
     const classes = [
       {
         name: '高一(1)班',
-        grade: '高一',
+        grade: 10,
         studentCount: 45,
-        classTeacher: teachers[0]._id
+        classTeacher: teachers[0]._id,
+        academicYear: '2024-2025',
+        semester: 1
       },
       {
         name: '高一(2)班', 
-        grade: '高一',
+        grade: 10,
         studentCount: 42,
-        classTeacher: teachers[1]._id
+        classTeacher: teachers[1]._id,
+        academicYear: '2024-2025',
+        semester: 1
       },
       {
         name: '高二(1)班',
-        grade: '高二',
+        grade: 11,
         studentCount: 38,
-        classTeacher: teachers[2]._id
+        classTeacher: teachers[2]._id,
+        academicYear: '2024-2025',
+        semester: 1
       }
     ];
 
@@ -307,48 +313,48 @@ async function createTestRooms(): Promise<any[]> {
     const rooms = [
       {
         name: '教学楼A-101',
-        code: 'A101',
+        roomNumber: 'A101',
         type: '普通教室',
         building: '教学楼A',
         floor: 1,
         capacity: 50,
-        equipment: ['黑板', '投影仪', '音响']
+        equipment: ['投影仪', '音响设备']
       },
       {
         name: '教学楼A-102',
-        code: 'A102', 
+        roomNumber: 'A102', 
         type: '普通教室',
         building: '教学楼A',
         floor: 1,
         capacity: 48,
-        equipment: ['黑板', '投影仪']
+        equipment: ['投影仪']
       },
       {
         name: '教学楼A-201',
-        code: 'A201',
+        roomNumber: 'A201',
         type: '普通教室',
         building: '教学楼A', 
         floor: 2,
         capacity: 45,
-        equipment: ['黑板', '投影仪', '音响']
+        equipment: ['投影仪', '音响设备']
       },
       {
         name: '物理实验室1',
-        code: 'LAB01',
-        type: '物理实验室',
+        roomNumber: 'LAB01',
+        type: '实验室',
         building: '实验楼',
         floor: 1, 
         capacity: 40,
-        equipment: ['实验台', '投影仪', '物理器材']
+        equipment: ['实验台', '投影仪']
       },
       {
         name: '化学实验室1',
-        code: 'LAB02',
-        type: '化学实验室',
+        roomNumber: 'LAB02',
+        type: '实验室',
         building: '实验楼',
         floor: 1,
         capacity: 36,
-        equipment: ['实验台', '通风橱', '化学器材']
+        equipment: ['实验台']
       }
     ];
 

@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * 系统主页面
  * 
@@ -6,6 +8,7 @@
 
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Button } from '@/components/ui/button';
+import Link from 'next/link';
 import { 
   Users, 
   GraduationCap, 
@@ -17,6 +20,7 @@ import {
   Activity,
   Clock
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 /**
  * 统计卡片组件
@@ -58,34 +62,42 @@ const QuickActions = () => (
   <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">快捷操作</h3>
     <div className="grid grid-cols-2 gap-3">
-      <Button variant="outline" className="justify-start h-auto p-4">
-        <Users className="h-5 w-5 mr-2" />
-        <div className="text-left">
-          <div className="font-medium">用户管理</div>
-          <div className="text-xs text-gray-500">添加或编辑用户</div>
-        </div>
-      </Button>
-      <Button variant="outline" className="justify-start h-auto p-4">
-        <GraduationCap className="h-5 w-5 mr-2" />
-        <div className="text-left">
-          <div className="font-medium">教师管理</div>
-          <div className="text-xs text-gray-500">管理教师信息</div>
-        </div>
-      </Button>
-      <Button variant="outline" className="justify-start h-auto p-4">
-        <Calendar className="h-5 w-5 mr-2" />
-        <div className="text-left">
-          <div className="font-medium">智能排课</div>
-          <div className="text-xs text-gray-500">自动生成课表</div>
-        </div>
-      </Button>
-      <Button variant="outline" className="justify-start h-auto p-4">
-        <Activity className="h-5 w-5 mr-2" />
-        <div className="text-left">
-          <div className="font-medium">查看报表</div>
-          <div className="text-xs text-gray-500">统计分析</div>
-        </div>
-      </Button>
+      <Link href="/management/users" className="w-full">
+        <Button variant="outline" className="justify-start h-auto p-4 w-full">
+          <Users className="h-5 w-5 mr-2" />
+          <div className="text-left">
+            <div className="font-medium">用户管理</div>
+            <div className="text-xs text-gray-500">添加或编辑用户</div>
+          </div>
+        </Button>
+      </Link>
+      <Link href="/management/teachers" className="w-full">
+        <Button variant="outline" className="justify-start h-auto p-4 w-full">
+          <GraduationCap className="h-5 w-5 mr-2" />
+          <div className="text-left">
+            <div className="font-medium">教师管理</div>
+            <div className="text-xs text-gray-500">管理教师信息</div>
+          </div>
+        </Button>
+      </Link>
+      <Link href="/management/schedules/integrated" className="w-full">
+        <Button variant="outline" className="justify-start h-auto p-4 w-full">
+          <Calendar className="h-5 w-5 mr-2" />
+          <div className="text-left">
+            <div className="font-medium">智能排课</div>
+            <div className="text-xs text-gray-500">自动生成课表</div>
+          </div>
+        </Button>
+      </Link>
+      <Link href="/reports" className="w-full">
+        <Button variant="outline" className="justify-start h-auto p-4 w-full">
+          <Activity className="h-5 w-5 mr-2" />
+          <div className="text-left">
+            <div className="font-medium">查看报表</div>
+            <div className="text-xs text-gray-500">统计分析</div>
+          </div>
+        </Button>
+      </Link>
     </div>
   </div>
 );
@@ -126,33 +138,48 @@ const RecentActivity = () => (
  *   React.ReactElement: 系统仪表盘页面
  */
 export default function Home() {
+  const [stats, setStats] = useState({
+    userCount: 0,
+    teacherCount: 0,
+    classCount: 0,
+    courseCount: 0,
+    roomCount: 0,
+  });
+
+  useEffect(() => {
+    fetch('/api/statistics/overview')
+      .then(res => res.json())
+      .then(res => {
+        if (res.success && res.data) setStats(res.data);
+      });
+  }, []);
+
   return (
     <DashboardLayout title="系统仪表盘">
       <div className="space-y-6">
         {/* 统计概览 */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard
-            title="总用户数"
-            value="156"
-            icon={Users}
-            trend="+12% 本月"
-          />
-          <StatCard
             title="教师数量"
-            value="45"
+            value={stats.teacherCount.toString()}
             icon={GraduationCap}
             trend="+3 本月"
           />
           <StatCard
             title="班级数量"
-            value="24"
+            value={stats.classCount.toString()}
             icon={School}
           />
           <StatCard
             title="课程数量"
-            value="18"
+            value={stats.courseCount.toString()}
             icon={BookOpen}
             trend="+2 本月"
+          />
+          <StatCard
+            title="课室数量"
+            value={stats.roomCount.toString()}
+            icon={MapPin}
           />
         </div>
 
@@ -168,7 +195,7 @@ export default function Home() {
 
         {/* 欢迎信息 */}
         <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg p-6 text-white">
-          <h2 className="text-xl font-bold mb-2">欢迎使用智能排课系统</h2>
+          <h2 className="text-xl font-bold mb-2">欢迎使用长师附小智能排课系统</h2>
           <p className="text-blue-100 mb-4">
             这是一个面向K-12阶段的智能排课与场室管理系统，提供完整的教务管理解决方案。
           </p>
