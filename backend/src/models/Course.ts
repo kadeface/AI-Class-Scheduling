@@ -5,6 +5,7 @@
  */
 
 import mongoose, { Document, Schema } from 'mongoose';
+import { SUBJECTS } from '../constants/subjects';
 
 /**
  * 场地要求接口定义
@@ -84,11 +85,7 @@ const CourseSchema = new Schema<ICourse>({
     trim: true,
     maxlength: [50, '学科名称不能超过50个字符'],
     enum: {
-      values: [
-        '语文', '数学', '英语', '物理', '化学', '生物', 
-        '历史', '地理', '政治', '音乐', '美术', '体育', 
-        '信息技术', '通用技术', '心理健康', '班会'
-      ],
+      values: SUBJECTS,
       message: '学科不在允许的范围内'
     }
   },

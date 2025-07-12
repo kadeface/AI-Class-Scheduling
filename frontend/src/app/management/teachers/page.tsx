@@ -575,7 +575,12 @@ export default function TeachersPage() {
       {/* 批量导入对话框 */}
       <ImportDialog
         open={importDialogOpen}
-        onOpenChange={setImportDialogOpen}
+        onOpenChange={(open) => {
+          setImportDialogOpen(open);
+          if (!open) {
+            fetchTeachers(); // 弹窗关闭时刷新
+          }
+        }}
         resourceType="teacher"
         onImport={handleBatchImport}
       />

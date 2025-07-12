@@ -112,6 +112,13 @@ export default function TeachingPlansPage() {
     notes: '',
   });
 
+  // 审批意见
+  const [approvalComments, setApprovalComments] = useState('');
+
+  // 删除确认对话框状态
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [planToDelete, setPlanToDelete] = useState<TeachingPlan | null>(null);
+
   /**
    * 获取教学计划列表
    */
@@ -287,6 +294,7 @@ export default function TeachingPlansPage() {
       approve: false,
     });
     setSelectedPlan(null);
+    setApprovalComments('');
   };
 
   /**
@@ -342,8 +350,6 @@ export default function TeachingPlansPage() {
    * 删除教学计划
    */
   const handleDelete = async (id: string) => {
-    if (!confirm('确定要删除这个教学计划吗？')) return;
-    
     try {
       const response = await teachingPlanApi.delete(id);
       if (response.success) {
@@ -471,7 +477,10 @@ export default function TeachingPlansPage() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => handleDelete(record._id)}
+            onClick={() => {
+              setPlanToDelete(record);
+              setDeleteDialogOpen(true);
+            }}
           >
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -766,7 +775,7 @@ export default function TeachingPlansPage() {
                             <Input
                               type="number"
                               min="1"
-                              max="20"
+                              max="30"
                               value={assignment.weeklyHours}
                               onChange={(e) => {
                                 const newAssignments = [...formData.courseAssignments];
@@ -867,6 +876,337 @@ export default function TeachingPlansPage() {
             >
               创建教学计划
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 审批教学计划对话框 */}
+      <Dialog open={dialogState.approve} onOpenChange={(open) => 
+        setDialogState(prev => ({ ...prev, approve: open }))
+      }>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>审批教学计划</DialogTitle>
+          </DialogHeader>
+          
+          {/* 审批表单内容 */}
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="approvalComments">审批意见</Label>
+              <Textarea
+                id="approvalComments"
+                placeholder="请输入审批意见..."
+                rows={4}
+                value={approvalComments}
+                onChange={(e) => setApprovalComments(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDialogs}>
+              取消
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={() => handleApproval(false, approvalComments)}
+            >
+              拒绝
+            </Button>
+            <Button onClick={() => handleApproval(true, approvalComments)}>
+              通过
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 删除确认对话框 */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>确认删除</DialogTitle>
+          </DialogHeader>
+          <div>确定要删除该教学计划吗？此操作不可恢复。</div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>取消</Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                if (planToDelete) {
+                  await handleDelete(planToDelete._id);
+                  setDeleteDialogOpen(false);
+                  setPlanToDelete(null);
+                }
+              }}
+            >
+              确认删除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 编辑教学计划对话框 */}
+      <Dialog open={dialogState.edit} onOpenChange={(open) => setDialogState(prev => ({ ...prev, edit: open }))}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>编辑教学计划</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-6">
+            {/* 基本信息 */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">基本信息</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div>
+                    <Label htmlFor="academicYear">学年 *</Label>
+                    <Select
+                      value={formData.academicYear}
+                      onValueChange={(value) => {
+                        setFormData(prev => ({ ...prev, academicYear: value, class: '' }));
+                        if (value && formData.semester) {
+                          fetchClassesForAcademicYear(value, formData.semester);
+                        }
+                      }}
+                    >
+                      <option value="">请选择学年</option>
+                      {generateAcademicYears().map((year) => (
+                        <option key={year} value={year}>
+                          {year}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="semester">学期 *</Label>
+                    <Select
+                      value={formData.semester.toString()}
+                      onValueChange={(value) => {
+                        const newSemester = parseInt(value);
+                        setFormData(prev => ({ ...prev, semester: newSemester, class: '' }));
+                        if (formData.academicYear && newSemester) {
+                          fetchClassesForAcademicYear(formData.academicYear, newSemester);
+                        }
+                      }}
+                    >
+                      <option value="1">第一学期</option>
+                      <option value="2">第二学期</option>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="class">班级 *</Label>
+                    <Select
+                      value={formData.class}
+                      onValueChange={(value) => setFormData(prev => ({ ...prev, class: value }))}
+                      disabled={!formData.academicYear || !formData.semester}
+                    >
+                      <option value="">
+                        {!formData.academicYear || !formData.semester 
+                          ? '请先选择学年和学期' 
+                          : classes.length === 0 
+                            ? '该学年学期暂无班级数据'
+                            : '请选择班级'
+                        }
+                      </option>
+                      {classes.map((cls) => (
+                        <option key={cls._id} value={cls._id}>
+                          {cls.grade}年级{cls.name}班 ({cls.studentCount}人)
+                        </option>
+                      ))}
+                    </Select>
+                    {formData.academicYear && formData.semester && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        显示 {formData.academicYear} 学年第{formData.semester}学期的班级
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 课程安排 */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center justify-between">
+                  课程安排
+                  <Button 
+                    type="button"
+                    onClick={() => {
+                      setFormData(prev => ({
+                        ...prev,
+                        courseAssignments: [
+                          ...prev.courseAssignments,
+                          {
+                            course: '',
+                            teacher: '',
+                            weeklyHours: 2,
+                            requiresContinuous: false,
+                            continuousHours: 2,
+                            preferredTimeSlots: [],
+                            avoidTimeSlots: [],
+                            notes: ''
+                          }
+                        ]
+                      }));
+                    }}
+                    className="gap-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    添加课程
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {formData.courseAssignments.map((assignment, index) => (
+                    <Card key={index} className="border-l-4 border-l-blue-500">
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-medium">课程 {index + 1}</h4>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setFormData(prev => ({
+                                ...prev,
+                                courseAssignments: prev.courseAssignments.filter((_, i) => i !== index)
+                              }));
+                            }}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid gap-4 md:grid-cols-3">
+                          <div>
+                            <Label>课程 *</Label>
+                            <Select
+                              value={assignment.course}
+                              onValueChange={(value) => {
+                                const newAssignments = [...formData.courseAssignments];
+                                newAssignments[index].course = value;
+                                setFormData(prev => ({ ...prev, courseAssignments: newAssignments }));
+                              }}
+                            >
+                              <option value="">请选择课程</option>
+                              {courses.map((course) => (
+                                <option key={course._id} value={course._id}>
+                                  {course.name}
+                                </option>
+                              ))}
+                            </Select>
+                          </div>
+                          <div>
+                            <Label>授课教师 *</Label>
+                            <Select
+                              value={assignment.teacher}
+                              onValueChange={(value) => {
+                                const newAssignments = [...formData.courseAssignments];
+                                newAssignments[index].teacher = value;
+                                setFormData(prev => ({ ...prev, courseAssignments: newAssignments }));
+                              }}
+                            >
+                              <option value="">请选择教师</option>
+                              {teachers.map((teacher) => (
+                                <option key={teacher._id} value={teacher._id}>
+                                  {teacher.name} - {teacher.subjects?.join(', ') || '未设置科目'}
+                                </option>
+                              ))}
+                            </Select>
+                          </div>
+                          <div>
+                            <Label>周课时 *</Label>
+                            <Input
+                              type="number"
+                              min="1"
+                              max="30"
+                              value={assignment.weeklyHours}
+                              onChange={(e) => {
+                                const newAssignments = [...formData.courseAssignments];
+                                newAssignments[index].weeklyHours = parseInt(e.target.value) || 1;
+                                setFormData(prev => ({ ...prev, courseAssignments: newAssignments }));
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <div className="mt-4 space-y-2">
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              id={`continuous-edit-${index}`}
+                              checked={assignment.requiresContinuous || false}
+                              onChange={(e) => {
+                                const newAssignments = [...formData.courseAssignments];
+                                newAssignments[index].requiresContinuous = e.target.checked;
+                                if (e.target.checked && (!newAssignments[index].continuousHours || newAssignments[index].continuousHours < 2)) {
+                                  newAssignments[index].continuousHours = 2;
+                                }
+                                setFormData(prev => ({ ...prev, courseAssignments: newAssignments }));
+                              }}
+                            />
+                            <Label htmlFor={`continuous-edit-${index}`}>需要连续排课</Label>
+                          </div>
+                          {assignment.requiresContinuous && (
+                            <div className="ml-6">
+                              <Label>连续课时数</Label>
+                              <Input
+                                type="number"
+                                min="2"
+                                max="4"
+                                value={assignment.continuousHours || 2}
+                                onChange={(e) => {
+                                  const newAssignments = [...formData.courseAssignments];
+                                  newAssignments[index].continuousHours = parseInt(e.target.value) || 2;
+                                  setFormData(prev => ({ ...prev, courseAssignments: newAssignments }));
+                                }}
+                                className="w-24"
+                              />
+                            </div>
+                          )}
+                          <div>
+                            <Label>备注</Label>
+                            <Input
+                              placeholder="课程安排备注"
+                              value={assignment.notes || ''}
+                              onChange={(e) => {
+                                const newAssignments = [...formData.courseAssignments];
+                                newAssignments[index].notes = e.target.value;
+                                setFormData(prev => ({ ...prev, courseAssignments: newAssignments }));
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                  {formData.courseAssignments.length === 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      <BookOpen className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                      <p>暂无课程安排，点击"添加课程"开始配置</p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 备注 */}
+            <div>
+              <Label htmlFor="notes-edit">备注</Label>
+              <Textarea
+                id="notes-edit"
+                placeholder="教学计划备注"
+                rows={3}
+                value={formData.notes || ''}
+                onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDialogs}>取消</Button>
+            <Button onClick={handleUpdate}>保存修改</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

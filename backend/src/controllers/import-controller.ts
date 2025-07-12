@@ -202,8 +202,14 @@ export class ImportController {
         if (def === 'boolean' && value && !['true', 'false', '1', '0', true, false].includes(value)) {
           errors.push({ row: idx + 2, error: `字段 "${field}" 必须为布尔值(true/false/1/0)` });
         }
-        if (def === 'array' && value && typeof value === 'string' && value.indexOf(',') === -1) {
-          errors.push({ row: idx + 2, error: `字段 "${field}" 应为逗号分隔的数组` });
+        if (def === 'array' && value && typeof value === 'string') {
+          // 允许单个设备名字符串或逗号分隔字符串
+          // 只要 value 非空字符串即可通过
+          // 原逻辑: if (value.indexOf(',') === -1) { 错误！
+          if (value.trim() === '') {
+            errors.push({ row: idx + 2, error: `字段 "${field}" 不能为空` });
+          }
+          // 不再强制要求有逗号
         }
         if (Array.isArray(def) && value && !def.includes(value)) {
           errors.push({ row: idx + 2, error: `字段 "${field}" 必须为以下值之一: ${def.join(', ')}` });
@@ -304,7 +310,7 @@ export class ImportController {
     }
 
     // 实际导入
-    const Model = MODEL_MAP[type];
+    let insertCount = 0;
     try {
       // 可选：先做唯一性校验（如 employeeId、courseCode、roomNumber 等）
       // 可选：批量插入前先清理空值、格式化数据
@@ -331,9 +337,14 @@ export class ImportController {
             };
           }
         });
+        // 修正 continuousHours 字段处理
+        if (row.requiresContinuous) {
+          row.continuousHours = Number(row.continuousHours) || 2;
+        } else {
+          delete row.continuousHours;
+        }
       });
       console.log('【实际插入数据库的数据】', JSON.stringify(data, null, 2));
-      let insertCount = 0;
       let updateCount = 0;
       if (type === 'courses') {
         console.log('toInsert:', toInsert.length, toInsert);
@@ -366,6 +377,20 @@ export class ImportController {
         });
       }
     } catch (err) {
+      const errorObj = err as any;
+      if (errorObj.writeErrors) {
+        const details = errorObj.writeErrors.map((e: any) => ({
+          row: e.index + 2, // +2因为表头和0-index
+          error: e.errmsg
+        }));
+        res.status(400).json({
+          success: false,
+          message: '部分数据导入失败',
+          errors: details,
+          inserted: typeof insertCount !== 'undefined' ? insertCount : 0
+        });
+        return;
+      }
       res.status(500).json({
         success: false,
         message: '批量导入数据库时发生错误',

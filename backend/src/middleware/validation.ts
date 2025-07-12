@@ -6,6 +6,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { ApiResponse } from '../types/api';
+import { SUBJECTS } from '../constants/subjects';
 
 /**
  * 验证用户创建请求数据
@@ -470,8 +471,7 @@ export const validateCreateCourse = (req: Request, res: Response, next: NextFunc
   }
 
   // 验证学科
-  const validSubjects = ['语文', '数学', '英语', '物理', '化学', '生物', '历史', '地理', '政治', '音乐', '美术', '体育', '信息技术', '通用技术', '心理健康', '班会'];
-  if (!subject || !validSubjects.includes(subject)) {
+  if (!subject || !SUBJECTS.includes(subject)) {
     errors.push('学科不在允许的范围内');
   }
 
@@ -1129,8 +1129,8 @@ function validateCourseAssignment(assignment: any, index: number): string[] {
   // 验证每周课时数
   if (assignment.weeklyHours === undefined || typeof assignment.weeklyHours !== 'number') {
     errors.push(`${prefix} 每周课时数不能为空`);
-  } else if (assignment.weeklyHours < 1 || assignment.weeklyHours > 10) {
-    errors.push(`${prefix} 每周课时数必须在1-10之间`);
+  } else if (assignment.weeklyHours < 0|| assignment.weeklyHours > 20) {
+    errors.push(`${prefix} 每周课时数必须在0-20之间`);
   }
 
   // 验证连排设置

@@ -716,7 +716,12 @@ export default function RoomsPage() {
       {/* 批量导入对话框 */}
       <ImportDialog
         open={importDialogOpen}
-        onOpenChange={setImportDialogOpen}
+        onOpenChange={(open) => {
+          setImportDialogOpen(open);
+          if (!open) {
+            fetchRooms(); // 弹窗关闭时刷新
+          }
+        }}
         resourceType="room"
         onImport={handleBatchImport}
       />

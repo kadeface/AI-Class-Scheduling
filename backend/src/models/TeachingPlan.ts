@@ -81,8 +81,8 @@ const CourseAssignmentSchema = new Schema<ICourseAssignment>({
   weeklyHours: {
     type: Number,
     required: [true, '每周课时数不能为空'],
-    min: [1, '每周课时数至少为1'],
-    max: [10, '每周课时数不能超过10']
+    min: [0, '每周课时数不能小于0'],
+    max: [20, '每周课时数不能超过20']
   },
   
   requiresContinuous: {
@@ -189,7 +189,7 @@ const TeachingPlanSchema = new Schema<ITeachingPlan>({
     type: Number,
     required: [true, '总周课时数不能为空'],
     min: [1, '总周课时数至少为1'],
-    max: [50, '总周课时数不能超过50']
+    max: [60, '总周课时数不能超过60']
   },
   
   status: {

@@ -27,7 +27,7 @@
 前端:
   - 框架: Next.js 15 (App Router)
   - 语言: TypeScript  
-  - UI组件: Shadcn UI
+  - UI组件: Radix UI
   - 样式: Tailwind CSS 4
   - 动画: Framer Motion
   - 图标: Lucide React

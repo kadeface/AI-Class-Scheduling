@@ -434,8 +434,10 @@ export const roomImportTemplate: ImportTemplate<CreateRoomRequest> = {
     }
     
     // 验证设备
-    const equipment = safeTrim(rowData['设备'])?.split(',').map(safeTrim).filter(Boolean) || [];
-    const invalidEquipment = equipment.filter(eq => !EQUIPMENT_TYPES.includes(eq));
+    const equipmentStr = safeTrim(rowData['设备']);
+    const validEquipmentStr = equipmentStr ? equipmentStr : '-'; // 或者 '无'，视后端容忍度
+    const equipmentArr = validEquipmentStr.split(',').map(safeTrim).filter(Boolean);
+    const invalidEquipment = equipmentArr.filter(eq => !EQUIPMENT_TYPES.includes(eq));
     if (invalidEquipment.length > 0) {
       errors.push(`无效的设备类型: ${invalidEquipment.join(', ')}。可选设备: ${EQUIPMENT_TYPES.join(', ')}`);
     }
@@ -451,7 +453,7 @@ export const roomImportTemplate: ImportTemplate<CreateRoomRequest> = {
       capacity: capacity,
       building: safeTrim(rowData['建筑']) || undefined,
       floor: rowData['楼层'] ? parseInt(safeTrim(rowData['楼层'])) : undefined,
-      equipment: equipment,
+      equipment: validEquipmentStr as any,
     };
     
     return { data, errors: [] };

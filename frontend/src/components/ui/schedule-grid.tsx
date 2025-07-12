@@ -166,7 +166,7 @@ export function ScheduleGrid({
     const items: string[] = [];
     gridData.forEach(row => {
       row.forEach(item => {
-        if (item && config.enableDragDrop) {
+        if (item && config.enableDragDrop && item._id) {
           items.push(item._id);
         }
       });

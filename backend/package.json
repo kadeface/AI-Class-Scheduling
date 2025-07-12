@@ -4,7 +4,7 @@
   "description": "智能排课排场室系统后端API服务",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "nodemon --no-deprecation src/index.ts",
+    "dev": "nodemon --exec \"node --no-deprecation -r ts-node/register src/index.ts\"",
     "build": "tsc",
     "start": "node dist/index.js",
     "init-db": "ts-node src/scripts/init-database.ts",

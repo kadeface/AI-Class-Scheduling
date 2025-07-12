@@ -764,7 +764,12 @@ export default function CoursesPage() {
       {/* 批量导入对话框 */}
       <ImportDialog
         open={importDialogOpen}
-        onOpenChange={setImportDialogOpen}
+        onOpenChange={(open) => {
+          setImportDialogOpen(open);
+          if (!open) {
+            fetchCourses(); // 弹窗关闭时刷新
+          }
+        }}
         resourceType="course"
         onImport={handleBatchImport}
       />

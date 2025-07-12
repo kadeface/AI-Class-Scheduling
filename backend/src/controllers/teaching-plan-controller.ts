@@ -119,6 +119,13 @@ export const getTeachingPlans = async (req: Request, res: Response): Promise<voi
     // 构建查询条件
     const query: any = {};
 
+    // 默认只查活跃数据，除非明确传入isActive参数
+    if (isActive !== undefined) {
+      query.isActive = isActive === 'true' || isActive === true;
+    } else {
+      query.isActive = true;
+    }
+
     if (classId) {
       query.class = classId;
     }
@@ -133,10 +140,6 @@ export const getTeachingPlans = async (req: Request, res: Response): Promise<voi
 
     if (status) {
       query.status = status;
-    }
-
-    if (isActive !== undefined) {
-      query.isActive = isActive === 'true' || isActive === true;
     }
 
     // 如果指定了教师，查找包含该教师的教学计划

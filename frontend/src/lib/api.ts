@@ -4,6 +4,8 @@
  * 提供与后端API交互的统一接口，包括错误处理和类型安全
  */
 
+import subjects from './subjects.json';
+
 // 基础配置
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
@@ -19,7 +21,7 @@ export interface ApiResponse<T = any> {
 
 /**
  * 分页响应类型
- */
+ */ 
 export interface PaginatedResponse<T> {
   items: T[];
   total: number;
@@ -357,13 +359,9 @@ export const roomApi = {
 export const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 
 /**
- * 学科列表
+ * 学科列表（自动与后端同步）
  */
-export const SUBJECTS = [
-  '语文', '数学', '英语', '物理', '化学', '生物',
-  '历史', '地理', '政治', '音乐', '美术', '体育',
-  '信息技术', '通用技术', '心理健康', '班会'
-];
+export const SUBJECTS = subjects as string[];
 
 /**
  * 教室类型列表
