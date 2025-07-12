@@ -72,7 +72,8 @@ interface DialogFooterProps {
  * 
  * Returns:
  *   React.ReactElement: 对话框组件
- */export function Dialog({ open, onOpenChange, children, className }: DialogProps) {
+ */
+export function Dialog({ open, onOpenChange, children, className }: DialogProps) {
   // 处理 ESC 键关闭
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
@@ -102,12 +103,11 @@ interface DialogFooterProps {
         className="fixed inset-0 bg-black/50 backdrop-blur-sm"
         onClick={() => onOpenChange(false)}
       />
-      
       {/* 对话框容器 */}
       <div className="fixed inset-0 flex items-center justify-center p-4">
         <div className={cn(
-          'relative bg-white dark:bg-gray-800 rounded-lg shadow-xl',
-          'w-full max-w-lg max-h-[90vh] overflow-hidden',
+          'relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl',
+          'w-full max-w-[1100px] max-h-[90vh] overflow-hidden',
           'transform transition-all duration-200 ease-out',
           className
         )}>
@@ -120,10 +120,17 @@ interface DialogFooterProps {
 
 /**
  * 对话框内容组件
+ * 
+ * Args:
+ *   children: 子组件
+ *   className: 自定义样式类
+ * 
+ * Returns:
+ *   React.ReactElement: 对话框内容
  */
 export function DialogContent({ children, className }: DialogContentProps) {
   return (
-    <div className={cn('flex flex-col max-h-[90vh]', className)}>
+    <div className={cn('flex flex-col max-h-[90vh] overflow-x-auto bg-white rounded-2xl', className)}>
       {children}
     </div>
   );
@@ -149,7 +156,7 @@ export function DialogHeader({ children, className }: DialogHeaderProps) {
 export function DialogTitle({ children, className }: DialogTitleProps) {
   return (
     <h2 className={cn(
-      'text-lg font-semibold text-gray-900 dark:text-white',
+      'text-2xl font-bold text-gray-900 dark:text-white',
       className
     )}>
       {children}
@@ -177,7 +184,7 @@ export function DialogDescription({ children, className }: DialogDescriptionProp
 export function DialogFooter({ children, className }: DialogFooterProps) {
   return (
     <div className={cn(
-      'flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-gray-700',
+      'flex items-center justify-end space-x-4 p-6 border-t border-gray-200 dark:border-gray-700',
       className
     )}>
       {children}

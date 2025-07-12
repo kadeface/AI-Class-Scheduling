@@ -210,3 +210,34 @@ export interface Option {
   name: string;
   [key: string]: any;
 }
+
+/**
+ * 年级批量设置教学计划相关类型
+ */
+
+/**
+ * 批量教学计划课程结构
+ */
+export interface BatchCourseConfig {
+  courseId: string;
+  name: string;
+  weeklyHours: number;
+  continuous?: boolean;
+}
+
+/**
+ * 班级-教师分配结构
+ */
+export interface BatchClassTeacherAssignment {
+  classId: string;
+  teachers: { [courseId: string]: string }; // courseId -> teacherId
+}
+
+/**
+ * 年级批量教学计划表单结构
+ */
+export interface BatchTeachingPlanForm {
+  grade: string;
+  courses: BatchCourseConfig[];
+  assignments: BatchClassTeacherAssignment[];
+}

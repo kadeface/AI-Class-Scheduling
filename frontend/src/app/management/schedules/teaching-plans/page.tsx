@@ -50,6 +50,8 @@ import {
   TEACHING_PLAN_STATUS
 } from '@/lib/api';
 import { formatDateTime, cn } from '@/lib/utils';
+import { BatchTeachingPlanForm, BatchCourseConfig, BatchClassTeacherAssignment } from '@/types/schedule';
+import { generateCsv, downloadCsv } from '@/lib/csv';
 
 /**
  * 教学计划管理页面组件
@@ -118,6 +120,35 @@ export default function TeachingPlansPage() {
   // 删除确认对话框状态
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [planToDelete, setPlanToDelete] = useState<TeachingPlan | null>(null);
+
+  // 年级批量设置Dialog状态
+  const [batchDialogOpen, setBatchDialogOpen] = useState(false);
+  // 年级批量表单状态（存储批量设置的表单数据）
+  const [batchForm, setBatchForm] = useState<BatchTeachingPlanForm | null>(null);
+  /**
+   * 年级批量表单错误状态
+   * 
+   * 记录课程结构区和班级-教师分配区的校验错误信息
+   * courses: 每门课程的错误（名称、课时、连排）
+   * assignments: 每个班级每门课程的教师分配错误
+   */
+  const [batchFormErrors, setBatchFormErrors] = useState<{
+    courses?: { name?: string; weeklyHours?: string; continuous?: string }[];
+    assignments?: { [classId: string]: { [courseId: string]: string } };
+  } | null>(null);
+  /**
+   * 年级批量表单提交loading状态
+   * 控制批量提交按钮的禁用与loading动画
+   */
+  const [batchLoading, setBatchLoading] = useState(false);
+  /**
+   * 年级批量表单导出loading状态
+   * 控制导出按钮的禁用与loading动画
+   */
+  const [exportLoading, setExportLoading] = useState(false);
+
+  // 年级选项（从班级name字段前3个字符提取，如“一年级”）
+  const gradeOptions = Array.from(new Set(classes.map(cls => cls.name.slice(0, 3))));
 
   /**
    * 获取教学计划列表
@@ -377,6 +408,60 @@ export default function TeachingPlansPage() {
     }
   };
 
+  // 打开年级批量设置Dialog
+  const openBatchDialog = async () => {
+    setBatchDialogOpen(true);
+    setBatchForm({ grade: '', courses: [], assignments: [] });
+    // 拉取所有班级，确保年级下拉有数据
+    try {
+      const res = await classApi.getList({ limit: 1000, isActive: true });
+      if (res.success && res.data) {
+        setClasses(res.data.items);
+      }
+    } catch (e) {
+      setClasses([]);
+    }
+  };
+
+  /**
+   * 关闭年级批量设置Dialog并重置所有相关状态
+   * 
+   * Args: None
+   * Returns: void
+   */
+  const closeBatchDialog = () => {
+    setBatchDialogOpen(false);
+    setBatchForm(null);
+    setBatchFormErrors(null);
+    setBatchLoading(false);
+    setExportLoading(false);
+  };
+
+  /**
+   * 将batchForm转换为后端API所需的批量教学计划创建请求体
+   * Returns: CreateTeachingPlanRequest[]
+   */
+  function convertBatchFormToApiRequests(batchForm: BatchTeachingPlanForm, academicYear: string, semester: number): CreateTeachingPlanRequest[] {
+    // 1. 获取所有班级ID
+    const classIds = batchForm.assignments.map(a => a.classId);
+    // 2. 对每个班级生成CreateTeachingPlanRequest
+    return classIds.map(classId => {
+      const assignment = batchForm.assignments.find(a => a.classId === classId);
+      return {
+        class: classId,
+        academicYear,
+        semester,
+        courseAssignments: batchForm.courses.map(course => ({
+          course: course.courseId || course.name, // 若无courseId则用name
+          teacher: assignment?.teachers[course.courseId] || '',
+          weeklyHours: course.weeklyHours,
+          requiresContinuous: !!course.continuous,
+        })),
+        notes: '',
+      };
+    });
+  }
+
   // 表格列定义
   const columns: TableColumn<TeachingPlan>[] = [
     {
@@ -499,10 +584,17 @@ export default function TeachingPlansPage() {
             管理班级的课程安排和教师分配
           </p>
         </div>
-        <Button onClick={openCreateDialog} className="gap-2">
-          <Plus className="h-4 w-4" />
-          新建计划
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={openCreateDialog} className="gap-2">
+            <Plus className="h-4 w-4" />
+            新建计划
+          </Button>
+          {/* 年级批量设置入口按钮 */}
+          <Button variant="secondary" onClick={openBatchDialog} className="gap-2">
+            <Users className="h-4 w-4" />
+            年级批量设置
+          </Button>
+        </div>
       </div>
 
       {/* 搜索和筛选 */}
@@ -1207,6 +1299,421 @@ export default function TeachingPlansPage() {
           <DialogFooter>
             <Button variant="outline" onClick={closeDialogs}>取消</Button>
             <Button onClick={handleUpdate}>保存修改</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 年级批量设置Dialog */}
+      <Dialog open={batchDialogOpen} onOpenChange={(open) => {
+        if (!open) closeBatchDialog();
+        else setBatchDialogOpen(true);
+      }}>
+        <DialogContent className="max-w-[90vw] w-full overflow-x-auto">
+          <DialogHeader>
+            <DialogTitle>年级批量设置教学计划</DialogTitle>
+            {/* 导出按钮，右上角 */}
+            {batchForm && batchForm.grade && batchForm.courses.length > 0 && batchForm.assignments.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="absolute right-8 top-6"
+                disabled={exportLoading || batchLoading}
+                /**
+                 * 导出当前批量表单为CSV文件
+                 * 
+                 * Args: None
+                 * Returns: void
+                 */
+                onClick={async () => {
+                  setExportLoading(true);
+                  try {
+                    // 组装导出数据，按年级、班级、课程、课时、连排、教师输出
+                    const filteredClasses = classes.filter(cls => String(cls.name.slice(0, 3)) === String(batchForm.grade));
+                    const rows: Array<{ 年级: string; 班级: string; 课程: string; 课时: string; 连排: string; 教师: string }> = [];
+                    filteredClasses.forEach(cls => {
+                      batchForm.courses.forEach(course => {
+                        const assignment = batchForm.assignments.find(a => a.classId === cls._id);
+                        const teacherId = assignment?.teachers[course.courseId] || '';
+                        // 查找教师姓名
+                        const teacherName = teachers.find(t => t._id === teacherId)?.name || '';
+                        rows.push({
+                          年级: String(batchForm.grade),
+                          班级: cls.name,
+                          课程: course.name,
+                          课时: String(course.weeklyHours),
+                          连排: course.continuous ? '是' : '否',
+                          教师: teacherName,
+                        });
+                      });
+                    });
+                    // 生成CSV内容
+                    const headers = ['年级', '班级', '课程', '课时', '连排', '教师'];
+                    const csvContent = generateCsv(rows, headers, item => [item.年级, item.班级, item.课程, item.课时, item.连排, item.教师]);
+                    // 文件名
+                    const now = new Date();
+                    const ts = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}_${now.getHours().toString().padStart(2,'0')}${now.getMinutes().toString().padStart(2,'0')}`;
+                    const filename = `教学计划批量配置_${batchForm.grade}_${ts}.csv`;
+                    downloadCsv(csvContent, filename);
+                  } finally {
+                    setExportLoading(false);
+                  }
+                }}
+              >{exportLoading ? '导出中...' : '导出'}</Button>
+            )}
+          </DialogHeader>
+          <div className="p-6 flex flex-col gap-6">
+            {/* 年级选择区 */}
+            <div>
+
+              <Label>选择年级</Label>
+ 
+              <Select
+                value={batchForm?.grade || ''}
+                onValueChange={grade => setBatchForm(f => f ? { ...f, grade } : null)}
+                options={gradeOptions.map(grade => ({ value: grade, label: grade }))}
+                placeholder="请选择年级"
+                className="w-48 mt-2"
+              />
+            </div>
+            <Separator />
+            {/* 课程结构配置区（动态增删） */}
+            <div>
+              <Label>课程结构配置</Label>
+              <div className="border rounded p-4 min-h-[80px] flex flex-col gap-4">
+                {/* 课程列表 */}
+                {batchForm?.courses && batchForm.courses.length > 0 ? (
+                  batchForm.courses.map((course, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <Select
+                        className="w-48"
+                        value={course.courseId}
+                        onValueChange={courseId => setBatchForm(f => {
+                          if (!f) return f;
+                          const coursesArr = [...f.courses];
+                          // 用全局 courses 查找
+                          const selected = courses.find(c => c._id === courseId);
+                          coursesArr[idx] = { ...coursesArr[idx], courseId, name: selected?.name || '' };
+                          return { ...f, courses: coursesArr };
+                        })}
+                        options={courses.map(c => ({ value: c._id, label: c.name }))}
+                        placeholder="请选择课程"
+                      />
+                      <Input
+                        className="w-24"
+                        type="number"
+                        min={1}
+                        placeholder="课时/周"
+                        value={course.weeklyHours}
+                        onChange={e => setBatchForm(f => {
+                          if (!f) return f;
+                          const coursesArr = [...f.courses];
+                          coursesArr[idx] = { ...coursesArr[idx], weeklyHours: Number(e.target.value) };
+                          return { ...f, courses: coursesArr };
+                        })}
+                      />
+                      <label className="flex items-center gap-1 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={!!course.continuous}
+                          onChange={e => setBatchForm(f => {
+                            if (!f) return f;
+                            const coursesArr = [...f.courses];
+                            coursesArr[idx] = { ...coursesArr[idx], continuous: e.target.checked };
+                            return { ...f, courses: coursesArr };
+                          })}
+                        /> 连排
+                      </label>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setBatchForm(f => {
+                          if (!f) return f;
+                          const coursesArr = f.courses.filter((_, i) => i !== idx);
+                          return { ...f, courses: coursesArr };
+                        })}
+                        title="删除课程"
+                      >
+                        <X size={16} />
+                      </Button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-gray-400 text-sm">暂无课程，请添加</div>
+                )}
+                {/* 添加课程按钮 */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-32 mt-2"
+                  onClick={() => setBatchForm(f => {
+                    if (!f) return f;
+                    return {
+                      ...f,
+                      courses: [
+                        ...f.courses,
+                        { courseId: '', name: '', weeklyHours: 1, continuous: false }
+                      ]
+                    };
+                  })}
+                >
+                  <Plus size={14} className="mr-1" /> 添加课程
+                </Button>
+              </div>
+            </div>
+            <Separator />
+            {/* 班级-教师分配表格（动态渲染） */}
+            <div>
+              <Label>班级-教师分配</Label>
+              {/* 快捷操作区 */}
+              {batchForm?.grade && batchForm.courses.length > 0 && teachers.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2 items-center">
+                  {/* 批量分配：为所有班级的某课程一键分配同一教师 */}
+                  {batchForm.courses.map((course, cidx) => (
+                    <div key={cidx} className="flex items-center gap-1">
+                      <Select
+                        value={''}
+                        onValueChange={teacherId => {
+                          setBatchForm(f => {
+                            if (!f) return f;
+                            const newAssignments = f.assignments.map(a => ({
+                              ...a,
+                              teachers: { ...a.teachers, [course.courseId]: teacherId }
+                            }));
+                            return { ...f, assignments: newAssignments };
+                          });
+                        }}
+                        options={teachers
+                          .filter(t => {
+                            const subs = t.subjects || [];
+                            return subs.length === 0 || subs.includes(course.name) || subs.includes(course.courseId);
+                          })
+                          .map(t => ({ value: t._id, label: `批量分配: ${course.name}→${t.name}` }))}
+                        placeholder={`批量分配${course.name}`}
+                        className="w-40"
+                      />
+                    </div>
+                  ))}
+                  <span className="text-gray-400 mx-2">|</span>
+                  {/* 复制上一班级分配 */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setBatchForm(f => {
+                      if (!f) return f;
+                      if (f.assignments.length < 2) return f;
+                      const prev = f.assignments[f.assignments.length - 2];
+                      const last = f.assignments[f.assignments.length - 1];
+                      const newAssignments = f.assignments.map((a, i) =>
+                        i === f.assignments.length - 1
+                          ? { ...a, teachers: { ...prev.teachers } }
+                          : a
+                      );
+                      return { ...f, assignments: newAssignments };
+                    })}
+                  >复制上一班级分配</Button>
+                  {/* 清空本班分配 */}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setBatchForm(f => {
+                      if (!f) return f;
+                      if (f.assignments.length === 0) return f;
+                      const newAssignments = f.assignments.map((a, i) =>
+                        i === f.assignments.length - 1
+                          ? { ...a, teachers: {} }
+                          : a
+                      );
+                      return { ...f, assignments: newAssignments };
+                    })}
+                  >清空本班分配</Button>
+                </div>
+              )}
+              <div
+                className="border rounded p-4 min-h-[120px] w-max"
+              >
+                {/* 仅在选定年级和有课程时渲染表格 */}
+                {batchForm?.grade && batchForm.courses.length > 0 ? (
+                  (() => {
+                    // 1. 根据年级筛选班级
+                    const filteredClasses = classes
+                      .filter(cls => String(cls.name.slice(0, 3)) === String(batchForm.grade))
+                      .sort((a, b) => {
+                        // 提取数字部分进行自然排序
+                        const numA = parseInt(a.name.replace(/[^0-9]/g, ''), 10) || 0;
+                        const numB = parseInt(b.name.replace(/[^0-9]/g, ''), 10) || 0;
+                        return numA - numB;
+                      });
+                    // 2. 构建班级-教师分配数据结构
+                    // 若assignments未覆盖所有班级，自动补全
+                    const assignments = filteredClasses.map(cls => {
+                      let found = batchForm.assignments.find(a => a.classId === cls._id);
+                      if (!found) {
+                        found = { classId: cls._id, teachers: {} };
+                      }
+                      return found;
+                    });
+                    // 3. 渲染表格
+                    return (
+                      <table className="min-w-max border-collapse text-sm">
+                        <thead>
+                          <tr>
+                            <th className="border px-2 py-1 bg-gray-50">班级</th>
+                            {batchForm.courses.map((course, cidx) => (
+                              <th key={cidx} className="border px-2 py-1 bg-gray-50">{course.name || `课程${cidx+1}`}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {assignments.map((assignment, ridx) => {
+                            const cls = filteredClasses[ridx];
+                            return (
+                              <tr key={cls._id}>
+                                <td className="border px-2 py-1 font-medium whitespace-nowrap">{cls.name}</td>
+                                {batchForm.courses.map((course, cidx) => {
+                                  // 只显示可授该课程的教师
+                                  const eligibleTeachers = teachers.filter(t => {
+                                    // 仅使用subjects字段（string[]），如无则全部显示
+                                    const subs = t.subjects || [];
+                                    return subs.length === 0 || subs.includes(course.name) || subs.includes(course.courseId);
+                                  });
+                                  return (
+                                    <td key={cidx} className="border px-2 py-1 min-w-[120px]">
+                                      <Select
+                                        value={assignment.teachers[course.courseId] || ''}
+                                        onValueChange={teacherId => {
+                                          setBatchForm(f => {
+                                            if (!f) return f;
+                                            const newAssignments = f.assignments.map(a =>
+                                              a.classId === cls._id
+                                                ? { ...a, teachers: { ...a.teachers, [course.courseId]: teacherId } }
+                                                : a
+                                            );
+                                            // 若当前班级assignment不存在则补充
+                                            if (!f.assignments.some(a => a.classId === cls._id)) {
+                                              newAssignments.push({ classId: cls._id, teachers: { [course.courseId]: teacherId } });
+                                            }
+                                            return { ...f, assignments: newAssignments };
+                                          });
+                                        }}
+                                        options={eligibleTeachers.map(t => ({ value: t._id, label: t.name }))}
+                                        placeholder="选择教师"
+                                        className="w-28"
+                                      />
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    );
+                  })()
+                ) : (
+                  <div className="text-gray-400 text-sm">请先选择年级并配置课程</div>
+                )}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeBatchDialog} disabled={batchLoading || exportLoading}>取消</Button>
+            <Button
+              disabled={!batchForm || !batchForm.grade || batchForm.courses.length === 0 || batchForm.assignments.length === 0 || batchLoading || exportLoading}
+              /**
+               * 批量提交前校验表单并发起批量创建请求
+               * 
+               * Args: None
+               * Returns: void
+               */
+              onClick={async () => {
+                if (!batchForm) return;
+                setBatchLoading(true);
+                // 校验逻辑
+                /**
+                 * 校验批量表单数据
+                 * 1. 校验课程结构区：名称、课时、连排
+                 * 2. 校验班级-教师分配区：每班每课均需分配教师
+                 * 错误信息写入batchFormErrors
+                 */
+                const errors: typeof batchFormErrors = { courses: [], assignments: {} };
+                let hasError = false;
+                // 1. 校验课程结构区
+                batchForm.courses.forEach((course, idx) => {
+                  const courseErr: { name?: string; weeklyHours?: string; continuous?: string } = {};
+                  if (!course.name || course.name.trim() === '') {
+                    courseErr.name = '课程名称不能为空';
+                    hasError = true;
+                  }
+                  if (!course.weeklyHours || course.weeklyHours <= 0 || !Number.isInteger(course.weeklyHours)) {
+                    courseErr.weeklyHours = '课时必须为正整数';
+                    hasError = true;
+                  }
+                  if (course.continuous && (typeof course.continuous !== 'boolean')) {
+                    courseErr.continuous = '连排设置非法';
+                    hasError = true;
+                  }
+                  errors.courses![idx] = courseErr;
+                });
+                // 2. 校验班级-教师分配
+                const filteredClasses = classes.filter(cls => String(cls.name.slice(0, 3)) === String(batchForm.grade));
+                batchForm.assignments.forEach(assignment => {
+                  const classErr: { [courseId: string]: string } = {};
+                  batchForm.courses.forEach(course => {
+                    if (!assignment.teachers[course.courseId] || assignment.teachers[course.courseId] === '') {
+                      classErr[course.courseId] = '请选择教师';
+                      hasError = true;
+                    }
+                  });
+                  if (Object.keys(classErr).length > 0) {
+                    errors.assignments![assignment.classId] = classErr;
+                  }
+                });
+                setBatchFormErrors(errors);
+                if (hasError) {
+                  setBatchLoading(false);
+                  // 自动聚焦第一个错误项
+                  setTimeout(() => {
+                    // 课程结构区错误优先
+                    const courseIdx = errors.courses?.findIndex(c => c && (c.name || c.weeklyHours));
+                    if (courseIdx !== undefined && courseIdx >= 0) {
+                      const el = document.querySelectorAll('input[placeholder="课程名称"]')[courseIdx] as HTMLElement;
+                      if (el) el.focus();
+                      return;
+                    }
+                    // 班级-教师分配区错误
+                    if (errors.assignments) {
+                      const classId = Object.keys(errors.assignments)[0];
+                      const courseId = classId && Object.keys(errors.assignments[classId] || {})[0];
+                      if (classId && courseId) {
+                        // 定位到对应Select
+                        const el = document.querySelector(`select[name="teacher-select-${classId}-${courseId}"]`) as HTMLElement;
+                        if (el) el.focus();
+                      }
+                    }
+                  }, 100);
+                  alert('请修正表单中的错误后再提交！');
+                  return;
+                }
+                // 校验通过，继续批量提交
+                const currentYear = new Date().getFullYear();
+                const academicYear = `${currentYear}-${currentYear + 1}`;
+                const semester = 1;
+                const apiRequests = convertBatchFormToApiRequests(batchForm, academicYear, semester);
+                try {
+                  // 并发批量创建教学计划
+                  const results = await Promise.all(apiRequests.map(req => teachingPlanApi.create(req)));
+                  const successCount = results.filter(r => r.success).length;
+                  const failCount = results.length - successCount;
+                  alert(`批量创建完成：成功${successCount}条，失败${failCount}条`);
+                  closeBatchDialog();
+                  fetchTeachingPlans();
+                } catch (err) {
+                  alert('批量创建失败，请检查网络或数据！');
+                } finally {
+                  setBatchLoading(false);
+                }
+              }}
+            >{batchLoading ? '提交中...' : '批量提交'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

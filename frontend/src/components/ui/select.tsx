@@ -38,6 +38,17 @@ export interface SelectProps {
 /**
  * 选择框组件
  * 
+ * 已支持：
+ *   - 动态options传递（支持大数据量选项，适合批量表单场景）
+ *   - 受控/非受控用法
+ *   - options与children二选一
+ *   - 占位符、禁用、错误态、辅助文本
+ * 
+ * 扩展建议：
+ *   - 如需支持分组（optgroup）、搜索、虚拟滚动等大数据优化，可在此基础上扩展
+ *   - 如需自定义过滤逻辑（如按课程过滤教师），建议在父组件处理后传递options
+ *   - 如需异步加载选项，可结合外部状态管理
+ * 
  * Args:
  *   value: 当前值
  *   onChange: 值变化回调 (React.ChangeEvent)
@@ -73,7 +84,7 @@ export function Select({
 
   const handleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const newValue = event.target.value;
-    onChange?.(event);
+    onChange?.(newValue);
     onValueChange?.(newValue);
   };
 
