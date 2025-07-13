@@ -31,7 +31,7 @@ export const createSchedulingRules = async (req: Request, res: Response): Promis
     const rulesData: CreateSchedulingRulesRequest = req.body;
     // TODO: 实现用户认证中间件后启用
     // const userId = req.user?.id;
-    const userId = new mongoose.Types.ObjectId('6862641baff97ed1dbda1987'); // 使用系统管理员ID，待实现认证后修改
+    const userId = new mongoose.Types.ObjectId('68692a48c6a3f27c50bf8cba'); // 使用系统管理员ID，待实现认证后修改
 
     // 如果设置为默认规则，检查是否已存在默认规则
     if (rulesData.isDefault) {
@@ -746,6 +746,9 @@ export const copySchedulingRules = async (req: Request, res: Response): Promise<
  *   SchedulingRulesResponse: API响应格式的排课规则数据
  */
 function transformSchedulingRulesToResponse(rules: any): SchedulingRulesResponse {
+  if (!rules.createdBy) {
+    throw new Error('排课规则缺少创建人信息');
+  }
   return {
     _id: rules._id.toString(),
     name: rules.name,

@@ -416,7 +416,7 @@
             "milestone": "V1.0 (MVP)",
             "dependencies": ["TKS-007"],
             "priority": "高",
-            "status": "To Do",
+            "status": "Done",
             "effort_points": 3,
             "tags": ["frontend", "ui", "feature"],
             "acceptance_criteria": [
@@ -460,7 +460,9 @@
               "12. 完成单元测试与集成测试",
               "13. 完成用户体验测试与性能优化"
             ]
+          
           }
+
         ]
       },
       {

@@ -188,3 +188,119 @@ TKS-007的完成标志着：
 ---
 
 > 🎯 **下一步建议**: 开始TKS-008核心排课算法的研发工作，利用已完成的教学计划和排课规则配置，实现智能排课的核心逻辑。
+
+## 📚 子任务补充：TKS-007-new-1 年级批量设置教学计划功能设计与实现
+
+### 1. 类型定义与数据结构设计
+- 在 `frontend/src/types/schedule.ts` 中定义了批量教学计划相关类型：
+  - `BatchTeachingPlanForm`：包含 grade、courses、assignments 三大区块。
+  - `BatchCourseConfig`：描述课程结构（课程ID、名称、课时、连排）。
+  - `BatchClassTeacherAssignment`：描述每个班级的课程-教师分配映射。
+- 类型与后端 API 完全兼容，便于数据映射和校验。
+
+### 2. 主界面与交互流程实现
+- 在 `teaching-plans/page.tsx` 中实现“年级批量设置教学计划”入口，弹出批量设置对话框。
+- 对话框分为三大区块：年级选择、课程结构配置、班级-教师分配。
+- 年级选项自动从班级名中提取，课程结构支持动态增删，分配表格根据年级和课程结构自动生成。
+
+### 3. 课程结构与班级-教师分配的动态渲染
+- 课程结构配置区支持任意增删课程，所有课程配置实时同步到分配表格。
+- 分配表格根据当前年级和课程结构动态生成，班级按自然顺序排序，表格支持横纵滚动。
+- 教师下拉选项根据课程科目智能过滤，仅显示可授该课程的教师。
+
+### 4. 表单校验与错误提示
+- 批量提交前，前端对课程结构和班级-教师分配区进行严格校验：
+  - 课程名、课时、连排设置必填且合法。
+  - 每班每课必须分配教师。
+- 校验失败时，自动高亮错误项并聚焦第一个错误，阻止提交，提示用户修正。
+
+### 5. API请求体映射与 totalWeeklyHours 修复
+- 实现 `convertBatchFormToApiRequests`，将批量表单数据映射为后端 API 所需的 teaching plan 请求体数组。
+- 为每个 teaching plan 自动计算所有课程的总周课时数（`totalWeeklyHours`），并补充到请求体，解决后端校验失败问题。
+- 确保每个 teaching plan 请求体结构与单个计划创建一致，兼容后端模型。
+
+### 6. 批量提交与结果反馈
+- 批量校验通过后，前端并发调用 teaching plan 创建 API，为每个班级创建教学计划。
+- 支持批量提交结果统计，成功/失败条数一目了然，失败时有详细提示。
+- 批量提交后自动刷新教学计划列表，用户可立即查看结果。
+
+### 7. 导出功能与用户体验优化
+- 支持将当前批量配置导出为 CSV 文件，包含年级、班级、课程、课时、连排、教师等字段，文件名带时间戳。
+- 对话框和表格布局优化，宽度自适应、滚动条友好、卡片式分区、按钮对齐、标题加大等，提升整体视觉和交互体验。
+
+### 8. 测试与验证
+- 多轮手动测试，覆盖年级选择、课程增删、教师分配、批量校验、API兼容、导出等场景。
+- 验证后端不再报“总周课时数不能为空”，所有批量计划均能成功创建。
+- 单个计划创建流程未受影响，兼容性良好。
+
+### 9. 相关API接口
+
+#### 批量创建教学计划 API
+- **接口路径**：`POST /api/teaching-plans`
+- **请求体（单条）**：
+```json
+{
+  "class": "班级ID",
+  "academicYear": "2024-2025",
+  "semester": 1,
+  "courseAssignments": [
+    {
+      "course": "课程ID",
+      "teacher": "教师ID",
+      "weeklyHours": 4,
+      "requiresContinuous": true
+    }
+  ],
+  "notes": "",
+  "totalWeeklyHours": 24
+}
+```
+- **响应示例**：
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "teachingPlanId",
+    ...
+  }
+}
+```
+- **批量提交实现**：前端将多个请求体并发 POST 到该接口。
+
+#### 相关类型定义（TypeScript）
+```ts
+export interface BatchTeachingPlanForm {
+  grade: string;
+  courses: BatchCourseConfig[];
+  assignments: BatchClassTeacherAssignment[];
+}
+
+export interface BatchCourseConfig {
+  courseId: string;
+  name: string;
+  weeklyHours: number;
+  continuous: boolean;
+}
+
+export interface BatchClassTeacherAssignment {
+  classId: string;
+  teachers: { [courseId: string]: string };
+}
+
+export interface CreateTeachingPlanRequest {
+  class: string;
+  academicYear: string;
+  semester: number;
+  courseAssignments: Array<{
+    course: string;
+    teacher: string;
+    weeklyHours: number;
+    requiresContinuous: boolean;
+  }>;
+  notes?: string;
+  totalWeeklyHours: number;
+}
+```
+
+### 10. 完成总结
+本子任务极大提升了教学计划配置效率，减少重复劳动，界面美观、交互流畅、校验严谨，满足所有验收标准。

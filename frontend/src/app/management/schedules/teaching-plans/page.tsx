@@ -447,6 +447,8 @@ export default function TeachingPlansPage() {
     // 2. 对每个班级生成CreateTeachingPlanRequest
     return classIds.map(classId => {
       const assignment = batchForm.assignments.find(a => a.classId === classId);
+      // 计算总周课时数
+      const totalWeeklyHours = batchForm.courses.reduce((sum, course) => sum + (course.weeklyHours && Number.isFinite(course.weeklyHours) ? course.weeklyHours : 0), 0);
       return {
         class: classId,
         academicYear,
@@ -458,6 +460,7 @@ export default function TeachingPlansPage() {
           requiresContinuous: !!course.continuous,
         })),
         notes: '',
+        totalWeeklyHours,
       };
     });
   }
