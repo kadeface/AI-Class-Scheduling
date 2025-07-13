@@ -2,6 +2,10 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
+  // 指定端口配置
+  env: {
+    PORT: '3000'
+  },
   async rewrites() {
     return [
       {

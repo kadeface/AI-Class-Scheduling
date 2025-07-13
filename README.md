@@ -48,26 +48,45 @@
 └── .cursorrules         # Cursor开发规则
 ```
 
-## 快速开始
+## 🚀 快速开始
 
-### 前端开发
+### 📋 系统要求
+- Node.js >= 18.0.0
+- npm >= 8.0.0  
+- MongoDB >= 6.0
+
+### 🛠️ 安装指南
+详细的安装说明请查看：[完整安装指南](./INSTALL.md)
+
+### ⚡ 快速安装（macOS）
 ```bash
-cd frontend
-npm install
-npm run dev
+# 1. 克隆项目
+git clone <your-repository-url>
+cd AI-Class-Scheduling
+
+# 2. 运行快速安装脚本
+chmod +x quick-install.sh
+./quick-install.sh
 ```
 
-### 后端开发
+### 🔧 手动安装
 ```bash
-cd backend
+# 1. 安装依赖
 npm install
+
+# 2. 启动开发环境
 npm run dev
+
+# 3. 访问应用
+# 前端: http://localhost:3000
+# 后端: http://localhost:3001
 ```
 
-### 排课算法测试
+### 📊 数据库初始化（首次使用）
 ```bash
-cd backend
-npx ts-node src/scripts/test-scheduling-algorithm.ts
+npm run init-db --workspace=backend
+npm run create-default-rules --workspace=backend
+npm run create-test-data --workspace=backend
 ```
 
 ## 排课算法使用
