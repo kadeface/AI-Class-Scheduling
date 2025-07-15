@@ -274,7 +274,7 @@ interface ImportDialogProps<T> {
    * 渲染上传阶段
    */
   const renderUploadStage = () => (
-    <div className="space-y-6">
+    <div className="space-y-6 flex flex-col items-center">
       <div className="text-center">
         <div className="mx-auto w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mb-4">
           <Upload className="h-8 w-8 text-blue-600 dark:text-blue-400" />
@@ -287,7 +287,7 @@ interface ImportDialogProps<T> {
         </p>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-4 w-full max-w-md">
         <Button 
           variant="outline" 
           onClick={() => downloadXlsxTemplate(template)}
@@ -340,7 +340,7 @@ interface ImportDialogProps<T> {
       </div>
 
       {/* 模板说明 */}
-      <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+      <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 w-full max-w-md">
         <h4 className="font-medium mb-2">导入格式说明：</h4>
         <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
           <li>• 必填字段：{template.requiredFields.join('、')}</li>

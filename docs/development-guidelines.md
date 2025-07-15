@@ -317,3 +317,30 @@ const items = response.data?.items || response.data || [];
   onImport={handleBatchImport}
 />
 ```
+
+---
+
+## 前后端学科常量同步操作指南
+
+### 场景说明
+当后端 `src/constants/subjects.ts` 文件中的学科常量（SUBJECTS）有新增、修改或删除时，需要同步更新前端的学科列表（frontend/src/lib/subjects.json），以保证前端校验和下拉选项与后端一致。
+
+### 操作步骤
+
+1. **在后端维护学科常量**
+   - 编辑 `backend/src/constants/subjects.ts`，增删或修改 `SUBJECTS` 数组内容。
+
+2. **运行同步脚本**
+   - 在终端进入 `AI-Class-Scheduling/backend` 目录，执行：
+     ```bash
+     npx ts-node src/scripts/export-subjects-json.ts
+     ```
+   - 脚本会自动将最新的 `SUBJECTS` 导出为 JSON 文件，覆盖前端的 `frontend/src/lib/subjects.json`。
+
+3. **前端自动生效**
+   - 前端所有涉及学科的下拉、校验等会自动读取最新 subjects.json，无需手动修改前端代码。
+
+4. **常见问题**
+   - 如果导入教师/课程时报“无效的学科”，请检查前后端学科是否同步，并重复上述操作。
+
+---
