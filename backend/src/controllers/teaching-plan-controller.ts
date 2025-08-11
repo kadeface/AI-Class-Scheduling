@@ -663,6 +663,53 @@ export const getCurrentPlan = async (req: Request, res: Response): Promise<void>
   }
 };
 
+/**
+ * 获取有教学计划的可用学年列表
+ * 
+ * Args:
+ *   req: Express请求对象
+ *   res: Express响应对象
+ * 
+ * Returns:
+ *   Promise<void>: 返回可用的学年列表
+ */
+export const getAvailableAcademicYears = async (req: Request, res: Response): Promise<void> => {
+  try {
+    // 获取所有已批准且活跃的教学计划的学年
+    const academicYears = await TeachingPlan.distinct('academicYear', {
+      status: 'approved',
+      isActive: true
+    });
+
+    // 按学年倒序排列（最新的在前）
+    const sortedYears = academicYears.sort((a, b) => {
+      const yearA = parseInt(a.split('-')[0]);
+      const yearB = parseInt(b.split('-')[0]);
+      return yearB - yearA;
+    });
+
+    const response: ApiResponse<{ academicYears: string[] }> = {
+      success: true,
+      message: '获取可用学年成功',
+      data: {
+        academicYears: sortedYears
+      }
+    };
+
+    res.json(response);
+  } catch (error) {
+    console.error('获取可用学年错误:', error);
+    
+    const response: ApiResponse = {
+      success: false,
+      message: '获取可用学年失败',
+      error: error instanceof Error ? error.message : '服务器内部错误'
+    };
+
+    res.status(500).json(response);
+  }
+};
+
 // ==================== 工具函数 ====================
 
 /**

@@ -22,6 +22,9 @@ import { ISchedulingRules } from '../../models/SchedulingRules';
  */
 export class ConstraintDetector {
   private rules: ISchedulingRules;
+  
+  // 新增：科目名称缓存
+  private subjectNameCache: Map<string, string> = new Map();
 
   /**
    * 构造函数
@@ -31,6 +34,31 @@ export class ConstraintDetector {
    */
   constructor(rules: ISchedulingRules) {
     this.rules = rules;
+    
+    // 延迟初始化科目名称缓存
+    this.initializeSubjectNameCache().catch(error => {
+      console.warn('科目名称缓存初始化失败:', error);
+    });
+  }
+
+  /**
+   * 初始化科目名称缓存
+   */
+  private async initializeSubjectNameCache(): Promise<void> {
+    try {
+      // 从数据库预加载常用科目名称
+      const Course = mongoose.model('Course');
+      const courses = await Course.find({}).select('_id name').lean();
+      
+      for (const course of courses) {
+        this.subjectNameCache.set((course as any)._id.toString(), (course as any).name || '未知科目');
+      }
+      
+      console.log(`✅ 科目名称缓存初始化完成，共缓存 ${this.subjectNameCache.size} 个科目`);
+    } catch (error) {
+      console.warn('科目名称缓存初始化失败:', error);
+      // 缓存初始化失败不影响主要功能
+    }
   }
 
   /**
@@ -406,5 +434,969 @@ export class ConstraintDetector {
   private formatTimeSlot(timeSlot: TimeSlot): string {
     const dayNames = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
     return `${dayNames[timeSlot.dayOfWeek]}第${timeSlot.period}节`;
+  }
+
+  /**
+   * 检测科目特定约束
+   * 
+   * Args:
+   *   assignment: 新的课程安排
+   *   existingAssignments: 已有的课程安排
+   * 
+   * Returns:
+   *   ConstraintViolation[]: 约束违反列表
+   */
+  checkSubjectSpecificConstraints(
+    assignment: CourseAssignment,
+    existingAssignments: Map<string, CourseAssignment>
+  ): ConstraintViolation[] {
+    const violations: ConstraintViolation[] = [];
+    
+    if (!this.rules.courseArrangementRules.enableSubjectConstraints) {
+      return violations;
+    }
+
+    // 获取科目名称（这里需要根据实际的课程数据结构调整）
+    const subjectName = this.getSubjectNameSync(assignment.courseId);
+    if (!subjectName) return violations;
+
+    // 查找科目特定规则
+    const subjectRule = this.rules.courseArrangementRules.subjectSpecificRules.find(
+      rule => rule.subjectName === subjectName
+    );
+    
+    if (!subjectRule) return violations;
+
+    // 检查避免连续安排约束
+    if (subjectRule.avoidConsecutive) {
+      const consecutiveViolation = this.checkConsecutiveConstraint(
+        assignment, existingAssignments, subjectRule
+      );
+      if (consecutiveViolation) {
+        violations.push(consecutiveViolation);
+      }
+    }
+
+    // 检查最小间隔约束
+    if (subjectRule.minInterval > 0) {
+      const intervalViolation = this.checkMinIntervalConstraint(
+        assignment, existingAssignments, subjectRule
+      );
+      if (intervalViolation) {
+        violations.push(intervalViolation);
+      }
+    }
+
+    // 检查每日最大出现次数约束
+    const dailyOccurrenceViolation = this.checkDailyOccurrenceConstraint(
+      assignment, existingAssignments, subjectRule
+    );
+    if (dailyOccurrenceViolation) {
+      violations.push(dailyOccurrenceViolation);
+    }
+
+    // 检查特殊约束（如体育课需要休息）
+    if (subjectRule.specialConstraints?.requiresRest) {
+      const restViolation = this.checkRestRequirementConstraint(
+        assignment, existingAssignments, subjectRule
+      );
+      if (restViolation) {
+        violations.push(restViolation);
+      }
+    }
+
+    // 新增：增强的科目特定约束检测
+    const enhancedViolations = this.checkEnhancedSubjectConstraints(
+      assignment, existingAssignments, subjectName
+    );
+    violations.push(...enhancedViolations);
+
+    return violations;
+  }
+
+  /**
+   * 检测增强的科目特定约束
+   */
+  private checkEnhancedSubjectConstraints(
+    assignment: CourseAssignment,
+    existingAssignments: Map<string, CourseAssignment>,
+    subjectName: string
+  ): ConstraintViolation[] {
+    const violations: ConstraintViolation[] = [];
+
+    // 1. 体育课特殊约束
+    if (subjectName === '体育') {
+      const peViolations = this.checkPhysicalEducationConstraints(assignment, existingAssignments);
+      violations.push(...peViolations);
+    }
+
+    // 2. 艺术课特殊约束
+    if (['音乐', '美术'].includes(subjectName)) {
+      const artViolations = this.checkArtSubjectConstraints(assignment, existingAssignments);
+      violations.push(...artViolations);
+    }
+
+    // 3. 实验课特殊约束
+    if (['物理', '化学', '生物'].includes(subjectName)) {
+      const labViolations = this.checkLabSubjectConstraints(assignment, existingAssignments);
+      violations.push(...labViolations);
+    }
+
+    // 4. 核心课程黄金时段保护
+    if (this.isCoreSubject(subjectName)) {
+      const coreViolations = this.checkCoreSubjectGoldenTimeProtection(assignment, existingAssignments);
+      violations.push(...coreViolations);
+    }
+
+    return violations;
+  }
+
+  /**
+   * 检测连续安排约束
+   */
+  private checkConsecutiveConstraint(
+    assignment: CourseAssignment,
+    existingAssignments: Map<string, CourseAssignment>,
+    subjectRule: any
+  ): ConstraintViolation | null {
+    const subjectName = this.getSubjectNameSync(assignment.courseId);
+    if (!subjectName) return null;
+
+    // 检查是否有连续安排
+    for (const [_, existing] of existingAssignments) {
+      if (existing.classId.equals(assignment.classId) && 
+          this.getSubjectNameSync(existing.courseId) === subjectName) {
+        
+        // 检查是否连续安排（同一天相邻节次）
+        if (assignment.timeSlot.dayOfWeek === existing.timeSlot.dayOfWeek &&
+            Math.abs(assignment.timeSlot.period - existing.timeSlot.period) === 1) {
+          
+          return {
+            constraintType: ConstraintType.SOFT_SUBJECT_CONSTRAINT,
+            isHard: false,
+            penalty: 100,
+            variables: [assignment.variableId],
+            message: `${subjectName}课不能连续安排，班级${assignment.classId}在相邻节次已有${subjectName}课`,
+            suggestion: '建议调整时间安排，避免连续安排'
+          };
+        }
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * 检测最小间隔约束
+   */
+  private checkMinIntervalConstraint(
+    assignment: CourseAssignment,
+    existingAssignments: Map<string, CourseAssignment>,
+    subjectRule: any
+  ): ConstraintViolation | null {
+    const subjectName = this.getSubjectNameSync(assignment.courseId);
+    if (!subjectName) return null;
+    const minInterval = subjectRule.minInterval;
+    
+    for (const [_, existing] of existingAssignments) {
+      if (existing.classId.equals(assignment.classId) && 
+          this.getSubjectNameSync(existing.courseId) === subjectName) {
+        
+        // 检查间隔是否满足要求
+        if (assignment.timeSlot.dayOfWeek === existing.timeSlot.dayOfWeek) {
+          const interval = Math.abs(assignment.timeSlot.period - existing.timeSlot.period);
+          if (interval < minInterval) {
+            return {
+              constraintType: ConstraintType.SOFT_SUBJECT_CONSTRAINT,
+              isHard: false,
+              penalty: 50,
+              variables: [assignment.variableId],
+              message: `${subjectName}课间隔不足，需要至少${minInterval}节间隔，当前间隔${interval}节`,
+              suggestion: '建议增加课程间隔时间'
+            };
+          }
+        }
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * 检测每日最大出现次数约束
+   */
+  private checkDailyOccurrenceConstraint(
+    assignment: CourseAssignment,
+    existingAssignments: Map<string, CourseAssignment>,
+    subjectRule: any
+  ): ConstraintViolation | null {
+    const subjectName = this.getSubjectNameSync(assignment.courseId);
+    if (!subjectName) return null;
+    const maxDaily = subjectRule.maxDailyOccurrences;
+    
+    let dailyCount = 1; // 当前要安排的课程
+    
+    for (const [_, existing] of existingAssignments) {
+      if (existing.classId.equals(assignment.classId) && 
+          this.getSubjectNameSync(existing.courseId) === subjectName &&
+          existing.timeSlot.dayOfWeek === assignment.timeSlot.dayOfWeek) {
+        dailyCount++;
+      }
+    }
+    
+    if (dailyCount > maxDaily) {
+      return {
+        constraintType: ConstraintType.SOFT_SUBJECT_CONSTRAINT,
+        isHard: false,
+        penalty: 80,
+        variables: [assignment.variableId],
+        message: `${subjectName}课每日最多${maxDaily}次，当前已安排${dailyCount}次`,
+        suggestion: '建议调整到其他日期'
+      };
+    }
+    
+    return null;
+  }
+
+  /**
+   * 检测休息要求约束
+   */
+  private checkRestRequirementConstraint(
+    assignment: CourseAssignment,
+    existingAssignments: Map<string, CourseAssignment>,
+    subjectRule: any
+  ): ConstraintViolation | null {
+    const subjectName = this.getSubjectNameSync(assignment.courseId);
+    if (!subjectName) return null;
+    const minRestPeriods = subjectRule.specialConstraints?.minRestPeriods || 0;
+    
+    if (minRestPeriods === 0) return null;
+    
+    for (const [_, existing] of existingAssignments) {
+      if (existing.classId.equals(assignment.classId) && 
+          this.getSubjectNameSync(existing.courseId) === subjectName) {
+        
+        // 检查休息时间是否足够
+        if (assignment.timeSlot.dayOfWeek === existing.timeSlot.dayOfWeek) {
+          const interval = Math.abs(assignment.timeSlot.period - existing.timeSlot.period);
+          if (interval < minRestPeriods + 1) { // +1 因为要包含休息的节次
+            return {
+              constraintType: ConstraintType.SOFT_SUBJECT_CONSTRAINT,
+              isHard: false,
+              penalty: 60,
+              variables: [assignment.variableId],
+              message: `${subjectName}课需要${minRestPeriods}节休息时间，当前间隔不足`,
+              suggestion: '建议增加休息时间间隔'
+            };
+          }
+        }
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * 检测体育课特殊约束
+   */
+  private checkPhysicalEducationConstraints(
+    assignment: CourseAssignment,
+    existingAssignments: Map<string, CourseAssignment>
+  ): ConstraintViolation[] {
+    const violations: ConstraintViolation[] = [];
+
+    // 1. 检查是否与核心课程冲突（体育课不应占用核心课程黄金时段）
+    if (this.isGoldenTimeForCoreSubjects(assignment.timeSlot)) {
+      violations.push({
+        constraintType: ConstraintType.SOFT_SUBJECT_CONSTRAINT,
+        isHard: false,
+        penalty: 80,
+        variables: [assignment.variableId],
+        message: '体育课不应占用核心课程黄金时段',
+        suggestion: '建议将体育课调整到非黄金时段'
+      });
+    }
+
+    // 2. 检查连排体育课的合理性
+    if (this.isContinuousPhysicalEducation(assignment, existingAssignments)) {
+      if (!this.isSuitableForContinuousPE(assignment.timeSlot)) {
+        violations.push({
+          constraintType: ConstraintType.SOFT_SUBJECT_CONSTRAINT,
+          isHard: false,
+          penalty: 60,
+          variables: [assignment.variableId],
+          message: '连排体育课时间安排不合理',
+          suggestion: '建议调整到更适合连排的时段'
+        });
+      }
+    }
+
+    // 3. 检查体育课与理论课的间隔
+    const theoryIntervalViolation = this.checkPETheoryInterval(assignment, existingAssignments);
+    if (theoryIntervalViolation) {
+      violations.push(theoryIntervalViolation);
+    }
+
+    return violations;
+  }
+
+  /**
+   * 检测艺术课特殊约束
+   */
+  private checkArtSubjectConstraints(
+    assignment: CourseAssignment,
+    existingAssignments: Map<string, CourseAssignment>
+  ): ConstraintViolation[] {
+    const violations: ConstraintViolation[] = [];
+
+    // 1. 检查艺术课与核心课程的间隔
+    const coreIntervalViolation = this.checkArtCoreInterval(assignment, existingAssignments);
+    if (coreIntervalViolation) {
+      violations.push(coreIntervalViolation);
+    }
+
+    // 2. 检查艺术课的时间安排合理性
+    if (!this.isSuitableForArtSubject(assignment.timeSlot)) {
+      violations.push({
+        constraintType: ConstraintType.SOFT_SUBJECT_CONSTRAINT,
+        isHard: false,
+        penalty: 40,
+        variables: [assignment.variableId],
+        message: '艺术课时间安排不合理',
+        suggestion: '建议调整到更适合艺术创作的时段'
+      });
+    }
+
+    return violations;
+  }
+
+  /**
+   * 检测实验课特殊约束
+   */
+  private checkLabSubjectConstraints(
+    assignment: CourseAssignment,
+    existingAssignments: Map<string, CourseAssignment>
+  ): ConstraintViolation[] {
+    const violations: ConstraintViolation[] = [];
+
+    // 1. 检查实验课与理论课的关联性
+    const theoryCorrelationViolation = this.checkLabTheoryCorrelation(assignment, existingAssignments);
+    if (theoryCorrelationViolation) {
+      violations.push(theoryCorrelationViolation);
+    }
+
+    // 2. 检查实验课的时间安排合理性
+    if (!this.isSuitableForLabSubject(assignment.timeSlot)) {
+      violations.push({
+        constraintType: ConstraintType.SOFT_SUBJECT_CONSTRAINT,
+        isHard: false,
+        penalty: 50,
+        variables: [assignment.variableId],
+        message: '实验课时间安排不合理',
+        suggestion: '建议调整到更适合实验操作的时段'
+      });
+    }
+
+    return violations;
+  }
+
+  /**
+   * 检测核心课程黄金时段保护
+   */
+  private checkCoreSubjectGoldenTimeProtection(
+    assignment: CourseAssignment,
+    existingAssignments: Map<string, CourseAssignment>
+  ): ConstraintViolation[] {
+    const violations: ConstraintViolation[] = [];
+    
+    for (const [_, existing] of existingAssignments) {
+      if (existing.classId.equals(assignment.classId) && 
+          this.isCoreSubject(this.getSubjectNameSync(existing.courseId) || '')) {
+        // 检查核心课程是否被安排在非黄金时段
+        if (!this.isGoldenTimeForCoreSubjects(existing.timeSlot)) {
+          violations.push({
+            constraintType: ConstraintType.SOFT_CORE_SUBJECT_PRIORITY,
+            isHard: false,
+            penalty: 100,
+            variables: [existing.variableId],
+            message: '核心课程应优先安排在黄金时段',
+            suggestion: '建议将核心课程调整到上午1-4节或下午5-6节'
+          });
+        }
+      }
+    }
+
+    return violations;
+  }
+
+  /**
+   * 检测核心课程分布约束
+   * 
+   * Args:
+   *   assignment: 新的课程安排
+   *   existingAssignments: 已有的课程安排
+   * 
+   * Returns:
+   *   ConstraintViolation[]: 约束违反列表
+   */
+  checkCoreSubjectDistributionConstraints(
+    assignment: CourseAssignment,
+    existingAssignments: Map<string, CourseAssignment>
+  ): ConstraintViolation[] {
+    const violations: ConstraintViolation[] = [];
+    
+    // 检查是否启用核心课程策略
+    if (!this.rules.courseArrangementRules.coreSubjectStrategy?.enableCoreSubjectStrategy) {
+      return violations;
+    }
+
+    const strategy = this.rules.courseArrangementRules.coreSubjectStrategy;
+    const subjectName = this.getSubjectNameSync(assignment.courseId);
+    
+    // 检查是否为核心课程
+    if (!subjectName || !strategy.coreSubjects.includes(subjectName)) {
+      return violations;
+    }
+
+    // 1. 检测每日最大出现次数约束
+    const dailyOccurrenceViolation = this.checkCoreSubjectDailyOccurrence(
+      assignment, existingAssignments, strategy, subjectName
+    );
+    if (dailyOccurrenceViolation) {
+      violations.push(dailyOccurrenceViolation);
+    }
+
+    // 2. 检测每周最少出现天数约束
+    const weeklyDistributionViolation = this.checkCoreSubjectWeeklyDistribution(
+      assignment, existingAssignments, strategy, subjectName
+    );
+    if (weeklyDistributionViolation) {
+      violations.push(weeklyDistributionViolation);
+    }
+
+    // 3. 检测连续天安排约束
+    if (strategy.avoidConsecutiveDays) {
+      const consecutiveDayViolation = this.checkCoreSubjectConsecutiveDays(
+        assignment, existingAssignments, strategy, subjectName
+      );
+      if (consecutiveDayViolation) {
+        violations.push(consecutiveDayViolation);
+      }
+    }
+
+    // 4. 检测集中度约束
+    const concentrationViolation = this.checkCoreSubjectConcentration(
+      assignment, existingAssignments, strategy, subjectName
+    );
+    if (concentrationViolation) {
+      violations.push(concentrationViolation);
+    }
+
+    // 5. 检测时间偏好约束
+    const timePreferenceViolation = this.checkCoreSubjectTimePreference(
+      assignment, strategy, subjectName
+    );
+    if (timePreferenceViolation) {
+      violations.push(timePreferenceViolation);
+    }
+
+    return violations;
+  }
+
+  /**
+   * 检测核心课程每日最大出现次数约束
+   */
+  private checkCoreSubjectDailyOccurrence(
+    assignment: CourseAssignment,
+    existingAssignments: Map<string, CourseAssignment>,
+    strategy: any,
+    subjectName: string
+  ): ConstraintViolation | null {
+    const maxDaily = strategy.maxDailyOccurrences;
+    let dailyCount = 1; // 当前要安排的课程
+    
+    for (const [_, existing] of existingAssignments) {
+      if (existing.classId.equals(assignment.classId) && 
+          this.getSubjectNameSync(existing.courseId) === subjectName &&
+          existing.timeSlot.dayOfWeek === assignment.timeSlot.dayOfWeek) {
+        dailyCount++;
+      }
+    }
+    
+    if (dailyCount > maxDaily) {
+      return {
+        constraintType: ConstraintType.HARD_CORE_SUBJECT_DISTRIBUTION, // 改为硬约束
+        isHard: true, // 改为硬约束
+        penalty: 1000, // 提高惩罚值
+        variables: [assignment.variableId],
+        message: `核心课程${subjectName}每日最多${maxDaily}次，当前已安排${dailyCount}次`,
+        suggestion: `建议将${subjectName}课调整到其他日期，确保每日分布均衡`
+      };
+    }
+    
+    return null;
+  }
+
+  /**
+   * 检测核心课程每周最少出现天数约束
+   */
+  private checkCoreSubjectWeeklyDistribution(
+    assignment: CourseAssignment,
+    existingAssignments: Map<string, CourseAssignment>,
+    strategy: any,
+    subjectName: string
+  ): ConstraintViolation | null {
+    const minDaysPerWeek = strategy.minDaysPerWeek;
+    const classId = assignment.classId;
+    
+    // 统计当前已安排的天数
+    const scheduledDays = new Set<number>();
+    
+    for (const [_, existing] of existingAssignments) {
+      if (existing.classId.equals(classId) && 
+          this.getSubjectNameSync(existing.courseId) === subjectName) {
+        scheduledDays.add(existing.timeSlot.dayOfWeek);
+      }
+    }
+    
+    // 添加当前要安排的天数
+    scheduledDays.add(assignment.timeSlot.dayOfWeek);
+    
+    if (scheduledDays.size < minDaysPerWeek) {
+      return {
+        constraintType: ConstraintType.SOFT_CORE_SUBJECT_DISTRIBUTION,
+        isHard: false,
+        penalty: 100,
+        variables: [assignment.variableId],
+        message: `核心课程${subjectName}每周至少需要${minDaysPerWeek}天，当前仅${scheduledDays.size}天`,
+        suggestion: `建议将${subjectName}课分散到更多工作日，确保每周分布均衡`
+      };
+    }
+    
+    return null;
+  }
+
+  /**
+   * 检测核心课程连续天安排约束
+   */
+  private checkCoreSubjectConsecutiveDays(
+    assignment: CourseAssignment,
+    existingAssignments: Map<string, CourseAssignment>,
+    strategy: any,
+    subjectName: string
+  ): ConstraintViolation | null {
+    const classId = assignment.classId;
+    const currentDay = assignment.timeSlot.dayOfWeek;
+    
+    // 检查前一天和后一天是否已有该核心课程
+    const prevDay = currentDay === 1 ? 5 : currentDay - 1; // 假设周一到周五
+    const nextDay = currentDay === 5 ? 1 : currentDay + 1;
+    
+    let hasPrevDay = false;
+    let hasNextDay = false;
+    
+    for (const [_, existing] of existingAssignments) {
+      if (existing.classId.equals(classId) && 
+          this.getSubjectNameSync(existing.courseId) === subjectName) {
+        if (existing.timeSlot.dayOfWeek === prevDay) {
+          hasPrevDay = true;
+        }
+        if (existing.timeSlot.dayOfWeek === nextDay) {
+          hasNextDay = true;
+        }
+      }
+    }
+    
+    if (hasPrevDay || hasNextDay) {
+      return {
+        constraintType: ConstraintType.HARD_CORE_SUBJECT_DISTRIBUTION, // 改为硬约束
+        isHard: true, // 改为硬约束
+        penalty: 1000, // 提高惩罚值
+        variables: [assignment.variableId],
+        message: `核心课程${subjectName}不能连续天安排，当前与相邻天冲突`,
+        suggestion: `建议将${subjectName}课调整到其他日期，避免连续天安排`
+      };
+    }
+    
+    return null;
+  }
+
+  /**
+   * 检测核心课程集中度约束
+   */
+  private checkCoreSubjectConcentration(
+    assignment: CourseAssignment,
+    existingAssignments: Map<string, CourseAssignment>,
+    strategy: any,
+    subjectName: string
+  ): ConstraintViolation | null {
+    const maxConcentration = strategy.maxConcentration;
+    const classId = assignment.classId;
+    
+    // 统计连续安排的天数
+    let maxConsecutiveDays = 1;
+    let currentConsecutiveDays = 1;
+    
+    // 按天排序，检查连续安排
+    const scheduledDays = new Set<number>();
+    for (const [_, existing] of existingAssignments) {
+      if (existing.classId.equals(classId) && 
+          this.getSubjectNameSync(existing.courseId) === subjectName) {
+        scheduledDays.add(existing.timeSlot.dayOfWeek);
+      }
+    }
+    scheduledDays.add(assignment.timeSlot.dayOfWeek);
+    
+    const sortedDays = Array.from(scheduledDays).sort();
+    
+    for (let i = 1; i < sortedDays.length; i++) {
+      if (sortedDays[i] === sortedDays[i-1] + 1) {
+        currentConsecutiveDays++;
+        maxConsecutiveDays = Math.max(maxConsecutiveDays, currentConsecutiveDays);
+      } else {
+        currentConsecutiveDays = 1;
+      }
+    }
+    
+    if (maxConsecutiveDays > maxConcentration) {
+      return {
+        constraintType: ConstraintType.SOFT_CORE_SUBJECT_DISTRIBUTION,
+        isHard: false,
+        penalty: 90,
+        variables: [assignment.variableId],
+        message: `核心课程${subjectName}连续安排天数(${maxConsecutiveDays})超过限制(${maxConcentration})`,
+        suggestion: `建议将${subjectName}课分散安排，避免过度集中`
+      };
+    }
+    
+    return null;
+  }
+
+  /**
+   * 检测核心课程时间偏好约束
+   */
+  private checkCoreSubjectTimePreference(
+    assignment: CourseAssignment,
+    strategy: any,
+    subjectName: string
+  ): ConstraintViolation | null {
+    const { preferredTimeSlots, avoidTimeSlots } = strategy;
+    const currentPeriod = assignment.timeSlot.period;
+    
+    // 检查是否在避免时间段（硬约束）
+    if (avoidTimeSlots && avoidTimeSlots.includes(currentPeriod)) {
+      return {
+        constraintType: ConstraintType.HARD_CORE_SUBJECT_DISTRIBUTION, // 改为硬约束
+        isHard: true, // 改为硬约束
+        penalty: 1000, // 提高惩罚值
+        variables: [assignment.variableId],
+        message: `核心课程${subjectName}不能在${currentPeriod}节安排，该时段被禁止`,
+        suggestion: `请选择其他时段安排${subjectName}课`
+      };
+    }
+    
+    // 检查是否在偏好时间段（软约束，保持原样）
+    if (preferredTimeSlots && preferredTimeSlots.length > 0 && preferredTimeSlots.includes(currentPeriod)) {
+      return {
+        constraintType: ConstraintType.SOFT_CORE_SUBJECT_DISTRIBUTION,
+        isHard: false,
+        penalty: 0, // 偏好时间段不扣分
+        variables: [assignment.variableId],
+        message: `${subjectName}课安排在偏好时段${currentPeriod}节`,
+        suggestion: '继续保持'
+      };
+    }
+    
+    return null;
+  }
+
+  /**
+   * 检测核心课程整体分布质量
+   * 
+   * Args:
+   *   classId: 班级ID
+   *   existingAssignments: 已有的课程安排
+   * 
+   * Returns:
+   *   ConstraintViolation[]: 分布质量约束违反列表
+   */
+  checkCoreSubjectDistributionQuality(
+    classId: mongoose.Types.ObjectId,
+    existingAssignments: Map<string, CourseAssignment>
+  ): ConstraintViolation[] {
+    const violations: ConstraintViolation[] = [];
+    
+    if (!this.rules.courseArrangementRules.coreSubjectStrategy?.enableCoreSubjectStrategy) {
+      return violations;
+    }
+
+    const strategy = this.rules.courseArrangementRules.coreSubjectStrategy;
+    
+    // 按科目统计分布情况
+    for (const coreSubject of strategy.coreSubjects) {
+      const subjectViolations = this.analyzeCoreSubjectDistribution(
+        classId, existingAssignments, strategy, coreSubject
+      );
+      violations.push(...subjectViolations);
+    }
+    
+    return violations;
+  }
+
+  /**
+   * 分析单个核心课程的分布情况
+   */
+  private analyzeCoreSubjectDistribution(
+    classId: mongoose.Types.ObjectId,
+    existingAssignments: Map<string, CourseAssignment>,
+    strategy: any,
+    subjectName: string
+  ): ConstraintViolation[] {
+    const violations: ConstraintViolation[] = [];
+    
+    // 统计每周各天的课程数量
+    const dailyCounts = new Map<number, number>();
+    const workingDays = this.rules.timeRules.workingDays;
+    
+    // 初始化每天计数为0
+    for (const day of workingDays) {
+      dailyCounts.set(day, 0);
+    }
+    
+    // 统计已有安排
+    for (const [_, existing] of existingAssignments) {
+      if (existing.classId.equals(classId) && 
+          this.getSubjectNameSync(existing.courseId) === subjectName) {
+        const day = existing.timeSlot.dayOfWeek;
+        dailyCounts.set(day, (dailyCounts.get(day) || 0) + 1);
+      }
+    }
+    
+    // 检查分布是否均匀
+    if (strategy.enforceEvenDistribution) {
+      const counts = Array.from(dailyCounts.values());
+      const maxCount = Math.max(...counts);
+      const minCount = Math.min(...counts);
+      
+      if (maxCount - minCount > 1) {
+        violations.push({
+          constraintType: ConstraintType.SOFT_CORE_SUBJECT_DISTRIBUTION,
+          isHard: false,
+          penalty: 70,
+          variables: [], // 这里需要具体的变量ID
+          message: `核心课程${subjectName}分布不均匀，最多${maxCount}次/天，最少${minCount}次/天`,
+          suggestion: `建议调整${subjectName}课安排，确保每周分布更加均匀`
+        });
+      }
+    }
+    
+    return violations;
+  }
+
+  /**
+   * 判断是否为核心课程
+   */
+  private isCoreSubject(subjectName: string): boolean {
+    const coreSubjects = ['语文', '数学', '英语', '物理', '化学', '生物'];
+    return coreSubjects.includes(subjectName);
+  }
+
+  /**
+   * 判断是否为核心课程黄金时段
+   */
+  private isGoldenTimeForCoreSubjects(timeSlot: TimeSlot): boolean {
+    return (timeSlot.period >= 1 && timeSlot.period <= 4) || // 上午1-4节
+           (timeSlot.period >= 5 && timeSlot.period <= 6);   // 下午5-6节
+  }
+
+  /**
+   * 判断是否为连排体育课
+   */
+  private isContinuousPhysicalEducation(
+    assignment: CourseAssignment,
+    existingAssignments: Map<string, CourseAssignment>
+  ): boolean {
+    // 检查同一天相邻节次是否有体育课
+    for (const [_, existing] of existingAssignments) {
+      if (existing.classId.equals(assignment.classId) && 
+          this.getSubjectNameSync(existing.courseId) === '体育' &&
+          existing.timeSlot.dayOfWeek === assignment.timeSlot.dayOfWeek &&
+          Math.abs(existing.timeSlot.period - assignment.timeSlot.period) === 1) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * 判断是否适合连排体育课
+   */
+  private isSuitableForContinuousPE(timeSlot: TimeSlot): boolean {
+    // 连排体育课最佳时段：上午3-4节，下午5-6节
+    return (timeSlot.period >= 3 && timeSlot.period <= 4) || 
+           (timeSlot.period >= 5 && timeSlot.period <= 6);
+  }
+
+  /**
+   * 判断是否适合艺术课
+   */
+  private isSuitableForArtSubject(timeSlot: TimeSlot): boolean {
+    // 艺术课最佳时段：上午3-4节，下午5-6节
+    return (timeSlot.period >= 3 && timeSlot.period <= 6);
+  }
+
+  /**
+   * 判断是否适合实验课
+   */
+  private isSuitableForLabSubject(timeSlot: TimeSlot): boolean {
+    // 实验课最佳时段：上午2-4节，下午5节
+    return (timeSlot.period >= 2 && timeSlot.period <= 4) || timeSlot.period === 5;
+  }
+
+  /**
+   * 检查体育课与理论课的间隔
+   */
+  private checkPETheoryInterval(
+    assignment: CourseAssignment,
+    existingAssignments: Map<string, CourseAssignment>
+  ): ConstraintViolation | null {
+    const theorySubjects = ['语文', '数学', '英语', '物理', '化学', '生物', '历史', '地理', '政治'];
+    
+    for (const [_, existing] of existingAssignments) {
+      if (existing.classId.equals(assignment.classId) && 
+          this.getSubjectNameSync(existing.courseId) === '体育' &&
+          theorySubjects.includes(this.getSubjectNameSync(existing.courseId) || '')) {
+        
+        // 检查是否在同一天且间隔过小
+        if (existing.timeSlot.dayOfWeek === assignment.timeSlot.dayOfWeek &&
+            Math.abs(existing.timeSlot.period - assignment.timeSlot.period) <= 1) {
+          
+          return {
+            constraintType: ConstraintType.SOFT_SUBJECT_CONSTRAINT,
+            isHard: false,
+            penalty: 70,
+            variables: [assignment.variableId],
+            message: '体育课与理论课间隔过小',
+            suggestion: '建议在体育课与理论课之间安排至少1节课的间隔'
+          };
+        }
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * 检查艺术课与核心课程的间隔
+   */
+  private checkArtCoreInterval(
+    assignment: CourseAssignment,
+    existingAssignments: Map<string, CourseAssignment>
+  ): ConstraintViolation | null {
+    for (const [_, existing] of existingAssignments) {
+      if (existing.classId.equals(assignment.classId) && 
+          this.isCoreSubject(this.getSubjectNameSync(existing.courseId) || '')) {
+        
+        // 检查是否在同一天且间隔过小
+        if (existing.timeSlot.dayOfWeek === assignment.timeSlot.dayOfWeek &&
+            Math.abs(existing.timeSlot.period - assignment.timeSlot.period) <= 1) {
+          
+          return {
+            constraintType: ConstraintType.SOFT_SUBJECT_CONSTRAINT,
+            isHard: false,
+            penalty: 50,
+            variables: [assignment.variableId],
+            message: '艺术课与核心课程间隔过小',
+            suggestion: '建议在艺术课与核心课程之间安排至少1节课的间隔'
+          };
+        }
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * 检查实验课与理论课的关联性
+   */
+  private checkLabTheoryCorrelation(
+    assignment: CourseAssignment,
+    existingAssignments: Map<string, CourseAssignment>
+  ): ConstraintViolation | null {
+    const subjectName = this.getSubjectNameSync(assignment.courseId);
+    if (!subjectName) return null;
+    
+    const theorySubject = this.getTheorySubjectForLab(subjectName);
+    
+    if (!theorySubject) return null;
+    
+    // 检查是否在同一天有对应的理论课
+    let hasTheoryClass = false;
+    for (const [_, existing] of existingAssignments) {
+      if (existing.classId.equals(assignment.classId) && 
+          this.getSubjectNameSync(existing.courseId) === theorySubject &&
+          existing.timeSlot.dayOfWeek === assignment.timeSlot.dayOfWeek) {
+        hasTheoryClass = true;
+        break;
+      }
+    }
+    
+    if (!hasTheoryClass) {
+      return {
+        constraintType: ConstraintType.SOFT_SUBJECT_CONSTRAINT,
+        isHard: false,
+        penalty: 60,
+        variables: [assignment.variableId],
+        message: `实验课应在对应理论课之后安排`,
+        suggestion: `建议先安排${theorySubject}理论课，再安排${subjectName}实验课`
+      };
+    }
+    
+    return null;
+  }
+
+  /**
+   * 获取实验课对应的理论课
+   */
+  private getTheorySubjectForLab(labSubject: string): string | null {
+    const labTheoryMap: { [key: string]: string } = {
+      '物理实验': '物理',
+      '化学实验': '化学',
+      '生物实验': '生物'
+    };
+    
+    return labTheoryMap[labSubject] || null;
+  }
+
+  /**
+   * 获取科目名称（辅助方法）
+   * 
+   * Args:
+   *   courseId: 课程ID
+   * 
+   * Returns:
+   *   string | null: 科目名称，如果无法获取则返回null
+   */
+  private async getSubjectName(courseId: mongoose.Types.ObjectId): Promise<string | null> {
+    try {
+      // 从数据库获取课程信息
+      const Course = mongoose.model('Course');
+      const course = await Course.findById(courseId).select('name').lean();
+      return (course as any)?.name || null;
+    } catch (error) {
+      console.warn(`获取科目名称失败 (ID: ${courseId}):`, error);
+      return null;
+    }
+  }
+
+  /**
+   * 同步版本的科目名称获取（用于性能关键场景）
+   */
+  public getSubjectNameSync(courseId: mongoose.Types.ObjectId): string | null {
+    // 如果科目名称缓存存在，直接返回
+    if (this.subjectNameCache && this.subjectNameCache.has(courseId.toString())) {
+      return this.subjectNameCache.get(courseId.toString())!;
+    }
+    return null;
   }
 }

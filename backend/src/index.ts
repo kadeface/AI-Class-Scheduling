@@ -33,6 +33,7 @@ import { default as manualSchedulingRoutes } from './routes/manual-scheduling-ro
 import { default as scheduleRoutes } from './routes/schedule-routes';
 import { default as importRoutes } from './routes/import-routes';
 import statisticsRoutes from './routes/statistics-routes';
+import gradeTemplateRoutes from './routes/grade-template-routes';
 
 // 加载环境变量
 dotenv.config();
@@ -132,6 +133,9 @@ function configureRoutes(): void {
 
   // 统计路由
    app.use('/api/statistics', statisticsRoutes);
+
+  // 年级课程模板路由
+   app.use('/api/grade-templates', gradeTemplateRoutes);
 }
 
 /**

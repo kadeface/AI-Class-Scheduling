@@ -27,6 +27,21 @@ export interface ITimeRules {
 }
 
 /**
+ * 教师轮换策略接口定义
+ * 
+ * 定义教师授课轮换的智能策略
+ */
+export interface ITeacherRotationStrategy {
+  enableRotation: boolean;              // 是否启用教师轮换
+  rotationMode: 'round_robin' | 'balanced' | 'custom'; // 轮换模式
+  roundCompletion: boolean;             // 是否要求完成一轮后再下一轮
+  minIntervalBetweenClasses: number;    // 同一班级间最小间隔节次
+  maxConsecutiveClasses: number;        // 同一班级最大连续节次
+  rotationOrder: 'alphabetical' | 'grade_based' | 'custom'; // 轮换顺序策略
+  customRotationOrder?: string[];       // 自定义轮换顺序
+}
+
+/**
  * 教师约束规则接口定义
  * 
  * 定义教师排课相关的约束规则
@@ -38,6 +53,9 @@ export interface ITeacherConstraints {
   avoidFridayAfternoon: boolean;       // 是否避免周五下午排课
   respectTeacherPreferences: boolean;  // 是否尊重教师时间偏好
   allowCrossGradeTeaching: boolean;    // 是否允许跨年级教学
+  
+  // 新增：教师轮换策略
+  rotationStrategy: ITeacherRotationStrategy; // 教师轮换策略
 }
 
 /**
@@ -53,6 +71,46 @@ export interface IRoomConstraints {
 }
 
 /**
+ * 科目特定约束规则接口定义
+ * 
+ * 定义特定科目的约束规则，如体育课不能连排等
+ */
+export interface ISubjectSpecificRules {
+  subjectName: string;                    // 科目名称
+  avoidConsecutive: boolean;              // 是否避免连续安排
+  minInterval: number;                    // 最小间隔节次（0表示无限制）
+  preferredTimeSlots: number[];           // 偏好时间段（节次数组）
+  avoidTimeSlots: number[];               // 避免时间段（节次数组）
+  relatedSubjects: string[];              // 关联科目（需要间隔安排的科目）
+  maxDailyOccurrences: number;            // 每日最大出现次数
+  priority: 'high' | 'medium' | 'low';   // 科目优先级
+  specialConstraints?: {                  // 特殊约束
+    type: 'physical' | 'lab' | 'theory' | 'art' | 'other'; // 科目类型
+    requiresRest: boolean;                // 是否需要休息时间
+    minRestPeriods: number;               // 最小休息节次数
+  };
+}
+
+/**
+ * 核心课程策略接口定义
+ * 
+ * 定义核心课程的分布和约束策略
+ */
+export interface ICoreSubjectStrategy {
+  enableCoreSubjectStrategy: boolean;        // 是否启用核心课程策略
+  coreSubjects: string[];                    // 核心课程列表（如：语文、数学、英语等）
+  distributionMode: 'daily' | 'balanced' | 'concentrated'; // 分布模式
+  maxDailyOccurrences: number;               // 每日最大出现次数（建议：1-2次）
+  minDaysPerWeek: number;                    // 每周最少出现天数（建议：4-5天）
+  avoidConsecutiveDays: boolean;             // 是否避免连续天安排
+  preferredTimeSlots: number[];              // 偏好时间段（节次数组）
+  avoidTimeSlots: number[];                  // 避免时间段（节次数组）
+  maxConcentration: number;                  // 最大集中度（连续天数限制）
+  balanceWeight: number;                     // 平衡权重（0-100）
+  enforceEvenDistribution: boolean;          // 是否强制均匀分布
+}
+
+/**
  * 课程排列规则接口定义
  * 
  * 定义课程安排相关的约束规则
@@ -64,6 +122,14 @@ export interface ICourseArrangementRules {
   avoidFirstLastPeriod: string[];      // 避免第一节或最后一节的科目
   coreSubjectPriority: boolean;        // 核心科目优先安排在黄金时段
   labCoursePreference: 'morning' | 'afternoon' | 'flexible'; // 实验课时间偏好
+  
+  // 新增：科目特定约束
+  subjectSpecificRules: ISubjectSpecificRules[]; // 科目特定约束规则
+  enableSubjectConstraints: boolean;   // 是否启用科目特定约束
+  defaultSubjectInterval: number;      // 默认科目间隔节次
+  
+  // 新增：核心课程策略
+  coreSubjectStrategy: ICoreSubjectStrategy; // 核心课程策略配置
 }
 
 /**
@@ -182,6 +248,50 @@ const TimeRulesSchema = new Schema<ITimeRules>({
 }, { _id: false });
 
 /**
+ * 教师轮换策略Schema定义
+ */
+const TeacherRotationStrategySchema = new Schema<ITeacherRotationStrategy>({
+  enableRotation: {
+    type: Boolean,
+    default: true
+  },
+  
+  rotationMode: {
+    type: String,
+    enum: ['round_robin', 'balanced', 'custom'],
+    default: 'round_robin'
+  },
+  
+  roundCompletion: {
+    type: Boolean,
+    default: true
+  },
+  
+  minIntervalBetweenClasses: {
+    type: Number,
+    min: [0, '同一班级间最小间隔节次不能为负数'],
+    default: 1
+  },
+  
+  maxConsecutiveClasses: {
+    type: Number,
+    min: [1, '同一班级最大连续节次至少为1'],
+    default: 2
+  },
+  
+  rotationOrder: {
+    type: String,
+    enum: ['alphabetical', 'grade_based', 'custom'],
+    default: 'alphabetical'
+  },
+  
+  customRotationOrder: {
+    type: [String],
+    default: []
+  }
+}, { _id: false });
+
+/**
  * 教师约束Schema定义
  */
 const TeacherConstraintsSchema = new Schema<ITeacherConstraints>({
@@ -219,6 +329,12 @@ const TeacherConstraintsSchema = new Schema<ITeacherConstraints>({
   allowCrossGradeTeaching: {
     type: Boolean,
     default: true
+  },
+  
+  // 新增：教师轮换策略
+  rotationStrategy: {
+    type: TeacherRotationStrategySchema,
+    default: () => ({})
   }
 }, { _id: false });
 
@@ -245,6 +361,128 @@ const TeacherConstraintsSchema = new Schema<ITeacherConstraints>({
     required: [true, '特殊教室优先级不能为空'],
     enum: ['strict', 'preferred', 'flexible'],
     default: 'preferred'
+  }
+}, { _id: false });
+
+/**
+ * 科目特定约束规则Schema定义
+ */
+const SubjectSpecificRulesSchema = new Schema<ISubjectSpecificRules>({
+  subjectName: {
+    type: String,
+    required: [true, '科目名称不能为空'],
+    trim: true
+  },
+  
+  avoidConsecutive: {
+    type: Boolean,
+    default: false
+  },
+  
+  minInterval: {
+    type: Number,
+    min: [0, '最小间隔节次不能为负数'],
+    default: 0
+  },
+  
+  preferredTimeSlots: {
+    type: [Number],
+    default: []
+  },
+  
+  avoidTimeSlots: {
+    type: [Number],
+    default: []
+  },
+  
+  relatedSubjects: {
+    type: [String],
+    default: []
+  },
+  
+  maxDailyOccurrences: {
+    type: Number,
+    min: [1, '每日最大出现次数至少为1'],
+    default: 2
+  },
+  
+  priority: {
+    type: String,
+    enum: ['high', 'medium', 'low'],
+    default: 'medium'
+  },
+  
+  specialConstraints: {
+    type: {
+      type: String,
+      enum: ['physical', 'lab', 'theory', 'art', 'other'],
+      default: 'other'
+    },
+    requiresRest: {
+      type: Boolean,
+      default: false
+    },
+    minRestPeriods: {
+      type: Number,
+      min: [0, '最小休息节次数不能为负数'],
+      default: 0
+    }
+  }
+}, { _id: false });
+
+/**
+ * 核心课程策略Schema定义
+ */
+const CoreSubjectStrategySchema = new Schema<ICoreSubjectStrategy>({
+  enableCoreSubjectStrategy: {
+    type: Boolean,
+    default: false
+  },
+  coreSubjects: {
+    type: [String],
+    default: []
+  },
+  distributionMode: {
+    type: String,
+    enum: ['daily', 'balanced', 'concentrated'],
+    default: 'balanced'
+  },
+  maxDailyOccurrences: {
+    type: Number,
+    min: [1, '每日最大出现次数至少为1'],
+    default: 2
+  },
+  minDaysPerWeek: {
+    type: Number,
+    min: [1, '每周最少出现天数至少为1'],
+    default: 4
+  },
+  avoidConsecutiveDays: {
+    type: Boolean,
+    default: true
+  },
+  preferredTimeSlots: {
+    type: [Number],
+    default: []
+  },
+  avoidTimeSlots: {
+    type: [Number],
+    default: []
+  },
+  maxConcentration: {
+    type: Number,
+    min: [1, '最大集中度至少为1'],
+    default: 2
+  },
+  balanceWeight: {
+    type: Number,
+    min: [0, '平衡权重不能为负数'],
+    max: [100, '平衡权重不能超过100'],
+    default: 50
+  },
+  enforceEvenDistribution: {
+    type: Boolean,
+    default: true
   }
 }, { _id: false });
 
@@ -287,6 +525,29 @@ const CourseArrangementRulesSchema = new Schema<ICourseArrangementRules>({
     required: [true, '实验课时间偏好不能为空'],
     enum: ['morning', 'afternoon', 'flexible'],
     default: 'afternoon'
+  },
+  
+  // 新增：科目特定约束
+  subjectSpecificRules: {
+    type: [SubjectSpecificRulesSchema],
+    default: []
+  },
+  
+  enableSubjectConstraints: {
+    type: Boolean,
+    default: true
+  },
+  
+  defaultSubjectInterval: {
+    type: Number,
+    min: [0, '默认科目间隔节次不能为负数'],
+    default: 1
+  },
+  
+  // 新增：核心课程策略
+  coreSubjectStrategy: {
+    type: CoreSubjectStrategySchema,
+    default: () => ({})
   }
 }, { _id: false });
 

@@ -47,7 +47,10 @@ import {
   TIME_PREFERENCES,
   ROOM_PRIORITY_OPTIONS,
   formatSchoolType,
-  WEEKDAY_OPTIONS
+  WEEKDAY_OPTIONS,
+  DEFAULT_CORE_SUBJECT_STRATEGY,
+  getRecommendedCoreSubjects,
+  CORE_SUBJECT_DISTRIBUTION_MODES
 } from '@/lib/api';
 import { formatDateTime, cn } from '@/lib/utils';
 
@@ -84,6 +87,15 @@ const ACADEMIC_YEAR_OPTIONS = generateAcademicYearOptions();
  *   React.ReactElement: 排课规则管理页面
  */
 export default function SchedulingRulesPage() {
+  // 安全的访问函数，用于避免 coreSubjectStrategy 字段缺失导致的错误
+  const getSafeCoreSubjectStrategy = () => {
+    return formData.courseArrangementRules?.coreSubjectStrategy && 
+      typeof formData.courseArrangementRules.coreSubjectStrategy === 'object' &&
+      'enableCoreSubjectStrategy' in formData.courseArrangementRules.coreSubjectStrategy
+      ? formData.courseArrangementRules.coreSubjectStrategy
+      : DEFAULT_CORE_SUBJECT_STRATEGY;
+  };
+
   // 状态管理
   const [schedulingRules, setSchedulingRules] = useState<SchedulingRules[]>([]);
   const [loading, setLoading] = useState(true);
@@ -123,27 +135,26 @@ export default function SchedulingRulesPage() {
   const [formData, setFormData] = useState<CreateSchedulingRulesRequest>({
     name: '',
     description: '',
-    schoolType: 'high',
-    academicYear: `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
+    schoolType: 'mixed',
+    academicYear: '',
     semester: 1,
     timeRules: {
       dailyPeriods: 8,
       workingDays: [1, 2, 3, 4, 5],
       periodDuration: 45,
       breakDuration: 10,
-      lunchBreakStart: 4,
-      lunchBreakDuration: 90,
+      lunchBreakStart: 5,
+      lunchBreakDuration: 60,
       morningPeriods: [1, 2, 3, 4],
       afternoonPeriods: [5, 6, 7, 8],
-      forbiddenSlots: [],
     },
     teacherConstraints: {
       maxDailyHours: 6,
       maxContinuousHours: 3,
-      minRestBetweenCourses: 1,
+      minRestBetweenCourses: 10,
       avoidFridayAfternoon: true,
       respectTeacherPreferences: true,
-      allowCrossGradeTeaching: true,
+      allowCrossGradeTeaching: false,
     },
     roomConstraints: {
       respectCapacityLimits: true,
@@ -158,6 +169,7 @@ export default function SchedulingRulesPage() {
       avoidFirstLastPeriod: [],
       coreSubjectPriority: true,
       labCoursePreference: 'morning',
+      coreSubjectStrategy: DEFAULT_CORE_SUBJECT_STRATEGY,
     },
     conflictResolutionRules: {
       teacherConflictResolution: 'strict',
@@ -253,27 +265,26 @@ export default function SchedulingRulesPage() {
     setFormData({
       name: '',
       description: '',
-      schoolType: 'high',
-      academicYear: `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
+      schoolType: 'mixed',
+      academicYear: '',
       semester: 1,
       timeRules: {
         dailyPeriods: 8,
         workingDays: [1, 2, 3, 4, 5],
         periodDuration: 45,
         breakDuration: 10,
-        lunchBreakStart: 4,
-        lunchBreakDuration: 90,
+        lunchBreakStart: 5,
+        lunchBreakDuration: 60,
         morningPeriods: [1, 2, 3, 4],
         afternoonPeriods: [5, 6, 7, 8],
-        forbiddenSlots: [],
       },
       teacherConstraints: {
         maxDailyHours: 6,
         maxContinuousHours: 3,
-        minRestBetweenCourses: 1,
+        minRestBetweenCourses: 10,
         avoidFridayAfternoon: true,
         respectTeacherPreferences: true,
-        allowCrossGradeTeaching: true,
+        allowCrossGradeTeaching: false,
       },
       roomConstraints: {
         respectCapacityLimits: true,
@@ -288,6 +299,7 @@ export default function SchedulingRulesPage() {
         avoidFirstLastPeriod: [],
         coreSubjectPriority: true,
         labCoursePreference: 'morning',
+        coreSubjectStrategy: DEFAULT_CORE_SUBJECT_STRATEGY,
       },
       conflictResolutionRules: {
         teacherConflictResolution: 'strict',
@@ -306,6 +318,14 @@ export default function SchedulingRulesPage() {
    */
   const openEditDialog = (rules: SchedulingRules) => {
     setSelectedRules(rules);
+    
+    // 确保 coreSubjectStrategy 字段存在并且有正确的结构
+    const safeCoreSubjectStrategy = rules.courseArrangementRules?.coreSubjectStrategy && 
+      typeof rules.courseArrangementRules.coreSubjectStrategy === 'object' &&
+      'enableCoreSubjectStrategy' in rules.courseArrangementRules.coreSubjectStrategy
+      ? rules.courseArrangementRules.coreSubjectStrategy
+      : DEFAULT_CORE_SUBJECT_STRATEGY;
+    
     setFormData({
       name: rules.name,
       description: rules.description,
@@ -315,7 +335,10 @@ export default function SchedulingRulesPage() {
       timeRules: rules.timeRules,
       teacherConstraints: rules.teacherConstraints,
       roomConstraints: rules.roomConstraints,
-      courseArrangementRules: rules.courseArrangementRules,
+      courseArrangementRules: {
+        ...rules.courseArrangementRules,
+        coreSubjectStrategy: safeCoreSubjectStrategy
+      },
       conflictResolutionRules: rules.conflictResolutionRules,
       isDefault: rules.isDefault,
     });
@@ -1280,6 +1303,378 @@ export default function SchedulingRulesPage() {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* 核心课程策略配置 */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BookOpen className="h-5 w-5" />
+                    核心课程策略
+                  </CardTitle>
+                  <CardDescription>
+                    配置核心课程的分布策略，确保核心课程均匀分布在一周内
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {/* 启用开关 */}
+                  <div className="flex items-center space-x-2 mb-4">
+                    <Switch
+                      id="enableCoreSubjectStrategy"
+                      checked={getSafeCoreSubjectStrategy().enableCoreSubjectStrategy}
+                      onCheckedChange={(checked) => setFormData(prev => ({
+                        ...prev,
+                        courseArrangementRules: {
+                          ...prev.courseArrangementRules,
+                          coreSubjectStrategy: {
+                            ...getSafeCoreSubjectStrategy(),
+                            enableCoreSubjectStrategy: checked
+                          }
+                        }
+                      }))}
+                    />
+                    <Label htmlFor="enableCoreSubjectStrategy" className="text-base font-medium">
+                      启用核心课程策略
+                    </Label>
+                  </div>
+
+                  {getSafeCoreSubjectStrategy().enableCoreSubjectStrategy && (
+                    <div className="space-y-6">
+                      {/* 核心课程列表 */}
+                      <div>
+                        <Label htmlFor="coreSubjects">核心课程列表 *</Label>
+                        <div className="mt-2 space-y-2">
+                          <div className="flex flex-wrap gap-2">
+                            {getSafeCoreSubjectStrategy().coreSubjects.map((subject, index) => (
+                              <div key={index} className="flex items-center gap-2 bg-blue-50 px-3 py-1 rounded-full">
+                                <span className="text-sm">{subject}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const newSubjects = getSafeCoreSubjectStrategy().coreSubjects.filter((_, i) => i !== index);
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      courseArrangementRules: {
+                                        ...prev.courseArrangementRules,
+                                        coreSubjectStrategy: {
+                                          ...prev.courseArrangementRules.coreSubjectStrategy,
+                                          coreSubjects: newSubjects
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                  className="text-red-500 hover:text-red-700"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex gap-2">
+                            <Select
+                              value=""
+                              onValueChange={(value) => {
+                                if (value && !getSafeCoreSubjectStrategy().coreSubjects.includes(value)) {
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    courseArrangementRules: {
+                                      ...prev.courseArrangementRules,
+                                      coreSubjectStrategy: {
+                                        ...prev.courseArrangementRules.coreSubjectStrategy,
+                                        coreSubjects: [...getSafeCoreSubjectStrategy().coreSubjects, value]
+                                      }
+                                    }
+                                  }));
+                                }
+                              }}
+                            >
+                              <option value="">选择课程...</option>
+                              {['语文', '数学', '英语', '物理', '化学', '生物', '历史', '地理', '政治', '科学', '道德与法治'].map(subject => (
+                                <option key={subject} value={subject}>
+                                  {subject}
+                                </option>
+                              ))}
+                            </Select>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const recommendedSubjects = getRecommendedCoreSubjects(formData.schoolType);
+                                setFormData(prev => ({
+                                  ...prev,
+                                  courseArrangementRules: {
+                                    ...prev.courseArrangementRules,
+                                    coreSubjectStrategy: {
+                                      ...prev.courseArrangementRules.coreSubjectStrategy,
+                                      coreSubjects: recommendedSubjects
+                                    }
+                                  }
+                                }));
+                              }}
+                            >
+                              推荐配置
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 分布模式和时间设置 */}
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <Label htmlFor="distributionMode">分布模式 *</Label>
+                          <Select
+                            value={getSafeCoreSubjectStrategy().distributionMode}
+                            onValueChange={(value) => setFormData(prev => ({
+                              ...prev,
+                              courseArrangementRules: {
+                                ...prev.courseArrangementRules,
+                                coreSubjectStrategy: {
+                                  ...prev.courseArrangementRules.coreSubjectStrategy,
+                                  distributionMode: value as any
+                                }
+                              }
+                            }))}
+                          >
+                            {CORE_SUBJECT_DISTRIBUTION_MODES.map(mode => (
+                              <option key={mode.value} value={mode.value}>
+                                {mode.label}
+                              </option>
+                            ))}
+                          </Select>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {getSafeCoreSubjectStrategy().distributionMode === 'daily' && '每日分布：核心课程每天都有安排'}
+                            {getSafeCoreSubjectStrategy().distributionMode === 'balanced' && '平衡分布：核心课程在一周内均匀分布'}
+                            {getSafeCoreSubjectStrategy().distributionMode === 'concentrated' && '集中分布：核心课程集中在特定几天'}
+                          </p>
+                        </div>
+
+                        <div>
+                          <Label htmlFor="maxDailyOccurrences">每日最大出现次数 *</Label>
+                          <Input
+                            id="maxDailyOccurrences"
+                            type="number"
+                            min="1"
+                            max="4"
+                            value={getSafeCoreSubjectStrategy().maxDailyOccurrences}
+                            onChange={(e) => setFormData(prev => ({
+                              ...prev,
+                              courseArrangementRules: {
+                                ...prev.courseArrangementRules,
+                                coreSubjectStrategy: {
+                                  ...prev.courseArrangementRules.coreSubjectStrategy,
+                                  maxDailyOccurrences: parseInt(e.target.value) || 2
+                                }
+                              }
+                            }))}
+                          />
+                          <p className="text-xs text-gray-500 mt-1">建议：1-2次，避免某一天课程过重</p>
+                        </div>
+                      </div>
+
+                      {/* 每周要求和连续天控制 */}
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <Label htmlFor="minDaysPerWeek">每周最少出现天数 *</Label>
+                          <Input
+                            id="minDaysPerWeek"
+                            type="number"
+                            min="3"
+                            max="7"
+                            value={getSafeCoreSubjectStrategy().minDaysPerWeek}
+                            onChange={(e) => setFormData(prev => ({
+                              ...prev,
+                              courseArrangementRules: {
+                                ...prev.courseArrangementRules,
+                                coreSubjectStrategy: {
+                                  ...prev.courseArrangementRules.coreSubjectStrategy,
+                                  minDaysPerWeek: parseInt(e.target.value) || 5
+                                }
+                              }
+                            }))}
+                          />
+                          <p className="text-xs text-gray-500 mt-1">建议：4-5天，确保核心课程覆盖足够的天数</p>
+                        </div>
+
+                        <div>
+                          <Label htmlFor="maxConcentration">最大集中度</Label>
+                          <Input
+                            id="maxConcentration"
+                            type="number"
+                            min="1"
+                            max="5"
+                            value={getSafeCoreSubjectStrategy().maxConcentration}
+                            onChange={(e) => setFormData(prev => ({
+                              ...prev,
+                              courseArrangementRules: {
+                                ...prev.courseArrangementRules,
+                                coreSubjectStrategy: {
+                                  ...prev.courseArrangementRules.coreSubjectStrategy,
+                                  maxConcentration: parseInt(e.target.value) || 3
+                                }
+                              }
+                            }))}
+                          />
+                          <p className="text-xs text-gray-500 mt-1">连续天数限制，避免核心课程过于集中</p>
+                        </div>
+                      </div>
+
+                      {/* 时间段偏好设置 */}
+                      <div>
+                        <Label>时间段偏好设置</Label>
+                        <div className="mt-2 grid gap-4 md:grid-cols-2">
+                          <div>
+                            <Label htmlFor="preferredTimeSlots" className="text-sm">偏好时间段</Label>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {[1, 2, 3, 4, 5, 6, 7, 8].map(period => (
+                                <button
+                                  key={period}
+                                  type="button"
+                                  onClick={() => {
+                                    const current = getSafeCoreSubjectStrategy().preferredTimeSlots;
+                                    const newPeriods = current.includes(period)
+                                      ? current.filter(p => p !== period)
+                                      : [...current, period];
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      courseArrangementRules: {
+                                        ...prev.courseArrangementRules,
+                                        coreSubjectStrategy: {
+                                          ...prev.courseArrangementRules.coreSubjectStrategy,
+                                          preferredTimeSlots: newPeriods
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                  className={cn(
+                                    'px-2 py-1 text-xs rounded border',
+                                    getSafeCoreSubjectStrategy().preferredTimeSlots.includes(period)
+                                      ? 'bg-blue-500 text-white border-blue-500'
+                                      : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
+                                  )}
+                                >
+                                  第{period}节
+                                </button>
+                              ))}
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">选择核心课程偏好的时间段</p>
+                          </div>
+
+                          <div>
+                            <Label htmlFor="avoidTimeSlots" className="text-sm">避免时间段</Label>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {[1, 2, 3, 4, 5, 6, 7, 8].map(period => (
+                                <button
+                                  key={period}
+                                  type="button"
+                                  onClick={() => {
+                                    const current = getSafeCoreSubjectStrategy().avoidTimeSlots;
+                                    const newPeriods = current.includes(period)
+                                      ? current.filter(p => p !== period)
+                                      : [...current, period];
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      courseArrangementRules: {
+                                        ...prev.courseArrangementRules,
+                                        coreSubjectStrategy: {
+                                          ...prev.courseArrangementRules.coreSubjectStrategy,
+                                          avoidTimeSlots: newPeriods
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                  className={cn(
+                                    'px-2 py-1 text-xs rounded border',
+                                    getSafeCoreSubjectStrategy().avoidTimeSlots.includes(period)
+                                      ? 'bg-red-500 text-white border-red-500'
+                                      : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
+                                  )}
+                                >
+                                  第{period}节
+                                </button>
+                              ))}
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">选择核心课程要避免的时间段</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 高级选项 */}
+                      <div className="space-y-4">
+                        <Separator />
+                        <h4 className="font-medium text-gray-900">高级选项</h4>
+                        
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div className="flex items-center space-x-2">
+                            <Switch
+                              id="avoidConsecutiveDays"
+                              checked={getSafeCoreSubjectStrategy().avoidConsecutiveDays}
+                              onCheckedChange={(checked) => setFormData(prev => ({
+                                ...prev,
+                                courseArrangementRules: {
+                                  ...prev.courseArrangementRules,
+                                  coreSubjectStrategy: {
+                                    ...prev.courseArrangementRules.coreSubjectStrategy,
+                                    avoidConsecutiveDays: checked
+                                  }
+                                }
+                              }))}
+                            />
+                            <Label htmlFor="avoidConsecutiveDays">避免连续天安排</Label>
+                          </div>
+
+                          <div className="flex items-center space-x-2">
+                            <Switch
+                              id="enforceEvenDistribution"
+                              checked={getSafeCoreSubjectStrategy().enforceEvenDistribution}
+                              onCheckedChange={(checked) => setFormData(prev => ({
+                                ...prev,
+                                courseArrangementRules: {
+                                  ...prev.courseArrangementRules,
+                                  coreSubjectStrategy: {
+                                    ...prev.courseArrangementRules.coreSubjectStrategy,
+                                    enforceEvenDistribution: checked
+                                  }
+                                }
+                              }))}
+                            />
+                            <Label htmlFor="enforceEvenDistribution">强制均匀分布</Label>
+                          </div>
+                        </div>
+
+                        <div>
+                          <Label htmlFor="balanceWeight">平衡权重</Label>
+                          <div className="mt-1 flex items-center gap-2">
+                            <Input
+                              id="balanceWeight"
+                              type="range"
+                              min="0"
+                              max="100"
+                              value={getSafeCoreSubjectStrategy().balanceWeight}
+                              onChange={(e) => setFormData(prev => ({
+                                ...prev,
+                                courseArrangementRules: {
+                                  ...prev.courseArrangementRules,
+                                  coreSubjectStrategy: {
+                                    ...prev.courseArrangementRules.coreSubjectStrategy,
+                                    balanceWeight: parseInt(e.target.value) || 80
+                                  }
+                                }
+                              }))}
+                              className="flex-1"
+                            />
+                            <span className="text-sm font-medium w-12 text-right">
+                              {getSafeCoreSubjectStrategy().balanceWeight}%
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1">
+                            调整核心课程分布策略在排课算法中的重要性权重
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </TabsContent>
 
             {/* 冲突解决 */}
@@ -1909,6 +2304,378 @@ export default function SchedulingRulesPage() {
                       </div>
                     )}
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* 核心课程策略配置 */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BookOpen className="h-5 w-5" />
+                    核心课程策略
+                  </CardTitle>
+                  <CardDescription>
+                    配置核心课程的分布策略，确保核心课程均匀分布在一周内
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {/* 启用开关 */}
+                  <div className="flex items-center space-x-2 mb-4">
+                    <Switch
+                      id="edit-enableCoreSubjectStrategy"
+                      checked={getSafeCoreSubjectStrategy().enableCoreSubjectStrategy}
+                      onCheckedChange={(checked) => setFormData(prev => ({
+                        ...prev,
+                        courseArrangementRules: {
+                          ...prev.courseArrangementRules,
+                          coreSubjectStrategy: {
+                            ...prev.courseArrangementRules.coreSubjectStrategy,
+                            enableCoreSubjectStrategy: checked
+                          }
+                        }
+                      }))}
+                    />
+                    <Label htmlFor="edit-enableCoreSubjectStrategy" className="text-base font-medium">
+                      启用核心课程策略
+                    </Label>
+                  </div>
+
+                  {getSafeCoreSubjectStrategy().enableCoreSubjectStrategy && (
+                    <div className="space-y-6">
+                      {/* 核心课程列表 */}
+                      <div>
+                        <Label htmlFor="edit-coreSubjects">核心课程列表 *</Label>
+                        <div className="mt-2 space-y-2">
+                          <div className="flex flex-wrap gap-2">
+                            {getSafeCoreSubjectStrategy().coreSubjects.map((subject, index) => (
+                              <div key={index} className="flex items-center gap-2 bg-blue-50 px-3 py-1 rounded-full">
+                                <span className="text-sm">{subject}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const newSubjects = getSafeCoreSubjectStrategy().coreSubjects.filter((_, i) => i !== index);
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      courseArrangementRules: {
+                                        ...prev.courseArrangementRules,
+                                        coreSubjectStrategy: {
+                                          ...prev.courseArrangementRules.coreSubjectStrategy,
+                                          coreSubjects: newSubjects
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                  className="text-red-500 hover:text-red-700"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex gap-2">
+                            <Select
+                              value=""
+                              onValueChange={(value) => {
+                                if (value && !getSafeCoreSubjectStrategy().coreSubjects.includes(value)) {
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    courseArrangementRules: {
+                                      ...prev.courseArrangementRules,
+                                      coreSubjectStrategy: {
+                                        ...prev.courseArrangementRules.coreSubjectStrategy,
+                                        coreSubjects: [...getSafeCoreSubjectStrategy().coreSubjects, value]
+                                      }
+                                    }
+                                  }));
+                                }
+                              }}
+                            >
+                              <option value="">选择课程...</option>
+                              {['语文', '数学', '英语', '物理', '化学', '生物', '历史', '地理', '政治', '科学', '道德与法治'].map(subject => (
+                                <option key={subject} value={subject}>
+                                  {subject}
+                                </option>
+                              ))}
+                            </Select>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const recommendedSubjects = getRecommendedCoreSubjects(formData.schoolType);
+                                setFormData(prev => ({
+                                  ...prev,
+                                  courseArrangementRules: {
+                                    ...prev.courseArrangementRules,
+                                    coreSubjectStrategy: {
+                                      ...prev.courseArrangementRules.coreSubjectStrategy,
+                                      coreSubjects: recommendedSubjects
+                                    }
+                                  }
+                                }));
+                              }}
+                            >
+                              推荐配置
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 分布模式和时间设置 */}
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <Label htmlFor="edit-distributionMode">分布模式 *</Label>
+                          <Select
+                            value={getSafeCoreSubjectStrategy().distributionMode}
+                            onValueChange={(value) => setFormData(prev => ({
+                              ...prev,
+                              courseArrangementRules: {
+                                ...prev.courseArrangementRules,
+                                coreSubjectStrategy: {
+                                  ...prev.courseArrangementRules.coreSubjectStrategy,
+                                  distributionMode: value as any
+                                }
+                              }
+                            }))}
+                          >
+                            {CORE_SUBJECT_DISTRIBUTION_MODES.map(mode => (
+                              <option key={mode.value} value={mode.value}>
+                                {mode.label}
+                              </option>
+                            ))}
+                          </Select>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {getSafeCoreSubjectStrategy().distributionMode === 'daily' && '每日分布：核心课程每天都有安排'}
+                            {getSafeCoreSubjectStrategy().distributionMode === 'balanced' && '平衡分布：核心课程在一周内均匀分布'}
+                            {getSafeCoreSubjectStrategy().distributionMode === 'concentrated' && '集中分布：核心课程集中在特定几天'}
+                          </p>
+                        </div>
+
+                        <div>
+                          <Label htmlFor="edit-maxDailyOccurrences">每日最大出现次数 *</Label>
+                          <Input
+                            id="edit-maxDailyOccurrences"
+                            type="number"
+                            min="1"
+                            max="4"
+                            value={getSafeCoreSubjectStrategy().maxDailyOccurrences}
+                            onChange={(e) => setFormData(prev => ({
+                              ...prev,
+                              courseArrangementRules: {
+                                ...prev.courseArrangementRules,
+                                coreSubjectStrategy: {
+                                  ...prev.courseArrangementRules.coreSubjectStrategy,
+                                  maxDailyOccurrences: parseInt(e.target.value) || 2
+                                }
+                              }
+                            }))}
+                          />
+                          <p className="text-xs text-gray-500 mt-1">建议：1-2次，避免某一天课程过重</p>
+                        </div>
+                      </div>
+
+                      {/* 每周要求和连续天控制 */}
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <Label htmlFor="edit-minDaysPerWeek">每周最少出现天数 *</Label>
+                          <Input
+                            id="edit-minDaysPerWeek"
+                            type="number"
+                            min="3"
+                            max="7"
+                            value={getSafeCoreSubjectStrategy().minDaysPerWeek}
+                            onChange={(e) => setFormData(prev => ({
+                              ...prev,
+                              courseArrangementRules: {
+                                ...prev.courseArrangementRules,
+                                coreSubjectStrategy: {
+                                  ...prev.courseArrangementRules.coreSubjectStrategy,
+                                  minDaysPerWeek: parseInt(e.target.value) || 5
+                                }
+                              }
+                            }))}
+                          />
+                          <p className="text-xs text-gray-500 mt-1">建议：4-5天，确保核心课程覆盖足够的天数</p>
+                        </div>
+
+                        <div>
+                          <Label htmlFor="edit-maxConcentration">最大集中度</Label>
+                          <Input
+                            id="edit-maxConcentration"
+                            type="number"
+                            min="1"
+                            max="5"
+                            value={getSafeCoreSubjectStrategy().maxConcentration}
+                            onChange={(e) => setFormData(prev => ({
+                              ...prev,
+                              courseArrangementRules: {
+                                ...prev.courseArrangementRules,
+                                coreSubjectStrategy: {
+                                  ...prev.courseArrangementRules.coreSubjectStrategy,
+                                  maxConcentration: parseInt(e.target.value) || 3
+                                }
+                              }
+                            }))}
+                          />
+                          <p className="text-xs text-gray-500 mt-1">连续天数限制，避免核心课程过于集中</p>
+                        </div>
+                      </div>
+
+                      {/* 时间段偏好设置 */}
+                      <div>
+                        <Label>时间段偏好设置</Label>
+                        <div className="mt-2 grid gap-4 md:grid-cols-2">
+                          <div>
+                            <Label htmlFor="edit-preferredTimeSlots" className="text-sm">偏好时间段</Label>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {[1, 2, 3, 4, 5, 6, 7, 8].map(period => (
+                                <button
+                                  key={period}
+                                  type="button"
+                                  onClick={() => {
+                                    const current = getSafeCoreSubjectStrategy().preferredTimeSlots;
+                                    const newPeriods = current.includes(period)
+                                      ? current.filter(p => p !== period)
+                                      : [...current, period];
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      courseArrangementRules: {
+                                        ...prev.courseArrangementRules,
+                                        coreSubjectStrategy: {
+                                          ...prev.courseArrangementRules.coreSubjectStrategy,
+                                          preferredTimeSlots: newPeriods
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                  className={cn(
+                                    'px-2 py-1 text-xs rounded border',
+                                    getSafeCoreSubjectStrategy().preferredTimeSlots.includes(period)
+                                      ? 'bg-blue-500 text-white border-blue-500'
+                                      : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
+                                  )}
+                                >
+                                  第{period}节
+                                </button>
+                              ))}
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">选择核心课程偏好的时间段</p>
+                          </div>
+
+                          <div>
+                            <Label htmlFor="edit-avoidTimeSlots" className="text-sm">避免时间段</Label>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {[1, 2, 3, 4, 5, 6, 7, 8].map(period => (
+                                <button
+                                  key={period}
+                                  type="button"
+                                  onClick={() => {
+                                    const current = getSafeCoreSubjectStrategy().avoidTimeSlots;
+                                    const newPeriods = current.includes(period)
+                                      ? current.filter(p => p !== period)
+                                      : [...current, period];
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      courseArrangementRules: {
+                                        ...prev.courseArrangementRules,
+                                        coreSubjectStrategy: {
+                                          ...prev.courseArrangementRules.coreSubjectStrategy,
+                                          avoidTimeSlots: newPeriods
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                  className={cn(
+                                    'px-2 py-1 text-xs rounded border',
+                                    getSafeCoreSubjectStrategy().avoidTimeSlots.includes(period)
+                                      ? 'bg-red-500 text-white border-red-500'
+                                      : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
+                                  )}
+                                >
+                                  第{period}节
+                                </button>
+                              ))}
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">选择核心课程要避免的时间段</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 高级选项 */}
+                      <div className="space-y-4">
+                        <Separator />
+                        <h4 className="font-medium text-gray-900">高级选项</h4>
+                        
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div className="flex items-center space-x-2">
+                            <Switch
+                              id="edit-avoidConsecutiveDays"
+                              checked={getSafeCoreSubjectStrategy().avoidConsecutiveDays}
+                              onCheckedChange={(checked) => setFormData(prev => ({
+                                ...prev,
+                                courseArrangementRules: {
+                                  ...prev.courseArrangementRules,
+                                  coreSubjectStrategy: {
+                                    ...prev.courseArrangementRules.coreSubjectStrategy,
+                                    avoidConsecutiveDays: checked
+                                  }
+                                }
+                              }))}
+                            />
+                            <Label htmlFor="edit-avoidConsecutiveDays">避免连续天安排</Label>
+                          </div>
+
+                          <div className="flex items-center space-x-2">
+                            <Switch
+                              id="edit-enforceEvenDistribution"
+                              checked={getSafeCoreSubjectStrategy().enforceEvenDistribution}
+                              onCheckedChange={(checked) => setFormData(prev => ({
+                                ...prev,
+                                courseArrangementRules: {
+                                  ...prev.courseArrangementRules,
+                                  coreSubjectStrategy: {
+                                    ...prev.courseArrangementRules.coreSubjectStrategy,
+                                    enforceEvenDistribution: checked
+                                  }
+                                }
+                              }))}
+                            />
+                            <Label htmlFor="edit-enforceEvenDistribution">强制均匀分布</Label>
+                          </div>
+                        </div>
+
+                        <div>
+                          <Label htmlFor="edit-balanceWeight">平衡权重</Label>
+                          <div className="mt-1 flex items-center gap-2">
+                            <Input
+                              id="edit-balanceWeight"
+                              type="range"
+                              min="0"
+                              max="100"
+                              value={getSafeCoreSubjectStrategy().balanceWeight}
+                              onChange={(e) => setFormData(prev => ({
+                                ...prev,
+                                courseArrangementRules: {
+                                  ...prev.courseArrangementRules,
+                                  coreSubjectStrategy: {
+                                    ...prev.courseArrangementRules.coreSubjectStrategy,
+                                    balanceWeight: parseInt(e.target.value) || 80
+                                  }
+                                }
+                              }))}
+                              className="flex-1"
+                            />
+                            <span className="text-sm font-medium w-12 text-right">
+                              {getSafeCoreSubjectStrategy().balanceWeight}%
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1">
+                            调整核心课程分布策略在排课算法中的重要性权重
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

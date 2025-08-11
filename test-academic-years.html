@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试学年API</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { margin: 20px 0; padding: 10px; border: 1px solid #ccc; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        button { padding: 10px 20px; margin: 10px; }
+    </style>
+</head>
+<body>
+    <h1>测试学年API</h1>
+    <button onclick="testAcademicYears()">测试获取可用学年</button>
+    <div id="result"></div>
+
+    <script>
+        async function testAcademicYears() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '正在测试...';
+            
+            try {
+                const response = await fetch('http://localhost:3001/api/teaching-plans/academic-years');
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <div class="result success">
+                            <h3>✅ 成功</h3>
+                            <p><strong>消息:</strong> ${data.message}</p>
+                            <p><strong>可用学年:</strong> ${data.data.academicYears.join(', ')}</p>
+                            <p><strong>学年数量:</strong> ${data.data.academicYears.length}</p>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            <h3>❌ 失败</h3>
+                            <p><strong>消息:</strong> ${data.message}</p>
+                            <p><strong>错误:</strong> ${data.error}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        <h3>❌ 网络错误</h3>
+                        <p><strong>错误:</strong> ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
+

@@ -15,6 +15,9 @@ import {
   ArrowRight
 } from 'lucide-react';
 
+// 强制动态渲染以绕过构建问题
+export const dynamic = 'force-dynamic';
+
 /**
  * 管理模块卡片组件
  */
@@ -28,7 +31,7 @@ const ModuleCard = ({
   title: string;
   description: string;
   href: string;
-  icon: React.ElementType;
+  icon: any;
   count?: number;
 }) => (
   <Link href={href} className="block">

@@ -13,7 +13,8 @@ import {
   deleteTeachingPlan,
   permanentDeleteTeachingPlan,
   approveTeachingPlan,
-  getCurrentPlan
+  getCurrentPlan,
+  getAvailableAcademicYears
 } from '../controllers/teaching-plan-controller';
 import {
   validateCreateTeachingPlan,
@@ -42,6 +43,26 @@ router.post('/', validateCreateTeachingPlan, createTeachingPlan);
  * 响应: ApiResponse<PaginatedResponse<TeachingPlanResponse>>
  */
 router.get('/', getTeachingPlans);
+
+/**
+ * 获取有教学计划的可用学年列表
+ * GET /api/teaching-plans/academic-years
+ * 
+ * 响应: ApiResponse<{ academicYears: string[] }>
+ */
+router.get('/academic-years', getAvailableAcademicYears);
+
+/**
+ * 获取班级的当前教学计划
+ * GET /api/teaching-plans/current/:classId/:academicYear/:semester
+ * 
+ * 路径参数:
+ *   classId: 班级ID
+ *   academicYear: 学年 (格式: 2024-2025)
+ *   semester: 学期 (1或2)
+ * 响应: ApiResponse<TeachingPlanResponse>
+ */
+router.get('/current/:classId/:academicYear/:semester', getCurrentPlan);
 
 /**
  * 根据ID获取单个教学计划
@@ -96,17 +117,5 @@ router.delete('/:id/permanent', permanentDeleteTeachingPlan);
  * 响应: ApiResponse<TeachingPlanResponse>
  */
 router.post('/:id/approve', validateApproveTeachingPlan, approveTeachingPlan);
-
-/**
- * 获取班级的当前教学计划
- * GET /api/teaching-plans/current/:classId/:academicYear/:semester
- * 
- * 路径参数:
- *   classId: 班级ID
- *   academicYear: 学年 (格式: 2024-2025)
- *   semester: 学期 (1或2)
- * 响应: ApiResponse<TeachingPlanResponse>
- */
-router.get('/current/:classId/:academicYear/:semester', getCurrentPlan);
 
 export default router;

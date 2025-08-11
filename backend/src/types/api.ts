@@ -553,6 +553,21 @@ export interface CourseArrangementRulesRequest {
   avoidFirstLastPeriod: string[];      // 避免第一节或最后一节的科目
   coreSubjectPriority: boolean;        // 核心科目优先安排在黄金时段
   labCoursePreference: 'morning' | 'afternoon' | 'flexible'; // 实验课时间偏好
+  
+  // 新增：核心课程策略
+  coreSubjectStrategy?: {
+    enableCoreSubjectStrategy: boolean;        // 是否启用核心课程策略
+    coreSubjects: string[];                    // 核心课程列表
+    distributionMode: 'daily' | 'balanced' | 'concentrated'; // 分布模式
+    maxDailyOccurrences: number;               // 每日最大出现次数
+    minDaysPerWeek: number;                    // 每周最少出现天数
+    avoidConsecutiveDays: boolean;             // 是否避免连续天安排
+    preferredTimeSlots: number[];              // 偏好时间段
+    avoidTimeSlots: number[];                  // 避免时间段
+    maxConcentration: number;                  // 最大集中度
+    balanceWeight: number;                     // 平衡权重
+    enforceEvenDistribution: boolean;          // 是否强制均匀分布
+  };
 }
 
 /**
@@ -581,6 +596,7 @@ export interface CreateSchedulingRulesRequest {
   courseArrangementRules: CourseArrangementRulesRequest; // 课程排列规则
   conflictResolutionRules: ConflictResolutionRulesRequest; // 冲突处理规则
   isDefault?: boolean;                 // 是否为默认规则集
+  createdBy?: string;                  // 创建人ID（可选，后端会自动设置）
 }
 
 /**

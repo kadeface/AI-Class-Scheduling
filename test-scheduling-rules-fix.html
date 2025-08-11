@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>排课规则创建测试 - 修复验证</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f7;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #1d1d1f;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #e5e5e7;
+            border-radius: 8px;
+        }
+        .test-section h3 {
+            color: #007aff;
+            margin-top: 0;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #1d1d1f;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #d2d2d7;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        button {
+            background: #007aff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>排课规则创建测试 - 修复验证</h1>
+        
+        <div class="test-section">
+            <h3>测试1: 创建排课规则（不包含createdBy字段）</h3>
+            <p>测试后端是否能自动处理缺少创建人信息的情况</p>
+            <button onclick="testCreateWithoutCreatedBy()">测试创建（无createdBy）</button>
+            <div id="result1" class="result" style="display: none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>测试2: 创建排课规则（包含createdBy字段）</h3>
+            <p>测试后端是否能正确处理包含创建人信息的情况</p>
+            <input type="text" id="createdBy" placeholder="输入用户ID（可选）" />
+            <button onclick="testCreateWithCreatedBy()">测试创建（有createdBy）</button>
+            <div id="result2" class="result" style="display: none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>测试3: 验证错误处理</h3>
+            <p>测试后端是否能正确处理验证错误</p>
+            <button onclick="testValidationError()">测试验证错误</button>
+            <div id="result3" class="result" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3001/api';
+
+        function showResult(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            element.className = `result ${type}`;
+            element.style.display = 'block';
+        }
+
+        function createTestData() {
+            return {
+                name: "测试排课规则",
+                description: "用于测试的排课规则",
+                schoolType: "middle",
+                academicYear: "2024-2025",
+                semester: 1,
+                timeRules: {
+                    dailyPeriods: 8,
+                    workingDays: [1, 2, 3, 4, 5],
+                    periodDuration: 45,
+                    breakDuration: 10,
+                    lunchBreakStart: 5,
+                    lunchBreakDuration: 60,
+                    morningPeriods: [1, 2, 3, 4],
+                    afternoonPeriods: [5, 6, 7, 8]
+                },
+                teacherConstraints: {
+                    maxDailyHours: 6,
+                    maxContinuousHours: 3,
+                    minRestBetweenCourses: 10,
+                    avoidFridayAfternoon: true,
+                    respectTeacherPreferences: true,
+                    allowCrossGradeTeaching: false
+                },
+                roomConstraints: {
+                    respectCapacityLimits: true,
+                    allowRoomSharing: false,
+                    preferFixedClassrooms: true,
+                    specialRoomPriority: "preferred"
+                },
+                courseArrangementRules: {
+                    allowContinuousCourses: true,
+                    maxContinuousHours: 2,
+                    distributionPolicy: "balanced",
+                    avoidFirstLastPeriod: ["体育", "音乐"],
+                    coreSubjectPriority: true,
+                    labCoursePreference: "afternoon"
+                },
+                conflictResolutionRules: {
+                    teacherConflictResolution: "strict",
+                    roomConflictResolution: "strict",
+                    classConflictResolution: "strict",
+                    allowOverride: false,
+                    priorityOrder: ["教师冲突", "教室冲突", "班级冲突"]
+                },
+                isDefault: false
+            };
+        }
+
+        async function testCreateWithoutCreatedBy() {
+            try {
+                showResult('result1', '正在测试创建排课规则（无createdBy字段）...', 'info');
+                
+                const response = await fetch(`${API_BASE}/scheduling-rules`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(createTestData())
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    showResult('result1', 
+                        `✅ 测试成功！\n\n` +
+                        `状态码: ${response.status}\n` +
+                        `消息: ${result.message}\n` +
+                        `规则ID: ${result.data._id}\n` +
+                        `创建人: ${result.data.createdBy?.username || '系统管理员'}\n\n` +
+                        `说明: 后端成功自动处理了缺少创建人信息的情况，使用了系统默认管理员ID。`, 
+                        'success'
+                    );
+                } else {
+                    showResult('result1', 
+                        `❌ 测试失败\n\n` +
+                        `状态码: ${response.status}\n` +
+                        `错误: ${result.error}\n\n` +
+                        `说明: 后端仍然无法处理缺少创建人信息的情况。`, 
+                        'error'
+                    );
+                }
+            } catch (error) {
+                showResult('result1', 
+                    `❌ 请求错误\n\n` +
+                    `错误信息: ${error.message}\n\n` +
+                    `说明: 可能是网络错误或服务器未启动。`, 
+                    'error'
+                );
+            }
+        }
+
+        async function testCreateWithCreatedBy() {
+            try {
+                const createdBy = document.getElementById('createdBy').value.trim();
+                const testData = createTestData();
+                
+                if (createdBy) {
+                    testData.createdBy = createdBy;
+                    showResult('result2', `正在测试创建排课规则（createdBy: ${createdBy}）...`, 'info');
+                } else {
+                    showResult('result2', '正在测试创建排课规则（createdBy: 空值）...', 'info');
+                }
+                
+                const response = await fetch(`${API_BASE}/scheduling-rules`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(testData)
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    showResult('result2', 
+                        `✅ 测试成功！\n\n` +
+                        `状态码: ${response.status}\n` +
+                        `消息: ${result.message}\n` +
+                        `规则ID: ${result.data._id}\n` +
+                        `创建人: ${result.data.createdBy?.username || '系统管理员'}\n\n` +
+                        `说明: 后端成功处理了排课规则创建请求。`, 
+                        'success'
+                    );
+                } else {
+                    showResult('result2', 
+                        `❌ 测试失败\n\n` +
+                        `状态码: ${response.status}\n` +
+                        `错误: ${result.error}\n\n` +
+                        `说明: 后端处理请求时出现错误。`, 
+                        'error'
+                    );
+                }
+            } catch (error) {
+                showResult('result2', 
+                    `❌ 请求错误\n\n` +
+                    `错误信息: ${error.message}\n\n` +
+                    `说明: 可能是网络错误或服务器未启动。`, 
+                    'error'
+                );
+            }
+        }
+
+        async function testValidationError() {
+            try {
+                showResult('result3', '正在测试验证错误处理...', 'info');
+                
+                // 创建一个缺少必要字段的数据来触发验证错误
+                const invalidData = {
+                    name: "", // 空名称应该触发验证错误
+                    schoolType: "invalid", // 无效的学校类型
+                    academicYear: "", // 空学年
+                    semester: 0 // 无效学期
+                };
+                
+                const response = await fetch(`${API_BASE}/scheduling-rules`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(invalidData)
+                });
+
+                const result = await response.json();
+                
+                if (!result.success) {
+                    showResult('result3', 
+                        `✅ 验证错误测试成功！\n\n` +
+                        `状态码: ${response.status}\n` +
+                        `错误消息: ${result.error}\n\n` +
+                        `说明: 后端正确识别并处理了验证错误，返回了适当的错误信息。`, 
+                        'success'
+                    );
+                } else {
+                    showResult('result3', 
+                        `⚠️ 意外结果\n\n` +
+                        `状态码: ${response.status}\n` +
+                        `结果: ${result.message}\n\n` +
+                        `说明: 后端接受了无效数据，这可能表明验证逻辑需要改进。`, 
+                        'info'
+                    );
+                }
+            } catch (error) {
+                showResult('result3', 
+                    `❌ 请求错误\n\n` +
+                    `错误信息: ${error.message}\n\n` +
+                    `说明: 可能是网络错误或服务器未启动。`, 
+                    'error'
+                );
+            }
+        }
+    </script>
+</body>
+</html>

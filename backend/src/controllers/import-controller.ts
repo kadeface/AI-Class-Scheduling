@@ -369,7 +369,7 @@ export class ImportController {
         });
         return;
       } else {
-        const result = await Model.insertMany(data, { ordered: false });
+        const result = await MODEL_MAP[type].insertMany(data, { ordered: false });
         res.json({
           success: true,
           message: `成功导入${result.length}条数据`,

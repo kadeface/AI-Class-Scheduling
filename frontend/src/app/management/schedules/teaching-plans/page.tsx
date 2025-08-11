@@ -30,7 +30,10 @@ import {
   Eye,
   Trash2,
   FileCheck,
-  X
+  X,
+  FileText,
+  Zap,
+  AlertCircle
 } from 'lucide-react';
 import { 
   TeachingPlan,
@@ -49,6 +52,7 @@ import {
   formatSemester,
   TEACHING_PLAN_STATUS
 } from '@/lib/api';
+import { gradeTemplateApi } from '@/lib/grade-template-api';
 import { formatDateTime, cn } from '@/lib/utils';
 import { BatchTeachingPlanForm, BatchCourseConfig, BatchClassTeacherAssignment } from '@/types/schedule';
 import { generateCsv, downloadCsv } from '@/lib/csv';
@@ -93,6 +97,10 @@ export default function TeachingPlansPage() {
   const [classes, setClasses] = useState<Class[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
+  
+  // 按年级筛选的课程数据
+  const [filteredCoursesByGrade, setFilteredCoursesByGrade] = useState<{ [grade: string]: Course[] }>({});
+  const [coursesLoading, setCoursesLoading] = useState(false);
 
   // 学年选项
   const generateAcademicYears = () => {
@@ -217,6 +225,101 @@ export default function TeachingPlansPage() {
     } catch (error) {
       console.error('获取基础数据失败:', error);
     }
+  };
+
+  /**
+   * 根据年级获取课程列表
+   * 
+   * Args:
+   *   grade: 年级标识（如"一年级"）
+   * 
+   * Returns:
+   *   Promise<Course[]>: 该年级的课程列表
+   */
+  const fetchCoursesByGrade = async (grade: string): Promise<Course[]> => {
+    try {
+      setCoursesLoading(true);
+      
+      // 1. 尝试获取该年级的默认课程模板
+      const templateRes = await gradeTemplateApi.getDefaultByGrade(grade);
+      
+      if (templateRes.success && templateRes.data && templateRes.data.courses) {
+        // 2. 如果找到模板，根据模板中的课程ID筛选课程
+        const templateCourseIds = templateRes.data.courses.map(c => c.courseId);
+        const filteredCourses = courses.filter(course => 
+          templateCourseIds.includes(course._id)
+        );
+        
+        // 3. 缓存结果
+        setFilteredCoursesByGrade(prev => ({
+          ...prev,
+          [grade]: filteredCourses
+        }));
+        
+        return filteredCourses;
+      } else {
+        // 4. 如果没有找到模板，返回所有课程（降级方案）
+        console.warn(`未找到${grade}的课程模板，显示所有课程`);
+        return courses;
+      }
+    } catch (error) {
+      console.error(`获取${grade}课程失败:`, error);
+      // 5. 出错时返回所有课程（降级方案）
+      return courses;
+    } finally {
+      setCoursesLoading(false);
+    }
+  };
+
+  /**
+   * 验证已选择的课程是否在新的年级中仍然有效
+   * 
+   * Args:
+   *   grade: 年级标识
+   *   selectedCourses: 已选择的课程列表
+   * 
+   * Returns:
+   *   { valid: boolean; invalidCourses: string[] }: 验证结果
+   */
+  const validateCoursesForGrade = (grade: string, selectedCourses: BatchCourseConfig[]) => {
+    if (!grade || !filteredCoursesByGrade[grade]) {
+      return { valid: true, invalidCourses: [] };
+    }
+    
+    const gradeCourses = filteredCoursesByGrade[grade];
+    const gradeCourseIds = gradeCourses.map(c => c._id);
+    
+    const invalidCourses = selectedCourses
+      .filter(course => course.courseId && !gradeCourseIds.includes(course.courseId))
+      .map(course => course.name || course.courseId);
+    
+    return {
+      valid: invalidCourses.length === 0,
+      invalidCourses
+    };
+  };
+
+  /**
+   * 获取可选的课程列表（排除已选择的课程）
+   * 
+   * Args:
+   *   grade: 年级标识
+   *   selectedCourses: 已选择的课程列表
+   *   excludeCourseId: 要排除的课程ID（用于编辑时保持当前选择）
+   * 
+   * Returns:
+   *   Course[]: 可选的课程列表
+   */
+  const getAvailableCourses = (grade: string, selectedCourses: BatchCourseConfig[], excludeCourseId?: string) => {
+    const availableCourses = grade && filteredCoursesByGrade[grade] 
+      ? filteredCoursesByGrade[grade] 
+      : courses;
+    
+    return availableCourses.filter(course => 
+      !selectedCourses.some(selectedCourse => 
+        selectedCourse.courseId === course._id && selectedCourse.courseId !== excludeCourseId
+      )
+    );
   };
 
   /**
@@ -1372,7 +1475,27 @@ export default function TeachingPlansPage() {
  
               <Select
                 value={batchForm?.grade || ''}
-                onValueChange={grade => setBatchForm(f => f ? { ...f, grade } : null)}
+                onValueChange={async (grade) => {
+                  // 验证当前已选择的课程是否在新年级中有效
+                  if (batchForm?.grade && batchForm.courses.length > 0) {
+                    const validation = validateCoursesForGrade(grade, batchForm.courses);
+                    if (!validation.valid) {
+                      // 如果有无效课程，给出警告但允许继续
+                      console.warn(`年级切换后，以下课程在${grade}中不存在:`, validation.invalidCourses);
+                    }
+                  }
+                  
+                  // 设置年级
+                  setBatchForm(f => f ? { ...f, grade, courses: [], assignments: [] } : null);
+                  
+                  // 清空之前的课程选择
+                  setBatchFormErrors(null);
+                  
+                  // 获取该年级的课程
+                  if (grade) {
+                    await fetchCoursesByGrade(grade);
+                  }
+                }}
                 options={gradeOptions.map(grade => ({ value: grade, label: grade }))}
                 placeholder="请选择年级"
                 className="w-48 mt-2"
@@ -1382,6 +1505,37 @@ export default function TeachingPlansPage() {
             {/* 课程结构配置区（动态增删） */}
             <div>
               <Label>课程结构配置</Label>
+              
+              {/* 课程筛选提示 */}
+              {batchForm?.grade && (
+                <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
+                  {coursesLoading ? (
+                    <div className="flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                      正在加载{batchForm.grade}的课程...
+                    </div>
+                  ) : filteredCoursesByGrade[batchForm.grade] ? (
+                    <div className="flex items-center gap-2 text-green-600">
+                      <CheckCircle size={16} />
+                      已筛选{batchForm.grade}的课程（{filteredCoursesByGrade[batchForm.grade].length}门）
+                      <span className="text-gray-500 ml-2">
+                        （从{filteredCoursesByGrade[batchForm.grade].length}门课程中选择，而非全部{courses.length}门课程）
+                      </span>
+                      {batchForm.courses.length > 0 && (
+                        <span className="text-blue-600 ml-2">
+                          （当前已选择{batchForm.courses.length}门，剩余{getAvailableCourses(batchForm.grade, batchForm.courses).length}门可选）
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-amber-600">
+                      <AlertCircle size={16} />
+                      未找到{batchForm.grade}的课程模板，显示所有课程（{courses.length}门）
+                    </div>
+                  )}
+                </div>
+              )}
+              
               <div className="border rounded p-4 min-h-[80px] flex flex-col gap-4">
                 {/* 课程列表 */}
                 {batchForm?.courses && batchForm.courses.length > 0 ? (
@@ -1393,13 +1547,22 @@ export default function TeachingPlansPage() {
                         onValueChange={courseId => setBatchForm(f => {
                           if (!f) return f;
                           const coursesArr = [...f.courses];
-                          // 用全局 courses 查找
-                          const selected = courses.find(c => c._id === courseId);
-                          coursesArr[idx] = { ...coursesArr[idx], courseId, name: selected?.name || '' };
+                          // 优先使用按年级筛选的课程，如果没有则使用全局课程
+                          const availableCourses = batchForm.grade && filteredCoursesByGrade[batchForm.grade] 
+                            ? filteredCoursesByGrade[batchForm.grade] 
+                            : courses;
+                          const selected = availableCourses.find(c => c._id === courseId);
+                          coursesArr[idx] = { 
+                            ...coursesArr[idx], 
+                            courseId, 
+                            name: selected?.name || '',
+                            subject: selected?.subject || ''
+                          };
                           return { ...f, courses: coursesArr };
                         })}
-                        options={courses.map(c => ({ value: c._id, label: c.name }))}
-                        placeholder="请选择课程"
+                        options={getAvailableCourses(batchForm.grade, batchForm.courses, course.courseId)
+                          .map(c => ({ value: c._id, label: c.name }))}
+                        placeholder={`请选择课程 (${getAvailableCourses(batchForm.grade, batchForm.courses, course.courseId).length}门可选)`}
                       />
                       <Input
                         className="w-24"
@@ -1454,7 +1617,7 @@ export default function TeachingPlansPage() {
                       ...f,
                       courses: [
                         ...f.courses,
-                        { courseId: '', name: '', weeklyHours: 1, continuous: false }
+                        { courseId: '', name: '', subject: '', weeklyHours: 1, continuous: false }
                       ]
                     };
                   })}
@@ -1488,7 +1651,7 @@ export default function TeachingPlansPage() {
                         options={teachers
                           .filter(t => {
                             const subs = t.subjects || [];
-                            return subs.length === 0 || subs.includes(course.name) || subs.includes(course.courseId);
+                            return subs.length === 0 || subs.includes(course.subject);
                           })
                           .map(t => ({ value: t._id, label: `批量分配: ${course.name}→${t.name}` }))}
                         placeholder={`批量分配${course.name}`}
@@ -1575,9 +1738,9 @@ export default function TeachingPlansPage() {
                                 {batchForm.courses.map((course, cidx) => {
                                   // 只显示可授该课程的教师
                                   const eligibleTeachers = teachers.filter(t => {
-                                    // 仅使用subjects字段（string[]），如无则全部显示
+                                    // 根据课程学科匹配教师学科
                                     const subs = t.subjects || [];
-                                    return subs.length === 0 || subs.includes(course.name) || subs.includes(course.courseId);
+                                    return subs.length === 0 || subs.includes(course.subject);
                                   });
                                   return (
                                     <td key={cidx} className="border px-2 py-1 min-w-[120px]">

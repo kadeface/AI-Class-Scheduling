@@ -31,11 +31,11 @@ export interface DashboardLayoutProps {
  * Returns:
  *   React.ReactElement: 仪表盘布局组件
  */
-export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
+export function DashboardLayout({
   children,
   title,
   className
-}) => {
+}: DashboardLayoutProps) {
   return (
     <div className={cn("flex h-screen bg-gray-50 dark:bg-gray-900", className)}>
       {/* 侧边栏 */}
@@ -55,4 +55,4 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
       </div>
     </div>
   );
-};
+}

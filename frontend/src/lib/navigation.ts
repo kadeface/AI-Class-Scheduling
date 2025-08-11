@@ -67,6 +67,12 @@ export const navigationItems: NavigationItem[] = [
         icon: MapPin
       },
       {
+        id: 'grade-templates',
+        label: '年级模板',
+        href: '/management/grade-templates',
+        icon: BookOpen
+      },
+      {
         id: 'schedules',
         label: '排课设置',
         href: '/management/schedules',

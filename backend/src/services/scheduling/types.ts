@@ -19,6 +19,20 @@ export interface TimeSlot {
 }
 
 /**
+ * 教师轮换状态接口
+ * 
+ * 跟踪教师授课轮换的进度和状态
+ */
+export interface TeacherRotationState {
+  teacherId: mongoose.Types.ObjectId;  // 教师ID
+  currentRound: number;                // 当前轮次
+  classRotationOrder: string[];        // 班级轮换顺序
+  lastAssignedClass: string;           // 最后分配的班级
+  rotationProgress: Map<string, number>; // 各班级轮换进度
+  roundCompletionStatus: Map<string, boolean>; // 各班级轮次完成状态
+}
+
+/**
  * 排课变量定义
  * 
  * 表示一个需要排课的课程实例
@@ -70,6 +84,15 @@ export enum ConstraintType {
   SOFT_WORKLOAD_BALANCE = 'soft_workload_balance',     // 工作量不均衡
   SOFT_CONTINUOUS_PREFERRED = 'soft_continuous_preferred', // 连排偏好
   SOFT_CORE_SUBJECT_PRIORITY = 'soft_core_subject_priority', // 核心科目优先级
+  
+  // 新增：科目特定约束类型
+  SOFT_SUBJECT_CONSTRAINT = 'soft_subject_constraint', // 科目特定约束
+  SOFT_TEACHER_ROTATION = 'soft_teacher_rotation',    // 教师轮换约束
+  
+  // 新增：核心课程分布约束类型
+  SOFT_CORE_SUBJECT_DISTRIBUTION = 'soft_core_subject_distribution', // 核心课程分布约束（软约束）
+  SOFT_CORE_SUBJECT_TIME_PREFERENCE = 'soft_core_subject_time_preference', // 核心课程时间偏好约束
+  HARD_CORE_SUBJECT_DISTRIBUTION = 'hard_core_subject_distribution', // 核心课程分布约束（硬约束）
 }
 
 /**
@@ -157,14 +180,56 @@ export interface SchedulingResult {
 }
 
 /**
- * 进度回调函数类型
+ * 轮换进度数据接口
+ * 
+ * 提供详细的教师轮换状态信息
+ */
+export interface RotationProgressData {
+  teacherId: mongoose.Types.ObjectId;           // 教师ID
+  teacherName?: string;                         // 教师姓名
+  currentRound: number;                         // 当前轮次
+  totalRounds: number;                          // 总轮次数
+  roundProgress: number;                        // 当前轮次进度 (0-100)
+  overallProgress: number;                      // 总体进度 (0-100)
+  classRotationOrder: string[];                 // 班级轮换顺序
+  completedClasses: string[];                   // 已完成的班级
+  pendingClasses: string[];                     // 待完成的班级
+  lastAssignedClass: string;                    // 最后分配的班级
+  constraintViolations: number;                 // 轮换约束违反次数
+  rotationScore: number;                        // 轮换策略评分
+  suggestions: string[];                        // 优化建议
+}
+
+/**
+ * 轮换状态摘要接口
+ * 
+ * 提供整体轮换状态的概览信息
+ */
+export interface RotationSummary {
+  totalTeachers: number;                        // 参与轮换的教师总数
+  averageRoundProgress: number;                 // 平均轮次进度
+  teachersWithViolations: number;               // 存在约束违反的教师数
+  overallRotationScore: number;                 // 整体轮换评分
+  criticalIssues: string[];                     // 关键问题列表
+  optimizationOpportunities: string[];          // 优化机会
+}
+
+/**
+ * 扩展的进度回调类型
+ * 
+ * 支持轮换状态监控的进度报告
  */
 export type ProgressCallback = (progress: {
-  stage: string;                       // 当前阶段
-  percentage: number;                  // 完成百分比 (0-100)
-  message: string;                     // 当前操作信息
-  assignedCount: number;               // 已分配数量
-  totalCount: number;                  // 总数量
+  stage: string;                                // 当前阶段
+  percentage: number;                           // 完成百分比 (0-100)
+  message: string;                              // 当前操作信息
+  assignedCount: number;                        // 已分配数量
+  totalCount: number;                           // 总数量
+  rotationData?: {                              // 轮换状态数据（可选）
+    individualProgress: RotationProgressData[]; // 各教师轮换进度
+    summary: RotationSummary;                   // 轮换状态摘要
+    timestamp: number;                          // 时间戳
+  };
 }) => void;
 
 /**

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>核心课程策略修复测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-button {
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #0056CC;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+    <h1>核心课程策略修复测试</h1>
+    
+    <div class="test-section">
+        <h2>测试说明</h2>
+        <p>此页面用于测试核心课程策略字段的安全访问修复。主要测试以下场景：</p>
+        <ul>
+            <li>当 coreSubjectStrategy 字段缺失时的安全访问</li>
+            <li>当 coreSubjectStrategy 字段为空对象时的安全访问</li>
+            <li>当 coreSubjectStrategy 字段结构完整时的正常访问</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>测试用例</h2>
+        <button class="test-button" onclick="testMissingField()">测试缺失字段</button>
+        <button class="test-button" onclick="testEmptyObject()">测试空对象</button>
+        <button class="test-button" onclick="testValidData()">测试有效数据</button>
+        <button class="test-button" onclick="testAllScenarios()">测试所有场景</button>
+    </div>
+
+    <div class="test-section">
+        <h2>测试结果</h2>
+        <div id="testResults"></div>
+    </div>
+
+    <script>
+        // 模拟 DEFAULT_CORE_SUBJECT_STRATEGY 常量
+        const DEFAULT_CORE_SUBJECT_STRATEGY = {
+            enableCoreSubjectStrategy: false,
+            coreSubjects: [],
+            distributionMode: 'balanced',
+            maxDailyOccurrences: 2,
+            minDaysPerWeek: 5,
+            maxConcentration: 3,
+            preferredTimeSlots: [1, 2, 3, 4],
+            avoidTimeSlots: [7, 8],
+            avoidConsecutiveDays: true,
+            enforceEvenDistribution: false,
+            balanceWeight: 80
+        };
+
+        // 模拟安全的访问函数
+        function getSafeCoreSubjectStrategy(formData) {
+            return formData.courseArrangementRules?.coreSubjectStrategy && 
+                typeof formData.courseArrangementRules.coreSubjectStrategy === 'object' &&
+                'enableCoreSubjectStrategy' in formData.courseArrangementRules.coreSubjectStrategy
+                ? formData.courseArrangementRules.coreSubjectStrategy
+                : DEFAULT_CORE_SUBJECT_STRATEGY;
+        }
+
+        function logResult(message, type = 'info') {
+            const resultsDiv = document.getElementById('testResults');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `result ${type}`;
+            resultDiv.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            resultsDiv.appendChild(resultDiv);
+        }
+
+        function testMissingField() {
+            logResult('开始测试：coreSubjectStrategy 字段缺失', 'info');
+            
+            try {
+                const testData = {
+                    courseArrangementRules: {
+                        // coreSubjectStrategy 字段完全缺失
+                    }
+                };
+
+                const result = getSafeCoreSubjectStrategy(testData);
+                logResult(`✅ 测试通过：成功获取默认值，enableCoreSubjectStrategy = ${result.enableCoreSubjectStrategy}`, 'success');
+                
+                // 测试访问其他字段
+                logResult(`✅ 核心课程数量：${result.coreSubjects.length}`, 'success');
+                logResult(`✅ 分布模式：${result.distributionMode}`, 'success');
+                
+            } catch (error) {
+                logResult(`❌ 测试失败：${error.message}`, 'error');
+            }
+        }
+
+        function testEmptyObject() {
+            logResult('开始测试：coreSubjectStrategy 字段为空对象', 'info');
+            
+            try {
+                const testData = {
+                    courseArrangementRules: {
+                        coreSubjectStrategy: {} // 空对象，没有 enableCoreSubjectStrategy 属性
+                    }
+                };
+
+                const result = getSafeCoreSubjectStrategy(testData);
+                logResult(`✅ 测试通过：成功获取默认值，enableCoreSubjectStrategy = ${result.enableCoreSubjectStrategy}`, 'success');
+                
+                // 测试访问其他字段
+                logResult(`✅ 核心课程数量：${result.coreSubjects.length}`, 'success');
+                logResult(`✅ 分布模式：${result.distributionMode}`, 'success');
+                
+            } catch (error) {
+                logResult(`❌ 测试失败：${error.message}`, 'error');
+            }
+        }
+
+        function testValidData() {
+            logResult('开始测试：coreSubjectStrategy 字段结构完整', 'info');
+            
+            try {
+                const testData = {
+                    courseArrangementRules: {
+                        coreSubjectStrategy: {
+                            enableCoreSubjectStrategy: true,
+                            coreSubjects: ['语文', '数学', '英语'],
+                            distributionMode: 'daily',
+                            maxDailyOccurrences: 1,
+                            minDaysPerWeek: 6,
+                            maxConcentration: 2,
+                            preferredTimeSlots: [1, 2],
+                            avoidTimeSlots: [7, 8],
+                            avoidConsecutiveDays: false,
+                            enforceEvenDistribution: true,
+                            balanceWeight: 90
+                        }
+                    }
+                };
+
+                const result = getSafeCoreSubjectStrategy(testData);
+                logResult(`✅ 测试通过：成功获取实际值，enableCoreSubjectStrategy = ${result.enableCoreSubjectStrategy}`, 'success');
+                
+                // 测试访问其他字段
+                logResult(`✅ 核心课程数量：${result.coreSubjects.length}`, 'success');
+                logResult(`✅ 分布模式：${result.distributionMode}`, 'success');
+                logResult(`✅ 平衡权重：${result.balanceWeight}%`, 'success');
+                
+            } catch (error) {
+                logResult(`❌ 测试失败：${error.message}`, 'error');
+            }
+        }
+
+        function testAllScenarios() {
+            logResult('开始测试所有场景...', 'info');
+            testMissingField();
+            setTimeout(() => testEmptyObject(), 500);
+            setTimeout(() => testValidData(), 1000);
+            logResult('所有测试场景已启动', 'info');
+        }
+
+        // 页面加载完成后的初始化
+        window.onload = function() {
+            logResult('测试页面已加载完成，可以开始测试', 'info');
+        };
+    </script>
+</body>
+</html>

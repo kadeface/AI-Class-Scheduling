@@ -221,6 +221,7 @@ export interface Option {
 export interface BatchCourseConfig {
   courseId: string;
   name: string;
+  subject: string;  // 添加学科字段
   weeklyHours: number;
   continuous?: boolean;
 }

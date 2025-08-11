@@ -11,15 +11,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-// Simple inline Progress component to avoid module resolution issues
-const Progress = ({ value = 0, className = '' }: { value?: number; className?: string }) => (
-  <div className={`relative h-2 w-full overflow-hidden rounded-full bg-gray-200 ${className}`}>
-    <div 
-      className="h-full bg-blue-600 transition-all duration-300" 
-      style={{ width: `${Math.min(Math.max(value, 0), 100)}%` }} 
-    />
-  </div>
-);
 import { Separator } from '@/components/ui/separator';
 import { Select } from '@/components/ui/select';
 import { 
@@ -48,6 +39,16 @@ import {
   CourseSlot,
   ApiResponse 
 } from '../schedule-view/types';
+
+// Simple inline Progress component to avoid module resolution issues
+const Progress = ({ value = 0, className = '' }: { value?: number; className?: string }) => (
+  <div className={`relative h-2 w-full overflow-hidden rounded-full bg-gray-200 ${className}`}>
+    <div 
+      className="h-full bg-blue-600 transition-all duration-300" 
+      style={{ width: `${Math.min(Math.max(value, 0), 100)}%` }} 
+    />
+  </div>
+);
 
 /**
  * 排课任务状态
@@ -97,8 +98,24 @@ export default function IntegratedSchedulePage() {
   const [selectedTarget, setSelectedTarget] = useState<ScheduleOption>();
   const [availableTargets, setAvailableTargets] = useState<ScheduleOption[]>([]);
   const [scheduleData, setScheduleData] = useState<ScheduleViewData>();
+  
+  // 可用学年状态
+  const [availableAcademicYears, setAvailableAcademicYears] = useState<string[]>([]);
+  const [isLoadingAcademicYears, setIsLoadingAcademicYears] = useState(true);
+  
+  // 排课规则选择状态
+  const [availableSchedulingRules, setAvailableSchedulingRules] = useState<Array<{
+    _id: string;
+    name: string;
+    description?: string;
+    isDefault: boolean;
+    schoolType: string;
+  }>>([]);
+  const [selectedRulesId, setSelectedRulesId] = useState<string>('');
+  const [isLoadingRules, setIsLoadingRules] = useState(false);
+  
   const [filters, setFilters] = useState<ScheduleFilters>({
-    academicYear: '2024-2025',
+    academicYear: '', // 初始为空，等待动态加载
     semester: '1'
   });
 
@@ -113,48 +130,12 @@ export default function IntegratedSchedulePage() {
   const [error, setError] = useState<string>();
 
   /**
-   * 启动一键排课任务
-   */
-  const startScheduling = useCallback(async () => {
-    setIsStartingTask(true);
-    setError(undefined);
-
-    try {
-      const response = await fetch('http://localhost:5000/api/scheduling/start', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          academicYear: filters.academicYear,
-          semester: filters.semester,
-          algorithm: 'balanced' // 使用均衡模式
-        })
-      });
-
-      const data: ApiResponse<{ taskId: string }> = await response.json();
-
-      if (data.success && data.data) {
-        // 开始监控任务
-        monitorTask(data.data.taskId);
-      } else {
-        throw new Error(data.message || '启动排课任务失败');
-      }
-    } catch (error) {
-      console.error('启动排课失败:', error);
-      setError(error instanceof Error ? error.message : '启动排课失败');
-    } finally {
-      setIsStartingTask(false);
-    }
-  }, [filters]);
-
-  /**
    * 监控排课任务进度
    */
   const monitorTask = useCallback(async (taskId: string) => {
     const checkStatus = async () => {
       try {
-        const response = await fetch(`http://localhost:5000/api/scheduling/tasks/${taskId}`);
+        const response = await fetch(`http://localhost:3001/api/scheduling/tasks/${taskId}`);
         const data: ApiResponse<SchedulingTask> = await response.json();
 
         if (data.success && data.data) {
@@ -193,7 +174,7 @@ export default function IntegratedSchedulePage() {
     if (!currentTask) return;
 
     try {
-      await fetch(`http://localhost:5000/api/scheduling/tasks/${currentTask.id}/stop`, {
+      await fetch(`http://localhost:3001/api/scheduling/tasks/${currentTask.id}/stop`, {
         method: 'POST'
       });
       setCurrentTask(undefined);
@@ -201,6 +182,40 @@ export default function IntegratedSchedulePage() {
       console.error('停止任务失败:', error);
     }
   }, [currentTask]);
+
+  /**
+   * 获取可用的学年列表
+   */
+  const loadAvailableAcademicYears = useCallback(async () => {
+    setIsLoadingAcademicYears(true);
+    setError(undefined);
+
+    try {
+      const response = await fetch('http://localhost:3001/api/teaching-plans/academic-years');
+      const data: ApiResponse<{ academicYears: string[] }> = await response.json();
+
+      if (data.success && data.data) {
+        const years = data.data.academicYears;
+        setAvailableAcademicYears(years);
+        
+        // 自动选择第一个可用学年
+        if (years.length > 0) {
+          setFilters(prev => ({
+            ...prev,
+            academicYear: years[0]
+          }));
+        }
+      } else {
+        throw new Error(data.message || '获取学年列表失败');
+      }
+    } catch (error) {
+      console.error('加载可用学年失败:', error);
+      setError('获取可用学年失败，请检查网络连接');
+      setAvailableAcademicYears([]);
+    } finally {
+      setIsLoadingAcademicYears(false);
+    }
+  }, []);
 
   /**
    * 加载可选目标列表
@@ -213,7 +228,7 @@ export default function IntegratedSchedulePage() {
       const endpoint = mode === 'class' ? 'classes' : 
                      mode === 'teacher' ? 'teachers' : 'rooms';
       
-      const response = await fetch(`http://localhost:5000/api/schedule-view/options/${endpoint}`);
+      const response = await fetch(`http://localhost:3001/api/schedule-view/options/${endpoint}`);
       const data: ApiResponse<ScheduleOption[]> = await response.json();
 
       if (data.success && data.data) {
@@ -255,12 +270,12 @@ export default function IntegratedSchedulePage() {
                      `room/${targetId}`;
       
       const params = new URLSearchParams({
-        academicYear: currentFilters.academicYear || '2024-2025',
-        semester: currentFilters.semester || '1'
+        academicYear: currentFilters.academicYear || '',
+        semester: currentFilters.semester || ''
       });
 
       const response = await fetch(
-        `http://localhost:5000/api/schedule-view/${endpoint}?${params}`
+        `http://localhost:3001/api/schedule-view/${endpoint}?${params}`
       );
       
       const data: ApiResponse<ScheduleViewData> = await response.json();
@@ -278,6 +293,84 @@ export default function IntegratedSchedulePage() {
       setIsLoadingSchedule(false);
     }
   }, []);
+
+  /**
+   * 加载可用的排课规则列表
+   */
+  const loadAvailableSchedulingRules = useCallback(async () => {
+    if (!filters.academicYear || !filters.semester) return;
+    
+    setIsLoadingRules(true);
+    setError(undefined);
+
+    try {
+      const response = await fetch(`http://localhost:3001/api/scheduling-rules?academicYear=${filters.academicYear}&semester=${filters.semester}&isActive=true&limit=100`);
+      const data: ApiResponse<{ items: any[]; total: number }> = await response.json();
+
+      if (data.success && data.data) {
+        const rules = data.data.items;
+        setAvailableSchedulingRules(rules);
+        
+        // 自动选择默认规则或第一个规则
+        const defaultRule = rules.find(rule => rule.isDefault);
+        if (defaultRule) {
+          setSelectedRulesId(defaultRule._id);
+        } else if (rules.length > 0) {
+          setSelectedRulesId(rules[0]._id);
+        }
+      } else {
+        throw new Error(data.message || '加载排课规则失败');
+      }
+    } catch (error) {
+      console.error('加载排课规则失败:', error);
+      setError('无法加载排课规则，将使用默认规则');
+    } finally {
+      setIsLoadingRules(false);
+    }
+  }, [filters.academicYear, filters.semester]);
+
+  /**
+   * 启动一键排课任务
+   */
+  const startScheduling = useCallback(async () => {
+    setIsStartingTask(true);
+    setError(undefined);
+
+    try {
+      const requestBody: any = {
+        academicYear: filters.academicYear,
+        semester: filters.semester,
+        algorithm: 'balanced' // 使用均衡模式
+      };
+
+      // 如果选择了特定规则，添加到请求中
+      if (selectedRulesId) {
+        requestBody.rulesId = selectedRulesId;
+      }
+
+      const response = await fetch('http://localhost:3001/api/scheduling/start', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      const data: ApiResponse<{ taskId: string }> = await response.json();
+
+      if (data.success && data.data) {
+        // 开始监控任务
+        monitorTask(data.data.taskId);
+      } else {
+        throw new Error(data.message || '启动排课任务失败');
+      }
+    } catch (error) {
+      console.error('启动排课失败:', error);
+      setError(error instanceof Error ? error.message : '启动排课失败');
+    } finally {
+      setIsStartingTask(false);
+    }
+  }, [filters, selectedRulesId, monitorTask]);
 
   /**
    * 处理课程拖拽开始
@@ -323,7 +416,7 @@ export default function IntegratedSchedulePage() {
         }
       };
 
-      const response = await fetch('http://localhost:5000/api/manual-scheduling/move', {
+      const response = await fetch('http://localhost:3001/api/manual-scheduling/move', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -350,10 +443,17 @@ export default function IntegratedSchedulePage() {
     }
   }, [draggedCourse, selectedTarget, viewMode, filters, loadScheduleData, handleDragEnd]);
 
-  // 效果钩子：视图模式变化时加载目标列表
+  // 效果钩子：页面加载时获取可用学年
   useEffect(() => {
-    loadAvailableTargets(viewMode);
-  }, [viewMode, loadAvailableTargets]);
+    loadAvailableAcademicYears();
+  }, [loadAvailableAcademicYears]);
+
+  // 效果钩子：学年或学期变化时加载排课规则
+  useEffect(() => {
+    if (filters.academicYear && filters.semester) {
+      loadAvailableSchedulingRules();
+    }
+  }, [filters.academicYear, filters.semester, loadAvailableSchedulingRules]);
 
   // 效果钩子：目标或筛选条件变化时加载课表数据
   useEffect(() => {
@@ -362,18 +462,25 @@ export default function IntegratedSchedulePage() {
     }
   }, [selectedTarget, filters, viewMode, loadScheduleData]);
 
+  // 效果钩子：视图模式变化时加载目标列表
+  useEffect(() => {
+    if (viewMode) {
+      loadAvailableTargets(viewMode);
+    }
+  }, [viewMode, loadAvailableTargets]);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
       {/* 页面标题 */}
       <div className="space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">智能排课中心</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">智能排课中心</h1>
+        <p className="text-sm sm:text-base text-muted-foreground">
           一键排课、可视化展示、拖拽调课的完整解决方案
         </p>
       </div>
 
       {/* 系统状态概览 */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">排课状态</CardTitle>
@@ -442,44 +549,69 @@ export default function IntegratedSchedulePage() {
       {/* 一键排课区域 */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
             <Zap className="h-5 w-5 text-yellow-500" />
             一键排课
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-sm">
             基于教学计划和排课规则，自动生成最优课表
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3 sm:space-y-4">
           {/* 排课控制 */}
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium">学年:</label>
-                          <Select 
-              value={filters.academicYear} 
-              onValueChange={(value) => setFilters(prev => ({ ...prev, academicYear: value }))}
-              options={[
-                { value: "2024-2025", label: "2024-2025" },
-                { value: "2023-2024", label: "2023-2024" }
-              ]}
-              className="w-32"
-            />
+          <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
+            <div className="flex items-center gap-2 min-w-0">
+              <label className="text-sm font-medium whitespace-nowrap">学年:</label>
+              {isLoadingAcademicYears ? (
+                <div className="w-32 h-9 bg-muted animate-pulse rounded-md" />
+              ) : (
+                <Select 
+                  value={filters.academicYear} 
+                  onValueChange={(value) => setFilters(prev => ({ ...prev, academicYear: value }))}
+                  options={availableAcademicYears.map(year => ({
+                    value: year,
+                    label: year
+                  }))}
+                  className="w-32"
+                  disabled={availableAcademicYears.length === 0}
+                />
+              )}
             </div>
 
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium">学期:</label>
-                          <Select 
-              value={filters.semester} 
-              onValueChange={(value) => setFilters(prev => ({ ...prev, semester: value }))}
-              options={[
-                { value: "1", label: "第1学期" },
-                { value: "2", label: "第2学期" }
-              ]}
-              className="w-20"
-            />
+            <div className="flex items-center gap-2 min-w-0">
+              <label className="text-sm font-medium whitespace-nowrap">学期:</label>
+              <Select 
+                value={filters.semester} 
+                onValueChange={(value) => setFilters(prev => ({ ...prev, semester: value }))}
+                options={[
+                  { value: "1", label: "第1学期" },
+                  { value: "2", label: "第2学期" }
+                ]}
+                className="w-20"
+              />
             </div>
 
-            <Separator orientation="vertical" className="h-6" />
+            <Separator orientation="vertical" className="h-6 hidden sm:block" />
+
+            <div className="flex items-center gap-2 min-w-0">
+              <label className="text-sm font-medium whitespace-nowrap">排课规则:</label>
+              {isLoadingRules ? (
+                <div className="w-48 h-9 bg-muted animate-pulse rounded-md" />
+              ) : (
+                <Select 
+                  value={selectedRulesId} 
+                  onValueChange={setSelectedRulesId}
+                  options={availableSchedulingRules.map(rule => ({
+                    value: rule._id,
+                    label: rule.isDefault ? `${rule.name} (默认)` : rule.name
+                  }))}
+                  className="w-48"
+                  disabled={availableSchedulingRules.length === 0}
+                />
+              )}
+            </div>
+
+            <Separator orientation="vertical" className="h-6 hidden sm:block" />
 
             {currentTask?.status === 'running' ? (
               <Button onClick={stopScheduling} variant="destructive" className="flex items-center gap-2">
@@ -487,18 +619,45 @@ export default function IntegratedSchedulePage() {
                 停止排课
               </Button>
             ) : (
-              <Button onClick={startScheduling} disabled={isStartingTask} className="flex items-center gap-2">
+              <Button 
+                onClick={startScheduling} 
+                disabled={isStartingTask || !filters.academicYear || availableAcademicYears.length === 0} 
+                className="flex items-center gap-2"
+              >
                 <Play className="h-4 w-4" />
                 {isStartingTask ? '启动中...' : '开始排课'}
               </Button>
             )}
           </div>
 
+          {/* 排课规则信息 */}
+          {selectedRulesId && availableSchedulingRules.length > 0 && (
+            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <Settings className="h-4 w-4 text-blue-600" />
+                  <span className="font-medium text-blue-800">当前排课规则:</span>
+                  <span className="text-blue-700">
+                    {availableSchedulingRules.find(rule => rule._id === selectedRulesId)?.name}
+                  </span>
+                  {availableSchedulingRules.find(rule => rule._id === selectedRulesId)?.isDefault && (
+                    <Badge variant="secondary" className="text-xs">默认规则</Badge>
+                  )}
+                </div>
+              </div>
+              {availableSchedulingRules.find(rule => rule._id === selectedRulesId)?.description && (
+                <p className="text-xs text-blue-600 mt-1 ml-0 sm:ml-6">
+                  {availableSchedulingRules.find(rule => rule._id === selectedRulesId)?.description}
+                </p>
+              )}
+            </div>
+          )}
+
           {/* 排课进度 */}
           {currentTask && (
-            <div className="space-y-3">
+            <div className="space-y-2 sm:space-y-3">
               <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2">
                   {currentTask.status === 'running' && <RefreshCw className="h-4 w-4 animate-spin text-blue-500" />}
                   {currentTask.status === 'completed' && <CheckCircle className="h-4 w-4 text-green-500" />}
                   {currentTask.status === 'failed' && <AlertCircle className="h-4 w-4 text-red-500" />}
@@ -521,61 +680,71 @@ export default function IntegratedSchedulePage() {
 
               {/* 排课结果统计 */}
               {currentTask.status === 'completed' && currentTask.result && (
-                <div className="grid grid-cols-3 gap-4 p-4 bg-green-50 rounded-lg">
+                <div className="grid gap-3 sm:gap-4 p-3 sm:p-4 bg-green-50 rounded-lg grid-cols-1 sm:grid-cols-3">
                   <div className="text-center">
-                    <div className="text-lg font-bold text-green-600">
+                    <div className="text-base sm:text-lg font-bold text-green-600">
                       {currentTask.result.totalScheduled}
                     </div>
                     <div className="text-xs text-green-500">成功安排</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-lg font-bold text-red-600">
+                    <div className="text-base sm:text-lg font-bold text-red-600">
                       {currentTask.result.conflicts}
                     </div>
                     <div className="text-xs text-red-500">冲突课程</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-lg font-bold text-blue-600">
+                    <div className="text-base sm:text-lg font-bold text-blue-600">
                       {Math.round((currentTask.result.totalScheduled / (currentTask.result.totalScheduled + currentTask.result.conflicts)) * 100)}%
                     </div>
                     <div className="text-xs text-blue-500">成功率</div>
                   </div>
                 </div>
               )}
-                  </div>
+            </div>
           )}
-                </CardContent>
-              </Card>
+        </CardContent>
+      </Card>
 
       {/* 错误提示 */}
       {error && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="mx-4 sm:mx-0">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription className="text-sm">{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* 学年提示 */}
+      {!isLoadingAcademicYears && availableAcademicYears.length === 0 && (
+        <Alert className="mx-4 sm:mx-0">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="text-sm">
+            当前没有可用的教学计划学年。请先创建并审批教学计划，然后重新加载页面。
+          </AlertDescription>
         </Alert>
       )}
 
       {/* 课表展示和调课区域 */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
             <Calendar className="h-5 w-5 text-purple-500" />
             课表展示与调课
             {isDragging && (
-              <Badge variant="secondary" className="ml-2">
+              <Badge variant="secondary" className="ml-2 text-xs">
                 拖拽模式
               </Badge>
             )}
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-sm">
             查看课表并通过拖拽进行调课
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3 sm:space-y-4">
           {/* 课表控制面板 */}
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium">查看:</label>
+          <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
+            <div className="flex items-center gap-2 min-w-0">
+              <label className="text-sm font-medium whitespace-nowrap">查看:</label>
               <Select 
                 value={viewMode} 
                 onValueChange={(value: string) => {
@@ -596,8 +765,8 @@ export default function IntegratedSchedulePage() {
               />
             </div>
 
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium">目标:</label>
+            <div className="flex items-center gap-2 min-w-0">
+              <label className="text-sm font-medium whitespace-nowrap">目标:</label>
               <Select 
                 value={selectedTarget?._id} 
                 onValueChange={(value) => {
@@ -612,7 +781,7 @@ export default function IntegratedSchedulePage() {
                 placeholder={`选择${viewMode === 'class' ? '班级' : viewMode === 'teacher' ? '教师' : '教室'}`}
                 className="w-48"
               />
-                  </div>
+            </div>
 
             <Button 
               onClick={() => {
@@ -627,10 +796,10 @@ export default function IntegratedSchedulePage() {
             >
               <RefreshCw className={`h-4 w-4 ${isLoadingSchedule ? 'animate-spin' : ''}`} />
             </Button>
-                </div>
+          </div>
 
           {/* 课表内容 */}
-          <div className="min-h-[600px]">
+          <div className="min-h-[400px] sm:min-h-[600px]">
             {isLoadingSchedule ? (
               <ScheduleGridSkeleton />
             ) : scheduleData ? (
@@ -640,31 +809,31 @@ export default function IntegratedSchedulePage() {
                 onCourseHover={() => {}}
               />
             ) : selectedTarget ? (
-              <Card className="p-8 text-center">
+              <Card className="p-4 sm:p-8 text-center">
                 <div className="space-y-4">
-                  <div className="text-6xl text-gray-300">📅</div>
+                  <div className="text-4xl sm:text-6xl text-gray-300">📅</div>
                   <div className="space-y-2">
-                    <h3 className="text-lg font-semibold text-gray-900">
+                    <h3 className="text-base sm:text-lg font-semibold text-gray-900">
                       暂无课表数据
                     </h3>
-                    <p className="text-gray-500">
+                    <p className="text-sm sm:text-base text-gray-500">
                       {selectedTarget.name} 在 {filters.academicYear} 学年第 {filters.semester} 学期暂无排课数据
                     </p>
-                    <p className="text-sm text-gray-400">
+                    <p className="text-xs sm:text-sm text-gray-400">
                       请先进行一键排课生成课表
                     </p>
                   </div>
                 </div>
               </Card>
             ) : (
-              <Card className="p-8 text-center">
+              <Card className="p-4 sm:p-8 text-center">
                 <div className="space-y-4">
-                  <div className="text-6xl text-gray-300">🔍</div>
+                  <div className="text-4xl sm:text-6xl text-gray-300">🔍</div>
                   <div className="space-y-2">
-                    <h3 className="text-lg font-semibold text-gray-900">
+                    <h3 className="text-base sm:text-lg font-semibold text-gray-900">
                       请选择查看目标
                     </h3>
-                    <p className="text-gray-500">
+                    <p className="text-sm sm:text-base text-gray-500">
                       在上方选择要查看课表的{
                         viewMode === 'class' ? '班级' :
                         viewMode === 'teacher' ? '教师' : '教室'
@@ -681,15 +850,15 @@ export default function IntegratedSchedulePage() {
       {/* 使用提示 */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">使用流程</CardTitle>
+          <CardTitle className="text-base sm:text-lg">使用流程</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-3 text-sm">
+          <div className="grid gap-3 sm:gap-4 grid-cols-1 md:grid-cols-3 text-sm">
             <div className="flex items-start gap-2">
               <div className="h-6 w-6 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
                 <span className="text-xs font-medium text-blue-600">1</span>
               </div>
-              <div>
+              <div className="min-w-0">
                 <div className="font-medium">执行一键排课</div>
                 <div className="text-muted-foreground text-xs">
                   设置学年学期，点击"开始排课"生成初始课表
@@ -700,7 +869,7 @@ export default function IntegratedSchedulePage() {
               <div className="h-6 w-6 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0 mt-0.5">
                 <span className="text-xs font-medium text-green-600">2</span>
               </div>
-              <div>
+              <div className="min-w-0">
                 <div className="font-medium">查看课表结果</div>
                 <div className="text-muted-foreground text-xs">
                   选择班级/教师/教室查看对应的课表安排
@@ -711,7 +880,7 @@ export default function IntegratedSchedulePage() {
               <div className="h-6 w-6 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0 mt-0.5">
                 <span className="text-xs font-medium text-purple-600">3</span>
               </div>
-              <div>
+              <div className="min-w-0">
                 <div className="font-medium">拖拽调整课程</div>
                 <div className="text-muted-foreground text-xs">
                   直接拖拽课程卡片到新位置进行微调

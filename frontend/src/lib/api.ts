@@ -584,6 +584,23 @@ export interface RoomConstraints {
 }
 
 /**
+ * 核心课程策略接口定义
+ */
+export interface ICoreSubjectStrategy {
+  enableCoreSubjectStrategy: boolean;        // 是否启用核心课程策略
+  coreSubjects: string[];                    // 核心课程列表（如：语文、数学、英语等）
+  distributionMode: 'daily' | 'balanced' | 'concentrated'; // 分布模式
+  maxDailyOccurrences: number;               // 每日最大出现次数（建议：1-2次）
+  minDaysPerWeek: number;                    // 每周最少出现天数（建议：4-5天）
+  avoidConsecutiveDays: boolean;             // 是否避免连续天安排
+  preferredTimeSlots: number[];              // 偏好时间段（节次数组）
+  avoidTimeSlots: number[];                  // 避免时间段（节次数组）
+  maxConcentration: number;                  // 最大集中度（连续天数限制）
+  balanceWeight: number;                     // 平衡权重（0-100）
+  enforceEvenDistribution: boolean;          // 是否强制均匀分布
+}
+
+/**
  * 课程排列规则接口定义
  */
 export interface CourseArrangementRules {
@@ -593,6 +610,9 @@ export interface CourseArrangementRules {
   avoidFirstLastPeriod: string[];
   coreSubjectPriority: boolean;
   labCoursePreference: 'morning' | 'afternoon' | 'flexible';
+  
+  // 新增：核心课程策略
+  coreSubjectStrategy: ICoreSubjectStrategy;
 }
 
 /**
@@ -652,6 +672,7 @@ export interface CreateSchedulingRulesRequest {
   courseArrangementRules: CourseArrangementRules;
   conflictResolutionRules: ConflictResolutionRules;
   isDefault?: boolean;
+  createdBy?: string;                  // 创建人ID（可选，后端会自动设置）
 }
 
 /**
@@ -715,6 +736,102 @@ export const schedulingRulesApi = {
       body: { targetAcademicYear, targetSemester, newName }
     })
 };
+
+// ==================== 核心课程策略API ====================
+
+/**
+ * 获取核心课程策略配置
+ * 
+ * Args:
+ *   rulesId: 排课规则ID
+ * 
+ * Returns:
+ *   Promise<ApiResponse<{rulesId: string, coreSubjectStrategy: ICoreSubjectStrategy | null, isEnabled: boolean}>>: 核心课程策略配置
+ * 
+ * Raises:
+ *   Error: 网络错误或API错误
+ */
+export async function getCoreSubjectStrategy(rulesId: string): Promise<ApiResponse<{
+  rulesId: string;
+  coreSubjectStrategy: ICoreSubjectStrategy | null;
+  isEnabled: boolean;
+}>> {
+  return apiRequest(`/scheduling-rules/${rulesId}/core-subject-strategy`);
+}
+
+/**
+ * 更新核心课程策略配置
+ * 
+ * Args:
+ *   rulesId: 排课规则ID
+ *   strategy: 核心课程策略配置
+ * 
+ * Returns:
+ *   Promise<ApiResponse<{rulesId: string, coreSubjectStrategy: ICoreSubjectStrategy, message: string}>>: 更新结果
+ * 
+ * Raises:
+ *   Error: 网络错误或API错误
+ */
+export async function updateCoreSubjectStrategy(
+  rulesId: string, 
+  strategy: ICoreSubjectStrategy
+): Promise<ApiResponse<{
+  rulesId: string;
+  coreSubjectStrategy: ICoreSubjectStrategy;
+  message: string;
+}>> {
+  return apiRequest(`/scheduling-rules/${rulesId}/core-subject-strategy`, {
+    method: 'PUT',
+    body: strategy
+  });
+}
+
+/**
+ * 验证核心课程策略配置
+ * 
+ * Args:
+ *   rulesId: 排课规则ID
+ *   strategy: 核心课程策略配置
+ * 
+ * Returns:
+ *   Promise<ApiResponse<{isValid: boolean, errors: string[], suggestions: string[]}>>: 验证结果
+ * 
+ * Raises:
+ *   Error: 网络错误或API错误
+ */
+export async function validateCoreSubjectStrategy(
+  rulesId: string, 
+  strategy: ICoreSubjectStrategy
+): Promise<ApiResponse<{
+  isValid: boolean;
+  errors: string[];
+  suggestions: string[];
+}>> {
+  return apiRequest(`/scheduling-rules/${rulesId}/core-subject-strategy/validate`, {
+    method: 'POST',
+    body: strategy
+  });
+}
+
+/**
+ * 分析核心课程分布情况
+ * 
+ * Args:
+ *   rulesId: 排课规则ID
+ * 
+ * Returns:
+ *   Promise<ApiResponse<{currentDistribution: Record<string, number>, recommendations: string[], quality: string}>>: 分布分析结果
+ * 
+ * Raises:
+ *   Error: 网络错误或API错误
+ */
+export async function analyzeCoreSubjectDistribution(rulesId: string): Promise<ApiResponse<{
+  currentDistribution: Record<string, number>;
+  recommendations: string[];
+  quality: string;
+}>> {
+  return apiRequest(`/scheduling-rules/${rulesId}/core-subject-distribution-analysis`);
+}
 
 // ==================== 常量定义 ====================
 
@@ -786,6 +903,48 @@ export const WEEKDAY_OPTIONS = [
   { value: 6, label: '周六' },
   { value: 7, label: '周日' }
 ];
+
+/**
+ * 核心课程策略分布模式选项
+ */
+export const CORE_SUBJECT_DISTRIBUTION_MODES = [
+  { value: 'daily', label: '每日分布' },
+  { value: 'balanced', label: '平衡分布' },
+  { value: 'concentrated', label: '集中分布' }
+] as const;
+
+/**
+ * 核心课程策略默认配置
+ */
+export const DEFAULT_CORE_SUBJECT_STRATEGY: ICoreSubjectStrategy = {
+  enableCoreSubjectStrategy: true,
+  coreSubjects: ['语文', '数学', '英语'],
+  distributionMode: 'daily',
+  maxDailyOccurrences: 2,
+  minDaysPerWeek: 5,
+  avoidConsecutiveDays: true,
+  preferredTimeSlots: [1, 2, 3, 5, 6],
+  avoidTimeSlots: [7, 8],
+  maxConcentration: 3,
+  balanceWeight: 80,
+  enforceEvenDistribution: true
+};
+
+/**
+ * 根据学校类型获取推荐的核心课程列表
+ */
+export function getRecommendedCoreSubjects(schoolType: string): string[] {
+  switch (schoolType) {
+    case 'primary':
+      return ['语文', '数学', '英语', '科学', '道德与法治'];
+    case 'middle':
+      return ['语文', '数学', '英语', '物理', '化学', '生物'];
+    case 'high':
+      return ['语文', '数学', '英语', '物理', '化学', '生物', '历史', '地理', '政治'];
+    default:
+      return ['语文', '数学', '英语'];
+  }
+}
 
 /**
  * 格式化教学计划状态显示

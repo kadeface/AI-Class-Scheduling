@@ -14,7 +14,11 @@ import {
   permanentDeleteSchedulingRules,
   setDefaultRules,
   getDefaultRules,
-  copySchedulingRules
+  copySchedulingRules,
+  getCoreSubjectStrategy,
+  updateCoreSubjectStrategy,
+  validateCoreSubjectStrategy,
+  analyzeCoreSubjectDistribution
 } from '../controllers/scheduling-rules-controller';
 import {
   validateCreateSchedulingRules,
@@ -120,5 +124,11 @@ router.get('/default/:academicYear/:semester', getDefaultRules);
  * 响应: ApiResponse<SchedulingRulesResponse>
  */
 router.post('/:id/copy', copySchedulingRules);
+
+// 核心课程策略相关路由
+router.get('/:id/core-subject-strategy', getCoreSubjectStrategy);
+router.put('/:id/core-subject-strategy', updateCoreSubjectStrategy);
+router.post('/:id/core-subject-strategy/validate', validateCoreSubjectStrategy);
+router.get('/:id/core-subject-distribution-analysis', analyzeCoreSubjectDistribution);
 
 export default router;

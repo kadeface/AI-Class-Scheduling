@@ -1,7 +1,18 @@
 import React from 'react';
 import { Sidebar } from '@/components/layout/sidebar';
 
-export default function ReportsLayout({ children }: { children: React.ReactNode }) {
+/**
+ * 报告模块布局组件
+ * 
+ * Args:
+ *   children: 子页面内容
+ * 
+ * Returns:
+ *   React.ReactElement: 报告模块布局
+ */
+export default function ReportsLayout(props: any) {
+  const { children } = props;
+  
   return (
     <div className="flex min-h-screen bg-gray-50 dark:bg-gray-950">
       <Sidebar />
