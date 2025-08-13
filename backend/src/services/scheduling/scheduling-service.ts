@@ -152,7 +152,7 @@ export class SchedulingService {
         const otherAssignments = new Map(assignments);
         otherAssignments.delete(assignment.variableId);
         
-        const assignmentConflicts = (engine as any).constraintDetector.checkAllConflicts(assignment, otherAssignments);
+        const assignmentConflicts = await (engine as any).constraintDetector.checkAllConflicts(assignment, otherAssignments);
         conflicts.push(...assignmentConflicts);
       }
 
@@ -291,25 +291,111 @@ export class SchedulingService {
    * 加载排课规则
    * 
    * Args:
-   *   rulesId: 规则ID（可选）
+   *   rulesId: 排课规则ID（可选）
    * 
    * Returns:
    *   Promise<ISchedulingRules>: 排课规则
+   * 
+   * Raises:
+   *   Error: 当找不到指定规则或默认规则时
    */
   private async loadSchedulingRules(rulesId?: mongoose.Types.ObjectId): Promise<ISchedulingRules> {
+    console.log('🔍 排课规则加载检查:');
+    console.log('   传入的rulesId:', rulesId);
+    console.log('   rulesId类型:', typeof rulesId);
+    console.log('   rulesId是否为ObjectId:', rulesId instanceof mongoose.Types.ObjectId);
+    console.log('   rulesId是否为null/undefined:', rulesId == null);
+
     let rules: ISchedulingRules | null;
 
     if (rulesId) {
-      rules = await SchedulingRules.findById(rulesId);
-      if (!rules) {
-        throw new Error(`找不到指定的排课规则: ${rulesId}`);
+      console.log('   📖 查找指定排课规则:', rulesId);
+      
+      try {
+        rules = await SchedulingRules.findById(rulesId);
+        console.log('   🔍 数据库查询结果:', rules ? `找到规则: ${rules.name}` : '未找到规则');
+        
+        if (!rules) {
+          console.error('   ❌ 找不到指定的排课规则:', rulesId);
+          throw new Error(`找不到指定的排课规则: ${rulesId}`);
+        }
+        
+        // 检查规则是否激活
+        if (!rules.isActive) {
+          console.warn('   ⚠️ 指定的排课规则未激活:', rules.name);
+        }
+        
+        console.log('   ✅ 成功加载指定排课规则:');
+        console.log('      规则名称:', rules.name);
+        console.log('      规则描述:', rules.description);
+        console.log('      是否激活:', rules.isActive);
+        console.log('      是否默认:', rules.isDefault);
+        
+      } catch (error) {
+        console.error('   ❌ 查询指定排课规则失败:', error);
+        throw new Error(`查询排课规则失败: ${error instanceof Error ? error.message : '未知错误'}`);
       }
+      
     } else {
-      // 使用默认规则
-      rules = await SchedulingRules.findOne({ isDefault: true, isActive: true });
-      if (!rules) {
-        throw new Error('没有找到默认的排课规则');
+      console.log('   📖 查找默认排课规则');
+      
+      try {
+        rules = await SchedulingRules.findOne({ isDefault: true, isActive: true });
+        console.log('   🔍 默认规则查询结果:', rules ? `找到默认规则: ${rules.name}` : '未找到默认规则');
+        
+        if (!rules) {
+          console.error('   ❌ 没有找到默认的排课规则');
+          
+          // 尝试查找任何激活的规则作为备选
+          const anyActiveRules = await SchedulingRules.findOne({ isActive: true });
+          if (anyActiveRules) {
+            console.warn('   ⚠️ 找到备选激活规则:', anyActiveRules.name);
+            rules = anyActiveRules;
+          } else {
+            throw new Error('没有找到可用的排课规则');
+          }
+        }
+        
+        console.log('   ✅ 成功加载默认/备选排课规则:');
+        console.log('      规则名称:', rules.name);
+        console.log('      规则描述:', rules.description);
+        console.log('      是否激活:', rules.isActive);
+        console.log('      是否默认:', rules.isDefault);
+        
+      } catch (error) {
+        console.error('   ❌ 查询默认排课规则失败:', error);
+        throw new Error(`查询默认排课规则失败: ${error instanceof Error ? error.message : '未知错误'}`);
       }
+    }
+
+    // 验证规则完整性
+    if (rules) {
+      console.log('   🔍 验证排课规则完整性...');
+      
+      // 检查必要的规则字段
+      const hasTimeRules = rules.timeRules && Object.keys(rules.timeRules).length > 0;
+      const hasTeacherConstraints = rules.teacherConstraints && Object.keys(rules.teacherConstraints).length > 0;
+      const hasRoomConstraints = rules.roomConstraints && Object.keys(rules.roomConstraints).length > 0;
+      const hasCourseArrangementRules = rules.courseArrangementRules && Object.keys(rules.courseArrangementRules).length > 0;
+      
+      if (!hasTimeRules || !hasTeacherConstraints || !hasRoomConstraints || !hasCourseArrangementRules) {
+        const missingFields = [];
+        if (!hasTimeRules) missingFields.push('timeRules');
+        if (!hasTeacherConstraints) missingFields.push('teacherConstraints');
+        if (!hasRoomConstraints) missingFields.push('roomConstraints');
+        if (!hasCourseArrangementRules) missingFields.push('courseArrangementRules');
+        
+        console.warn('   ⚠️ 排课规则缺少必要字段:', missingFields);
+      } else {
+        console.log('   ✅ 排课规则完整性验证通过');
+      }
+      
+      // 输出规则摘要
+      console.log('   📋 排课规则摘要:');
+      console.log('      时间规则:', hasTimeRules ? '已配置' : '未配置');
+      console.log('      教师约束:', hasTeacherConstraints ? '已配置' : '未配置');
+      console.log('      教室约束:', hasRoomConstraints ? '已配置' : '未配置');
+      console.log('      课程安排规则:', hasCourseArrangementRules ? '已配置' : '未配置');
     }
 
     return rules;
@@ -392,6 +478,9 @@ export class SchedulingService {
 
     for (const plan of teachingPlans) {
       for (const assignment of plan.courseAssignments) {
+        // 获取课程信息（通过populate加载的课程对象）
+        const course = assignment.course as any;
+        
         // 为每周需要的课时创建变量
         for (let hour = 0; hour < assignment.weeklyHours; hour++) {
           const variable: ScheduleVariable = {
@@ -399,18 +488,36 @@ export class SchedulingService {
             classId: plan.class as mongoose.Types.ObjectId,
             courseId: assignment.course,
             teacherId: assignment.teacher,
+            // 新增：直接包含课程信息
+            courseName: course.name,
+            subject: course.subject,
             requiredHours: 1, // 每个变量代表1课时
             timePreferences: this.convertTimeSlots(assignment.preferredTimeSlots),
             timeAvoidance: this.convertTimeSlots(assignment.avoidTimeSlots),
             continuous: assignment.requiresContinuous,
             continuousHours: assignment.continuousHours,
-            priority: 5, // 默认优先级
+            // 根据科目设置优先级
+            priority: this.getCoursePriority(course.subject),
             domain: [] // 将在约束传播阶段填充
           };
 
           variables.push(variable);
         }
       }
+    }
+
+    // 添加调试日志
+    console.log(`🔍 排课变量生成完成，共 ${variables.length} 个变量`);
+    const coreCount = variables.filter(v => v.priority >= 8).length;
+    const generalCount = variables.length - coreCount;
+    console.log(`📊 变量统计: 核心课程 ${coreCount} 个，一般课程 ${generalCount} 个`);
+    
+    // 显示前几个变量的详细信息
+    if (variables.length > 0) {
+      console.log(`📋 前3个变量示例:`);
+      variables.slice(0, 3).forEach((v, index) => {
+        console.log(`   ${index + 1}. ${v.courseName || '未知'} (${v.subject || '未知科目'}) - 优先级: ${v.priority}`);
+      });
     }
 
     return variables;
@@ -476,6 +583,48 @@ export class SchedulingService {
     };
 
     return { ...defaultConfig, ...userConfig };
+  }
+
+  /**
+   * 根据科目设置课程优先级
+   * 
+   * Args:
+   *   subject: 科目名称
+   * 
+   * Returns:
+   *   number: 课程优先级 (1-10, 10最高)
+   */
+  private getCoursePriority(subject: string): number {
+    if (!subject) {
+      console.warn('⚠️ 课程科目为空，使用默认优先级5');
+      return 5;
+    }
+
+    // 扩展的核心科目列表，包含更多可能的名称变体
+    const coreSubjects = [
+      // 主要核心科目
+      '语文', '数学', '英语', '物理', '化学', '生物',
+      // 英文名称
+      'chinese', 'math', 'mathematics', 'english', 'physics', 'chemistry', 'biology',
+      // 可能的变体
+      '语文课', '数学课', '英语课', '物理课', '化学课', '生物课',
+      '语文基础', '数学基础', '英语基础', '物理基础', '化学基础', '生物基础',
+      // 可能的缩写
+      '语', '数', '英', '物', '化', '生'
+    ];
+
+    // 检查是否为核心科目（支持部分匹配）
+    const lowerSubject = subject.toLowerCase();
+    const isCoreSubject = coreSubjects.some(coreSubject => 
+      lowerSubject.includes(coreSubject.toLowerCase()) || 
+      coreSubject.toLowerCase().includes(lowerSubject)
+    );
+
+    const priority = isCoreSubject ? 9 : 5;
+    
+    console.log(`   📚 课程优先级设置: ${subject} -> ${priority} (${isCoreSubject ? '核心课程' : '一般课程'})`);
+    
+    return priority;
   }
 
   /**

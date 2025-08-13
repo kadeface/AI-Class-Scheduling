@@ -501,7 +501,7 @@ export class ManualSchedulingController {
     });
 
     // 检测所有冲突
-    const conflicts = detector.checkAllConflicts(newAssignment, existingAssignments);
+    const conflicts = await detector.checkAllConflicts(newAssignment, existingAssignments);
     const hardConflicts = conflicts.filter(c => c.severity === 'critical');
 
     // 如果有硬冲突且不强制移动，返回失败
@@ -626,8 +626,8 @@ export class ManualSchedulingController {
     });
 
     // 检测交换后的冲突
-    const conflicts1 = detector.checkAllConflicts(newAssignment1, existingAssignments);
-    const conflicts2 = detector.checkAllConflicts(newAssignment2, existingAssignments);
+    const conflicts1 = await detector.checkAllConflicts(newAssignment1, existingAssignments);
+    const conflicts2 = await detector.checkAllConflicts(newAssignment2, existingAssignments);
     
     const allConflicts = [...conflicts1, ...conflicts2];
     const hardConflicts = allConflicts.filter(c => c.severity === 'critical');

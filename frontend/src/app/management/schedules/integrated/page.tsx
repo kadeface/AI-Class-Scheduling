@@ -90,14 +90,14 @@ interface MoveCourseRequest {
  */
 export default function IntegratedSchedulePage() {
   // 排课任务状态
-  const [currentTask, setCurrentTask] = useState<SchedulingTask>();
+  const [currentTask, setCurrentTask] = useState<SchedulingTask | undefined>(undefined);
   const [isStartingTask, setIsStartingTask] = useState(false);
 
   // 课表查看状态
   const [viewMode, setViewMode] = useState<ViewMode>('class');
-  const [selectedTarget, setSelectedTarget] = useState<ScheduleOption>();
+  const [selectedTarget, setSelectedTarget] = useState<ScheduleOption | undefined>(undefined);
   const [availableTargets, setAvailableTargets] = useState<ScheduleOption[]>([]);
-  const [scheduleData, setScheduleData] = useState<ScheduleViewData>();
+  const [scheduleData, setScheduleData] = useState<ScheduleViewData | undefined>(undefined);
   
   // 可用学年状态
   const [availableAcademicYears, setAvailableAcademicYears] = useState<string[]>([]);
@@ -109,6 +109,7 @@ export default function IntegratedSchedulePage() {
     name: string;
     description?: string;
     isDefault: boolean;
+    isActive: boolean;
     schoolType: string;
   }>>([]);
   const [selectedRulesId, setSelectedRulesId] = useState<string>('');
@@ -121,13 +122,13 @@ export default function IntegratedSchedulePage() {
 
   // 拖拽调课状态
   const [isDragging, setIsDragging] = useState(false);
-  const [draggedCourse, setDraggedCourse] = useState<CourseSlot>();
-  const [dropTarget, setDropTarget] = useState<{ dayOfWeek: number; period: number }>();
+  const [draggedCourse, setDraggedCourse] = useState<CourseSlot | undefined>(undefined);
+  const [dropTarget, setDropTarget] = useState<{ dayOfWeek: number; period: number } | undefined>(undefined);
 
   // 加载状态
   const [isLoadingTargets, setIsLoadingTargets] = useState(false);
   const [isLoadingSchedule, setIsLoadingSchedule] = useState(false);
-  const [error, setError] = useState<string>();
+  const [error, setError] = useState<string | undefined>(undefined);
 
   /**
    * 监控排课任务进度
@@ -136,6 +137,9 @@ export default function IntegratedSchedulePage() {
     const checkStatus = async () => {
       try {
         const response = await fetch(`http://localhost:3001/api/scheduling/tasks/${taskId}`);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
         const data: ApiResponse<SchedulingTask> = await response.json();
 
         if (data.success && data.data) {
@@ -157,6 +161,8 @@ export default function IntegratedSchedulePage() {
 
           // 继续轮询
           setTimeout(checkStatus, 2000);
+        } else {
+          throw new Error(data.message || '获取任务状态失败');
         }
       } catch (error) {
         console.error('查询任务状态失败:', error);
@@ -174,12 +180,16 @@ export default function IntegratedSchedulePage() {
     if (!currentTask) return;
 
     try {
-      await fetch(`http://localhost:3001/api/scheduling/tasks/${currentTask.id}/stop`, {
+      const response = await fetch(`http://localhost:3001/api/scheduling/tasks/${currentTask.id}/stop`, {
         method: 'POST'
       });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
       setCurrentTask(undefined);
     } catch (error) {
       console.error('停止任务失败:', error);
+      setError('停止任务失败，请重试');
     }
   }, [currentTask]);
 
@@ -192,6 +202,9 @@ export default function IntegratedSchedulePage() {
 
     try {
       const response = await fetch('http://localhost:3001/api/teaching-plans/academic-years');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
       const data: ApiResponse<{ academicYears: string[] }> = await response.json();
 
       if (data.success && data.data) {
@@ -229,6 +242,9 @@ export default function IntegratedSchedulePage() {
                      mode === 'teacher' ? 'teachers' : 'rooms';
       
       const response = await fetch(`http://localhost:3001/api/schedule-view/options/${endpoint}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
       const data: ApiResponse<ScheduleOption[]> = await response.json();
 
       if (data.success && data.data) {
@@ -278,6 +294,10 @@ export default function IntegratedSchedulePage() {
         `http://localhost:3001/api/schedule-view/${endpoint}?${params}`
       );
       
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
       const data: ApiResponse<ScheduleViewData> = await response.json();
 
       if (data.success && data.data) {
@@ -305,6 +325,9 @@ export default function IntegratedSchedulePage() {
 
     try {
       const response = await fetch(`http://localhost:3001/api/scheduling-rules?academicYear=${filters.academicYear}&semester=${filters.semester}&isActive=true&limit=100`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
       const data: ApiResponse<{ items: any[]; total: number }> = await response.json();
 
       if (data.success && data.data) {
@@ -336,6 +359,31 @@ export default function IntegratedSchedulePage() {
     setIsStartingTask(true);
     setError(undefined);
 
+    // 添加详细的排课规则检查日志
+    console.log('🔍 前端排课规则检查:');
+    console.log('   selectedRulesId:', selectedRulesId);
+    console.log('   selectedRulesId类型:', typeof selectedRulesId);
+    console.log('   selectedRulesId是否为空:', !selectedRulesId);
+    console.log('   availableSchedulingRules数量:', availableSchedulingRules.length);
+    
+    if (selectedRulesId) {
+      const selectedRule = availableSchedulingRules.find(rule => rule._id === selectedRulesId);
+      console.log('   ✅ 选中的排课规则:', selectedRule ? {
+        id: selectedRule._id,
+        name: selectedRule.name,
+        description: selectedRule.description,
+        isDefault: selectedRule.isDefault,
+        isActive: selectedRule.isActive
+      } : '未找到');
+    } else {
+      const defaultRule = availableSchedulingRules.find(rule => rule.isDefault);
+      console.log('   ⚠️ 未选择排课规则，默认规则:', defaultRule ? {
+        id: defaultRule._id,
+        name: defaultRule.name,
+        isDefault: defaultRule.isDefault
+      } : '无默认规则');
+    }
+
     try {
       const requestBody: any = {
         academicYear: filters.academicYear,
@@ -346,7 +394,12 @@ export default function IntegratedSchedulePage() {
       // 如果选择了特定规则，添加到请求中
       if (selectedRulesId) {
         requestBody.rulesId = selectedRulesId;
+        console.log('   📤 已添加排课规则ID到请求:', selectedRulesId);
+      } else {
+        console.log('   📤 未添加排课规则ID，将使用后端默认规则');
       }
+
+      console.log('   📤 完整请求体:', requestBody);
 
       const response = await fetch('http://localhost:3001/api/scheduling/start', {
         method: 'POST',
@@ -356,7 +409,12 @@ export default function IntegratedSchedulePage() {
         body: JSON.stringify(requestBody)
       });
 
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
       const data: ApiResponse<{ taskId: string }> = await response.json();
+      console.log('   📥 后端响应:', data);
 
       if (data.success && data.data) {
         // 开始监控任务
@@ -370,7 +428,7 @@ export default function IntegratedSchedulePage() {
     } finally {
       setIsStartingTask(false);
     }
-  }, [filters, selectedRulesId, monitorTask]);
+  }, [filters, selectedRulesId, monitorTask, availableSchedulingRules]);
 
   /**
    * 处理课程拖拽开始
@@ -423,6 +481,10 @@ export default function IntegratedSchedulePage() {
         },
         body: JSON.stringify(moveRequest)
       });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
       const data: ApiResponse<any> = await response.json();
 
@@ -843,7 +905,7 @@ export default function IntegratedSchedulePage() {
                 </div>
               </Card>
             )}
-            </div>
+          </div>
         </CardContent>
       </Card>
 

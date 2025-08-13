@@ -21,13 +21,7 @@ import {
   TeacherRotationState,
   ConstraintType,
   RotationProgressData,
-  RotationSummary,
-  // 新增：分阶段排课相关类型
-  StageType,
-  StagedSchedulingStageConfig,
-  StageResult,
-  StageProgress,
-  CourseClassification
+  RotationSummary
 } from './types';
 import { ConstraintDetector } from './constraint-detector';
 import { ISchedulingRules } from '../../models/SchedulingRules';
@@ -35,7 +29,7 @@ import { ISchedulingRules } from '../../models/SchedulingRules';
 /**
  * 排课算法引擎类
  * 
- * 实现核心的排课算法逻辑，支持分阶段排课
+ * 实现核心的排课算法逻辑
  */
 export class SchedulingEngine {
   private rules: ISchedulingRules;
@@ -45,23 +39,9 @@ export class SchedulingEngine {
   
   // 新增：教师轮换状态管理
   private teacherRotationStates: Map<string, TeacherRotationState> = new Map();
-  
-  // 新增：核心课程引擎
-  private coreCourseEngine: CoreCourseEngine;
-  
+  n  // 新增：核心课程引擎n  private coreCourseEngine: CoreCourseEngine;n  
   // 新增：课程名称缓存
   private courseNameCache: Map<string, string> = new Map();
-
-  // 新增：分阶段排课配置
-  private stageConfigs: Map<StageType, StagedSchedulingStageConfig> = new Map();
-  
-  // 新增：分阶段状态跟踪
-  private currentStage: StageType | null = null;
-  private stageResults: Map<StageType, StageResult> = new Map();
-  private stageProgress: StageProgress | null = null;
-  
-  // 新增：保存所有变量的引用，用于局部优化
-  private allVariables: ScheduleVariable[] = [];
 
   /**
    * 构造函数
@@ -83,17 +63,11 @@ export class SchedulingEngine {
     
     // 初始化教师轮换状态
     this.initializeTeacherRotation([]);
-    
-    // 初始化核心课程引擎
-    this.coreCourseEngine = new CoreCourseEngine();
-    
+    n    // 初始化核心课程引擎n    this.coreCourseEngine = new CoreCourseEngine();n    
     // 延迟初始化课程名称缓存
     this.initializeCourseNameCache().catch(error => {
       console.warn('课程名称缓存初始化失败:', error);
     });
-
-    // 新增：初始化分阶段配置
-    this.initializeStageConfigs();
   }
 
   /**
@@ -180,77 +154,19 @@ export class SchedulingEngine {
    */
   private async initializeCourseNameCache(): Promise<void> {
     try {
-      console.log('🔄 开始初始化课程名称缓存...');
-      
       // 从数据库预加载常用课程名称
       const Course = mongoose.model('Course');
-      const courses = await Course.find({}).select('_id name subject type').lean();
-      
-      console.log(`📚 从数据库获取到 ${courses.length} 个课程`);
-      
-      let validCourses = 0;
-      let invalidCourses = 0;
+      const courses = await Course.find({}).select('_id name').lean();
       
       for (const course of courses) {
-        const courseId = (course as any)._id.toString();
-        const courseName = (course as any).name || (course as any).subject || '未知课程';
-        const courseType = (course as any).type || '未知类型';
-        
-        if (courseName && courseName !== '未知课程') {
-          this.courseNameCache.set(courseId, courseName);
-          validCourses++;
-          
-          // 调试：显示前几个课程信息
-          if (validCourses <= 5) {
-            console.log(`   📖 课程${validCourses}: ID=${courseId}, 名称=${courseName}, 类型=${courseType}`);
-          }
-        } else {
-          invalidCourses++;
-          if (invalidCourses <= 3) {
-            console.log(`   ⚠️ 无效课程: ID=${courseId}, 名称=${courseName}, 类型=${courseType}`);
-          }
-        }
+        this.courseNameCache.set((course as any)._id.toString(), (course as any).name || '未知课程');
       }
       
-      console.log(`✅ 课程名称缓存初始化完成:`);
-      console.log(`   有效课程: ${validCourses} 个`);
-      console.log(`   无效课程: ${invalidCourses} 个`);
-      console.log(`   缓存总数: ${this.courseNameCache.size} 个`);
-      
-      // 如果没有有效课程，提供警告
-      if (validCourses === 0) {
-        console.warn('⚠️ 警告: 没有找到有效的课程名称，核心课程识别可能失败');
-        console.warn('   建议: 检查数据库中的课程数据完整性');
-      }
-      
+      console.log(`✅ 课程名称缓存初始化完成，共缓存 ${this.courseNameCache.size} 个课程`);
     } catch (error) {
-      console.error('❌ 课程名称缓存初始化失败:', error);
-      console.error('   这可能导致核心课程识别失败，建议检查数据库连接和课程数据');
+      console.warn('课程名称缓存初始化失败:', error);
       // 缓存初始化失败不影响主要功能
     }
-  }
-
-  /**
-   * 确保课程名称缓存已初始化完成
-   * 
-   * 如果缓存为空，则重新初始化
-   * 
-   * Returns:
-   *   Promise<void>
-   */
-  private async ensureCourseNameCacheInitialized(): Promise<void> {
-    // 如果缓存为空，说明初始化可能失败或未完成
-    if (this.courseNameCache.size === 0) {
-      console.log('🔄 课程名称缓存为空，重新初始化...');
-      await this.initializeCourseNameCache();
-      
-      // 如果仍然为空，抛出错误
-      if (this.courseNameCache.size === 0) {
-        throw new Error('课程名称缓存初始化失败，无法进行核心课程识别');
-      }
-    }
-    
-    console.log(`✅ 课程名称缓存已就绪，共 ${this.courseNameCache.size} 个课程`);
   }
 
   /**
@@ -439,13 +355,13 @@ export class SchedulingEngine {
    *   Promise<SchedulingResult>: 排课结果
    */
   async solve(
-    variables: ScheduleVariable[],
+    n    // 分阶段排课：第一阶段 - 核心课程n    console.log("[排课引擎] 开始分阶段排课 - 第一阶段：核心课程");n    n    // 分离核心课程和一般课程n    const coreCourses = this.coreCourseEngine.filterCoreCourses(variables);n    const generalCourses = variables.filter(variable => !this.coreCourseEngine.isCoreCourse(variable));n    n    console.log(`[排课引擎] 核心课程数量: ${coreCourses.length}, 一般课程数量: ${generalCourses.length}`);n    n    // 如果存在核心课程，优先处理n    if (coreCourses.length > 0) {n      try {n        const coreResult = await this.scheduleCoreCourses(coreCourses, fixedAssignments);n        if (!coreResult.success) {n          console.warn("[排课引擎] 核心课程排课失败，继续处理一般课程");n        } else {n          console.log("[排课引擎] 核心课程排课成功，已分配", coreResult.scheduleState.assignments.size, "个课程");n        }n      } catch (error) {n        console.error("[排课引擎] 核心课程排课异常:", error);n      }n    }n    variables: ScheduleVariable[],
     fixedAssignments: CourseAssignment[] = []
   ): Promise<SchedulingResult> {
     const startTime = Date.now();
 
     try {
-      this.reportProgress('初始化', 0, '正在初始化分阶段排课算法...', 0, variables.length);
+      this.reportProgress('初始化', 0, '正在初始化排课算法...', 0, variables.length);
 
       // 验证输入数据
       if (!variables || variables.length === 0) {
@@ -458,7 +374,7 @@ export class SchedulingEngine {
       );
       
       if (invalidVariables.length > 0) {
-        console.log(`⚠️ 发现 ${invalidVariables.length} 个无效的排课变量`);
+        console.warn(`⚠️ 发现 ${invalidVariables.length} 个无效的排课变量`);
         // 过滤掉无效变量
         variables = variables.filter(v => 
           v.teacherId && v.classId && v.courseId
@@ -471,88 +387,49 @@ export class SchedulingEngine {
         console.log(`✅ 过滤后剩余 ${variables.length} 个有效变量`);
       }
 
-      // 保存所有变量的引用，用于局部优化
-      this.allVariables = variables;
+      // 初始化状态
+      const state = this.initializeState(variables, fixedAssignments);
       
-      // 确保课程名称缓存已初始化完成
-      this.reportProgress('缓存初始化', 2, '正在等待课程名称缓存初始化...', 0, variables.length);
-      try {
-        // 等待课程名称缓存初始化完成
-        await this.ensureCourseNameCacheInitialized();
-        this.reportProgress('缓存初始化', 4, '课程名称缓存初始化完成', 0, variables.length, true);
-      } catch (error) {
-        console.warn('⚠️ 课程名称缓存初始化失败，将使用默认识别策略:', error);
-        this.reportProgress('缓存初始化', 4, '课程名称缓存初始化失败，使用默认策略', 0, variables.length, true);
-      }
-      
-      // 课程分类
-      this.reportProgress('课程分类', 5, '正在进行课程分类...', 0, variables.length);
-      const classification = this.classifyCourses(variables);
-      
-      if (classification.classificationStats.coreCourseCount === 0) {
-        console.log('⚠️ 没有识别到核心课程，将使用传统单阶段排课');
-        return await this.solveTraditional(variables, fixedAssignments);
-      }
-
       // 初始化教师轮换状态
       try {
         this.initializeTeacherRotation(variables);
-        this.reportProgress('轮换初始化', 10, '教师轮换状态初始化完成', 0, variables.length, true);
+        this.reportProgress('轮换初始化', 5, '教师轮换状态初始化完成', 0, variables.length, true);
       } catch (error) {
         console.error('❌ 教师轮换状态初始化失败:', error);
-        this.reportProgress('轮换初始化', 10, '教师轮换状态初始化失败，继续执行...', 0, variables.length, true);
+        // 轮换初始化失败不应该中断整个排课过程
+        this.reportProgress('轮换初始化', 5, '教师轮换状态初始化失败，继续执行...', 0, variables.length, true);
       }
 
-      // 分阶段排课执行
-      this.reportProgress('分阶段排课', 15, '开始分阶段排课...', 0, variables.length);
-      
-      // 第一阶段：排核心课程
-      this.currentStage = StageType.CORE_COURSES;
-      const coreResult = await this.solveStage(
-        StageType.CORE_COURSES,
-        classification.coreCourses,
-        fixedAssignments,
-        'high'
-      );
-      
-      this.stageResults.set(StageType.CORE_COURSES, coreResult);
-      this.reportProgress('核心课程排课', 40, `核心课程排课完成，成功 ${coreResult.assignedVariables}/${classification.classificationStats.coreCourseCount}`, 
-        coreResult.assignedVariables, variables.length, true);
+      // 预处理：约束传播
+      this.reportProgress('预处理', 10, '正在进行约束传播...', 0, variables.length);
+      this.propagateConstraints(state, variables);
 
-      // 第二阶段：排一般课程
-      this.currentStage = StageType.GENERAL_COURSES;
-      const generalResult = await this.solveStage(
-        StageType.GENERAL_COURSES,
-        classification.generalCourses,
-        fixedAssignments,
-        'medium',
-        coreResult.scheduleState
-      );
-      
-      this.stageResults.set(StageType.GENERAL_COURSES, generalResult);
-      this.reportProgress('一般课程排课', 70, `一般课程排课完成，成功 ${generalResult.assignedVariables}/${classification.classificationStats.generalCourseCount}`, 
-        generalResult.assignedVariables, variables.length, true);
+      // 报告轮换约束预筛选结果
+      this.reportProgress('轮换约束检查', 15, '轮换约束预筛选完成', 0, variables.length, true);
 
-      // 结果合并和优化
-      this.reportProgress('结果合并', 80, '正在合并分阶段结果...', 0, variables.length);
-      const mergedState = this.mergeStageResults(coreResult, generalResult);
-      
-      // 最终优化
-      if (this.config.enableLocalOptimization) {
-        this.reportProgress('最终优化', 90, '正在进行最终优化...', mergedState.assignments.size, variables.length);
-        await this.localOptimization(mergedState, variables);
+      // 主要求解阶段
+      this.reportProgress('求解', 20, '正在执行回溯算法...', 0, variables.length);
+      const solved = await this.backtrackSearch(state, variables);
+
+      // 局部优化阶段
+      if (solved && this.config.enableLocalOptimization) {
+        this.reportProgress('优化', 80, '正在进行局部优化...', state.assignments.size, variables.length);
+        await this.localOptimization(state, variables);
+        
+        // 报告轮换优化效果
+        this.reportProgress('轮换优化', 85, '轮换优化完成', state.assignments.size, variables.length, true);
       }
 
       const endTime = Date.now();
       const executionTime = endTime - startTime;
 
-      this.reportProgress('完成', 100, '分阶段排课算法执行完成', mergedState.assignments.size, variables.length, true);
+      this.reportProgress('完成', 100, '排课算法执行完成', state.assignments.size, variables.length, true);
 
-      return this.buildResult(true, mergedState, variables, executionTime);
+      return this.buildResult(solved, state, variables, executionTime);
 
     } catch (error) {
       const executionTime = Date.now() - startTime;
-      console.error('分阶段排课算法执行失败:', error);
+      console.error('排课算法执行失败:', error);
 
       // 提供更详细的错误信息
       let errorMessage = '未知错误';
@@ -574,12 +451,6 @@ export class SchedulingEngine {
             '验证教师和班级的关联关系',
             '调整轮换策略参数'
           ];
-        } else if (error.message.includes('核心课程')) {
-          suggestions = [
-            '检查核心课程识别规则',
-            '验证课程数据完整性',
-            '调整核心课程分类策略'
-          ];
         }
       }
 
@@ -598,7 +469,7 @@ export class SchedulingEngine {
         },
         conflicts: [],
         violations: [],
-        message: `分阶段排课算法执行失败: ${errorMessage}`,
+        message: `算法执行失败: ${errorMessage}`,
         suggestions
       };
     }
@@ -701,35 +572,23 @@ export class SchedulingEngine {
     const maxIterations = this.config.maxIterations;
     const timeLimit = this.config.timeLimit * 1000; // 转换为毫秒
     const startTime = Date.now();
-    
-    // 新增：迭代限制警告标志，避免重复输出
-    let iterationLimitWarned = false;
-    let timeLimitWarned = false;
 
     const search = async (): Promise<boolean> => {
       iterations++;
 
       // 检查终止条件
       if (iterations > maxIterations) {
-        // 只在第一次达到限制时输出警告，避免重复日志
-        if (!iterationLimitWarned) {
-          console.log(`⚠️ 达到最大迭代次数限制: ${maxIterations}，算法将停止搜索`);
-          iterationLimitWarned = true;
-        }
+        console.log(`达到最大迭代次数限制: ${maxIterations}`);
         return false;
       }
 
       if (Date.now() - startTime > timeLimit) {
-        // 只在第一次达到时间限制时输出警告
-        if (!timeLimitWarned) {
-          console.log(`⏰ 达到时间限制: ${this.config.timeLimit}秒，算法将停止搜索`);
-          timeLimitWarned = true;
-        }
+        console.log(`达到时间限制: ${this.config.timeLimit}秒`);
         return false;
       }
 
-      // 定期报告轮换进度（每100次迭代报告一次，减少日志频率）
-      if (iterations % 100 === 0) {
+      // 定期报告轮换进度（每10次迭代报告一次）
+      if (iterations % 10 === 0) {
         const progress = Math.min(80, 20 + (iterations / maxIterations) * 60);
         this.reportProgress('轮换搜索', progress, `正在进行轮换搜索，已迭代${iterations}次`, state.assignments.size, variables.length, true);
       }
@@ -1038,13 +897,7 @@ export class SchedulingEngine {
    * 获取科目时间适配性评分
    */
   private getSubjectTimeAdaptation(variable: ScheduleVariable, timeSlot: TimeSlot): number {
-    // 优先使用变量中的科目信息
-    let courseName = variable.subject || variable.courseName;
-    
-    // 如果没有，则尝试从缓存获取
-    if (!courseName) {
-      courseName = this.getCourseNameSync(variable.courseId);
-    }
+    const courseName = this.getCourseNameSync(variable.courseId);
     
     // 体育课时间适配性
     if (courseName === '体育') {
@@ -1269,7 +1122,7 @@ export class SchedulingEngine {
     };
 
     // 检查硬约束
-    const conflicts = await this.constraintDetector.checkAllConflicts(tempAssignment, state.assignments);
+    const conflicts = this.constraintDetector.checkAllConflicts(tempAssignment, state.assignments);
     if (conflicts.length > 0) {
       return false;
     }
@@ -1444,209 +1297,9 @@ export class SchedulingEngine {
     timeSlot: TimeSlot,
     state: ScheduleState
   ): Promise<mongoose.Types.ObjectId | null> {
-    try {
-      // 1. 优先使用班级的固定教室（行政班）
-      const classInfo = await mongoose.model('Class').findById(variable.classId);
-      if (classInfo?.homeroom) {
-        // 检查固定教室在指定时间段是否可用
-        if (await this.isRoomAvailableAtTime(classInfo.homeroom, timeSlot, state)) {
-          console.log(`✅ 班级 ${classInfo.name} 使用固定教室 ${classInfo.homeroom}`);
-          return classInfo.homeroom;
-        } else {
-          console.log(`⚠️ 班级 ${classInfo.name} 的固定教室在指定时间段不可用`);
-        }
-      }
-
-      // 2. 如果没有固定教室或固定教室不可用，查找其他可用教室
-      const availableRooms = await this.findAvailableRooms(variable, timeSlot, state);
-      if (availableRooms.length > 0) {
-        // 根据优先级选择最佳教室
-        const bestRoom = this.selectBestRoom(availableRooms, variable, timeSlot);
-        console.log(`✅ 为班级 ${classInfo?.name || '未知'} 选择备用教室 ${bestRoom._id}`);
-        return bestRoom._id;
-      }
-
-      console.log(`❌ 没有找到可用的教室`);
-      return null; // 没有可用教室
-    } catch (error) {
-      console.error('教室选择失败:', error);
-      return null;
-    }
-  }
-
-  /**
-   * 检查教室在指定时间段是否可用
-   * 
-   * Args:
-   *   roomId: 教室ID
-   *   timeSlot: 时间段
-   *   state: 当前状态
-   * 
-   * Returns:
-   *   Promise<boolean>: 教室是否可用
-   */
-  private async isRoomAvailableAtTime(
-    roomId: mongoose.Types.ObjectId,
-    timeSlot: TimeSlot,
-    state: ScheduleState
-  ): Promise<boolean> {
-    try {
-      // 1. 检查是否已被其他课程占用
-      for (const assignment of state.assignments.values()) {
-        if (assignment.roomId.equals(roomId) &&
-            this.isTimeSlotOverlap(assignment.timeSlot, timeSlot)) {
-          return false; // 时间冲突
-        }
-      }
-
-      // 2. 检查教室是否在指定时间段不可用
-      const room = await mongoose.model('Room').findById(roomId);
-      if (room?.unavailableSlots) {
-        for (const slot of room.unavailableSlots) {
-          if (slot.dayOfWeek === timeSlot.dayOfWeek &&
-              slot.periods.includes(timeSlot.period)) {
-            return false; // 教室在该时间段不可用
-          }
-        }
-      }
-
-      return true;
-    } catch (error) {
-      console.error('教室可用性检查失败:', error);
-      return false;
-    }
-  }
-
-  /**
-   * 查找可用教室
-   * 
-   * Args:
-   *   variable: 排课变量
-   *   timeSlot: 时间段
-   *   state: 当前状态
-   * 
-   * Returns:
-   *   Promise<IRoom[]>: 可用教室列表
-   */
-  private async findAvailableRooms(
-    variable: ScheduleVariable,
-    timeSlot: TimeSlot,
-    state: ScheduleState
-  ): Promise<any[]> {
-    try {
-      const query: any = {
-        isActive: true,
-        capacity: { $gte: 30 } // 假设最小容量要求
-      };
-
-      // 根据课程类型选择教室
-      if (variable.roomRequirements?.roomType) {
-        query.type = variable.roomRequirements.roomType;
-      }
-
-      // 根据设备需求选择教室
-      if (variable.roomRequirements?.equipment?.length) {
-        query.equipment = { $all: variable.roomRequirements.equipment };
-      }
-
-      const rooms = await mongoose.model('Room').find(query);
-      
-      // 过滤掉在指定时间段不可用的教室
-      const availableRooms = [];
-      for (const room of rooms) {
-        if (await this.isRoomAvailableAtTime(room._id, timeSlot, state)) {
-          availableRooms.push(room);
-        }
-      }
-
-      return availableRooms;
-    } catch (error) {
-      console.error('查找可用教室失败:', error);
-      return [];
-    }
-  }
-
-  /**
-   * 选择最佳教室
-   * 
-   * Args:
-   *   rooms: 可用教室列表
-   *   variable: 排课变量
-   *   timeSlot: 时间段
-   * 
-   * Returns:
-   *   IRoom: 最佳教室
-   */
-  private selectBestRoom(rooms: any[], variable: ScheduleVariable, timeSlot: TimeSlot): any {
-    if (rooms.length === 0) {
-      throw new Error('没有可用教室');
-    }
-
-    if (rooms.length === 1) {
-      return rooms[0];
-    }
-
-    // 简单的选择策略：优先选择容量接近班级需求的教室
-    let bestRoom = rooms[0];
-    let bestScore = this.calculateRoomScore(bestRoom, variable, timeSlot);
-
-    for (const room of rooms) {
-      const score = this.calculateRoomScore(room, variable, timeSlot);
-      if (score > bestScore) {
-        bestScore = score;
-        bestRoom = room;
-      }
-    }
-
-    return bestRoom;
-  }
-
-  /**
-   * 计算教室评分
-   * 
-   * Args:
-   *   room: 教室信息
-   *   variable: 排课变量
-   *   timeSlot: 时间段
-   * 
-   * Returns:
-   *   number: 教室评分
-   */
-  private calculateRoomScore(room: any, variable: ScheduleVariable, timeSlot: TimeSlot): number {
-    let score = 0;
-
-    // 容量匹配度评分
-    const capacityDiff = Math.abs(room.capacity - 30); // 假设标准班级容量为30
-    score += Math.max(0, 100 - capacityDiff * 2);
-
-    // 教室类型匹配评分
-    if (variable.roomRequirements?.roomType && room.type === variable.roomRequirements.roomType) {
-      score += 50;
-    }
-
-    // 设备匹配评分
-    if (variable.roomRequirements?.equipment) {
-      const equipmentMatch = variable.roomRequirements.equipment.filter(
-        eq => room.equipment.includes(eq)
-      ).length;
-      score += equipmentMatch * 20;
-    }
-
-    return score;
-  }
-
-  /**
-   * 检查时间段是否重叠
-   * 
-   * Args:
-   *   slot1: 时间段1
-   *   slot2: 时间段2
-   * 
-   * Returns:
-   *   boolean: 是否重叠
-   */
-  private isTimeSlotOverlap(slot1: TimeSlot, slot2: TimeSlot): boolean {
-    return slot1.dayOfWeek === slot2.dayOfWeek && slot1.period === slot2.period;
+    // 这里应该从数据库查询可用教室
+    // 为了简化，暂时返回一个模拟的教室ID
+    return new mongoose.Types.ObjectId();
   }
 
   /**
@@ -1793,65 +1446,20 @@ export class SchedulingEngine {
    * 判断是否为核心课程
    */
   private isCoreSubject(variable: ScheduleVariable): boolean {
-    // 方法1: 通过优先级判断（最高优先级）
-    if (variable.priority >= 8) {
-      return true;
-    }
+    // 通过优先级判断
+    if (variable.priority >= 8) return true;
     
-    // 方法2: 通过科目信息判断
-    let courseName = variable.subject || variable.courseName;
-    
-    // 如果没有，则尝试从缓存获取
-    if (!courseName) {
-      courseName = this.getCourseNameSync(variable.courseId);
-    }
-    
-    if (courseName && courseName !== '未知课程') {
-      // 扩展的核心科目列表
-      const coreSubjects = [
-        // 主要核心科目
-        '语文', '数学', '英语', '物理', '化学', '生物',
-        // 英文名称
-        'chinese', 'math', 'mathematics', 'english', 'physics', 'chemistry', 'biology',
-        // 可能的变体
-        '语文课', '数学课', '英语课', '物理课', '化学课', '生物课',
-        '语文基础', '数学基础', '英语基础', '物理基础', '化学基础', '生物基础',
-        // 可能的缩写
-        '语', '数', '英', '物', '化', '生'
-      ];
-      
-      const lowerCourseName = courseName.toLowerCase();
-      for (const coreSubject of coreSubjects) {
-        if (lowerCourseName.includes(coreSubject.toLowerCase()) || 
-            coreSubject.toLowerCase().includes(lowerCourseName)) {
-          return true;
-        }
-      }
-    }
-    
-    // 方法3: 通过课程ID模式判断
-    if (variable.courseId) {
-      const courseIdStr = variable.courseId.toString();
-      if (courseIdStr.includes('core') || courseIdStr.includes('main') || 
-          courseIdStr.includes('primary') || courseIdStr.includes('essential')) {
-        return true;
-      }
-    }
-    
-    return false;
+    // 通过课程名称判断
+    const courseName = this.getCourseNameSync(variable.courseId);
+    const coreSubjects = ['语文', '数学', '英语', '物理', '化学', '生物'];
+    return coreSubjects.includes(courseName);
   }
 
   /**
    * 获取科目类型时间偏好
    */
   private getSubjectTypeTimePreference(variable: ScheduleVariable, timeSlot: TimeSlot): number {
-    // 优先使用变量中的科目信息
-    let courseName = variable.subject || variable.courseName;
-    
-    // 如果没有，则尝试从缓存获取
-    if (!courseName) {
-      courseName = this.getCourseNameSync(variable.courseId);
-    }
+    const courseName = this.getCourseNameSync(variable.courseId);
     
     // 1. 体育课时间偏好
     if (courseName === '体育') {
@@ -2295,8 +1903,8 @@ export class SchedulingEngine {
         iterations: 0, // TODO: 实际迭代次数
         executionTime
       },
-      conflicts: [],
-      violations: [],
+      conflicts: state.conflicts,
+      violations: state.violations,
       message: success ? '排课成功完成' : '排课未能完全成功',
       suggestions
     };
@@ -2759,7 +2367,7 @@ export class SchedulingEngine {
     };
 
     // 1. 检测时间冲突
-    const conflicts = await this.constraintDetector.checkAllConflicts(tempAssignment, state.assignments);
+    const conflicts = this.constraintDetector.checkAllConflicts(tempAssignment, state.assignments);
     if (conflicts.length > 0) {
       // 冲突转换为约束违反
       for (const conflict of conflicts) {
@@ -3010,7 +2618,7 @@ export class SchedulingEngine {
       return -60 * (maxConsecutiveDays - maxConcentration);
     }
   }
-
+}
   /**
    * 排课核心课程
    * @param coreVariables 核心课程变量列表
@@ -3037,7 +2645,7 @@ export class SchedulingEngine {
       // 转换变量为课程格式（简化实现）
       const courses = coreVariables.map(variable => ({
         id: variable.courseId.toString(),
-        subject: variable.subject || variable.courseName || this.getCourseNameSync(variable.courseId),
+        subject: this.getCourseNameSync(variable.courseId),
         classId: variable.classId.toString(),
         teacherId: variable.teacherId.toString(),
         requiredHours: variable.requiredHours
@@ -3093,7 +2701,7 @@ export class SchedulingEngine {
         suggestions: []
       };
 
-    } catch (error: any) {
+    } catch (error) {
       console.error('[排课引擎] 核心课程排课异常:', error);
       return {
         success: false,
@@ -3126,17 +2734,15 @@ export class SchedulingEngine {
     
     for (const variable of variables) {
       const teacherId = variable.teacherId.toString();
-      const subject = variable.subject || variable.courseName || this.getCourseNameSync(variable.courseId);
-      
       if (!teacherMap.has(teacherId)) {
         teacherMap.set(teacherId, {
           id: teacherId,
-          subjects: [subject]
+          subjects: [this.getCourseNameSync(variable.courseId)]
         });
       } else {
         const teacher = teacherMap.get(teacherId);
-        if (!teacher.subjects.includes(subject)) {
-          teacher.subjects.push(subject);
+        if (!teacher.subjects.includes(this.getCourseNameSync(variable.courseId))) {
+          teacher.subjects.push(this.getCourseNameSync(variable.courseId));
         }
       }
     }
@@ -3248,594 +2854,3 @@ export class SchedulingEngine {
       isFeasible: true
     };
   }
-
-  /**
-   * 初始化分阶段配置
-   * 
-   * 为不同阶段设置特定的算法参数和约束优先级
-   */
-  private initializeStageConfigs(): void {
-    // 核心课程阶段配置：更严格的限制，更高的约束优先级
-    this.stageConfigs.set(StageType.CORE_COURSES, {
-      stageType: StageType.CORE_COURSES,
-      maxIterations: Math.min(this.config.maxIterations, 5000), // 核心课程使用更严格的限制
-      timeLimit: Math.min(this.config.timeLimit, 120), // 2分钟时间限制
-      enableLocalOptimization: true,
-      localOptimizationIterations: 50,
-      constraintPriority: 'high',
-      enableBacktracking: true
-    });
-
-    // 一般课程阶段配置：更宽松的限制，考虑软约束优化
-    this.stageConfigs.set(StageType.GENERAL_COURSES, {
-      stageType: StageType.GENERAL_COURSES,
-      maxIterations: Math.min(this.config.maxIterations, 8000), // 一般课程可以使用更多迭代
-      timeLimit: Math.min(this.config.timeLimit, 180), // 3分钟时间限制
-      enableLocalOptimization: true,
-      localOptimizationIterations: 100,
-      constraintPriority: 'medium',
-      enableBacktracking: true
-    });
-
-    console.log('✅ 分阶段配置初始化完成');
-  }
-
-  /**
-   * 课程分类
-   * 
-   * 将排课变量分为核心课程和一般课程
-   * 
-   * Args:
-   *   variables: 排课变量列表
-   * 
-   * Returns:
-   *   CourseClassification: 课程分类结果
-   */
-  private classifyCourses(variables: ScheduleVariable[]): CourseClassification {
-    const coreCourses: ScheduleVariable[] = [];
-    const generalCourses: ScheduleVariable[] = [];
-    const coreSubjects = new Set<string>();
-    
-    // 扩展核心科目列表，包含更多可能的名称变体
-    const coreSubjectNames = [
-      // 主要核心科目
-      '语文', '数学', '英语', '物理', '化学', '生物',
-      // 可能的英文名称
-      'chinese', 'math', 'mathematics', 'english', 'physics', 'chemistry', 'biology',
-      // 可能的缩写
-      '语文课', '数学课', '英语课', '物理课', '化学课', '生物课',
-      // 可能的变体
-      '语文基础', '数学基础', '英语基础', '物理基础', '化学基础', '生物基础'
-    ];
-
-    console.log(`🔍 开始课程分类，共 ${variables.length} 个变量`);
-    console.log(`📚 课程名称缓存状态: ${this.courseNameCache.size} 个课程`);
-    
-    // 调试：检查前几个变量的信息
-    if (variables.length > 0) {
-      console.log(`📋 前3个变量信息示例:`);
-      for (let i = 0; i < Math.min(3, variables.length); i++) {
-        const v = variables[i];
-        console.log(`   变量${i+1}: ID=${v.id}, 优先级=${v.priority}, 科目=${v.subject || '无'}, 课程名=${v.courseName || '无'}, 课程ID=${v.courseId}`);
-      }
-    }
-
-    // 统计变量信息
-    let hasSubjectInfo = 0;
-    let hasCourseNameInfo = 0;
-    let hasPriorityInfo = 0;
-    let cacheHits = 0;
-    let cacheMisses = 0;
-
-    for (const variable of variables) {
-      // 统计变量信息
-      if (variable.subject) hasSubjectInfo++;
-      if (variable.courseName) hasCourseNameInfo++;
-      if (variable.priority >= 8) hasPriorityInfo++;
-      
-      // 优先使用变量中的科目信息
-      let courseName = variable.subject || variable.courseName;
-      
-      // 如果没有，则尝试从缓存获取
-      if (!courseName) {
-        courseName = this.getCourseNameSync(variable.courseId);
-        if (courseName && courseName !== '未知课程') {
-          console.log(`   从缓存获取课程名称: ${variable.courseId} -> ${courseName}`);
-          cacheHits++;
-        } else {
-          cacheMisses++;
-        }
-      }
-      
-      // 判断是否为核心课程
-      let isCoreSubject = false;
-      let recognitionMethod = '';
-      
-      // 方法1: 通过优先级判断
-      if (variable.priority >= 8) {
-        isCoreSubject = true;
-        recognitionMethod = `优先级(${variable.priority})`;
-        console.log(`   ✅ 通过优先级识别为核心课程: ${courseName || '未知'} (优先级: ${variable.priority})`);
-      }
-      
-      // 方法2: 通过科目名称判断
-      if (!isCoreSubject && courseName) {
-        // 检查是否包含核心科目关键词
-        const lowerCourseName = courseName.toLowerCase();
-        for (const coreSubject of coreSubjectNames) {
-          if (lowerCourseName.includes(coreSubject.toLowerCase()) || 
-              coreSubject.toLowerCase().includes(lowerCourseName)) {
-            isCoreSubject = true;
-            recognitionMethod = `科目名称匹配(${coreSubject})`;
-            console.log(`   ✅ 通过科目名称识别为核心课程: ${courseName} (匹配: ${coreSubject})`);
-            break;
-          }
-        }
-      }
-      
-      // 方法3: 通过课程ID模式判断（如果课程ID包含科目信息）
-      if (!isCoreSubject && variable.courseId) {
-        const courseIdStr = variable.courseId.toString();
-        // 检查课程ID是否包含核心科目标识
-        if (courseIdStr.includes('core') || courseIdStr.includes('main') || courseIdStr.includes('primary')) {
-          isCoreSubject = true;
-          recognitionMethod = `课程ID模式(${courseIdStr})`;
-          console.log(`   ✅ 通过课程ID模式识别为核心课程: ${courseName || '未知'} (ID: ${courseIdStr})`);
-        }
-      }
-      
-      // 方法4: 备用策略 - 如果缓存中有课程名称，尝试模糊匹配
-      if (!isCoreSubject && courseName && courseName !== '未知课程') {
-        // 检查是否包含数字（可能是年级信息）
-        if (/\d+/.test(courseName)) {
-          // 如果课程名称包含数字，可能是核心课程
-          isCoreSubject = true;
-          recognitionMethod = `备用策略(包含数字)`;
-          console.log(`   ✅ 通过备用策略识别为核心课程: ${courseName} (包含数字)`);
-        }
-      }
-      
-      if (isCoreSubject) {
-        coreCourses.push(variable);
-        coreSubjects.add(courseName || '未知');
-      } else {
-        generalCourses.push(variable);
-      }
-    }
-
-    // 输出统计信息
-    console.log(`📊 课程分类统计:`);
-    console.log(`   有科目信息的变量: ${hasSubjectInfo}/${variables.length}`);
-    console.log(`   有课程名信息的变量: ${hasCourseNameInfo}/${variables.length}`);
-    console.log(`   高优先级变量(≥8): ${hasPriorityInfo}/${variables.length}`);
-    console.log(`   缓存命中: ${cacheHits} 次`);
-    console.log(`   缓存未命中: ${cacheMisses} 次`);
-
-    // 添加优先级分布统计
-    const priorityDistribution = new Map<number, number>();
-    for (const variable of variables) {
-      const priority = variable.priority || 0;
-      priorityDistribution.set(priority, (priorityDistribution.get(priority) || 0) + 1);
-    }
-    
-    console.log(`📊 优先级分布统计:`);
-    const sortedPriorities = Array.from(priorityDistribution.keys()).sort((a, b) => b - a);
-    for (const priority of sortedPriorities) {
-      const count = priorityDistribution.get(priority) || 0;
-      const percentage = ((count / variables.length) * 100).toFixed(1);
-      console.log(`   优先级 ${priority}: ${count} 个 (${percentage}%)`);
-    }
-
-    // 添加科目名称统计
-    const subjectStats = new Map<string, number>();
-    for (const variable of variables) {
-      const subject = variable.subject || variable.courseName || '未知';
-      subjectStats.set(subject, (subjectStats.get(subject) || 0) + 1);
-    }
-    
-    console.log(`📊 科目名称统计 (前10个):`);
-    const sortedSubjects = Array.from(subjectStats.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10);
-    
-    for (const [subject, count] of sortedSubjects) {
-      console.log(`   ${subject}: ${count} 个`);
-    }
-
-    const classificationStats = {
-      totalVariables: variables.length,
-      coreCourseCount: coreCourses.length,
-      generalCourseCount: generalCourses.length,
-      coreSubjects: Array.from(coreSubjects)
-    };
-
-    console.log(`📚 课程分类完成: 核心课程 ${coreCourses.length} 个，一般课程 ${generalCourses.length} 个`);
-    console.log(`🔍 识别的核心科目: ${Array.from(coreSubjects).join(', ') || '无'}`);
-    
-    // 如果没有识别到核心课程，提供调试建议
-    if (coreCourses.length === 0) {
-      console.log(`⚠️ 未识别到核心课程，可能的原因:`);
-      console.log(`   1. 课程变量中缺少科目信息 (subject/courseName 字段) - 当前: ${hasSubjectInfo}/${variables.length}`);
-      console.log(`   2. 课程优先级设置过低 (当前要求 >= 8) - 当前: ${hasPriorityInfo}/${variables.length}`);
-      console.log(`   3. 课程名称与核心科目列表不匹配`);
-      console.log(`   4. 课程名称缓存未正确初始化 - 当前缓存: ${this.courseNameCache.size} 个`);
-      console.log(`   建议: 检查教学计划数据中的课程信息完整性`);
-      
-      // 如果缓存为空，提供额外建议
-      if (this.courseNameCache.size === 0) {
-        console.log(`   🚨 严重问题: 课程名称缓存为空！`);
-        console.log(`      建议: 检查数据库连接和课程数据`);
-      }
-    }
-
-    return {
-      coreCourses,
-      generalCourses,
-      coreSubjects: Array.from(coreSubjects),
-      classificationStats
-    };
-  }
-
-  /**
-   * 传统单阶段排课方法（回退方案）
-   * 
-   * Args:
-   *   variables: 排课变量列表
-   *   fixedAssignments: 固定安排
-   * 
-   * Returns:
-   *   Promise<SchedulingResult>: 排课结果
-   */
-  private async solveTraditional(
-    variables: ScheduleVariable[],
-    fixedAssignments: CourseAssignment[]
-  ): Promise<SchedulingResult> {
-    const startTime = Date.now();
-
-    try {
-      this.reportProgress('传统排课', 20, '使用传统单阶段排课算法...', 0, variables.length);
-
-      // 初始化状态
-      const state = this.initializeState(variables, fixedAssignments);
-      
-      // 预处理：约束传播
-      this.reportProgress('预处理', 30, '正在进行约束传播...', 0, variables.length);
-      this.propagateConstraints(state, variables);
-
-      // 主要求解阶段
-      this.reportProgress('求解', 50, '正在执行回溯算法...', 0, variables.length);
-      const solved = await this.backtrackSearch(state, variables);
-
-      // 局部优化阶段
-      if (solved && this.config.enableLocalOptimization) {
-        this.reportProgress('优化', 80, '正在进行局部优化...', state.assignments.size, variables.length);
-        await this.localOptimization(state, variables);
-      }
-
-      const endTime = Date.now();
-      const executionTime = endTime - startTime;
-
-      this.reportProgress('完成', 100, '传统排课算法执行完成', state.assignments.size, variables.length, true);
-
-      return this.buildResult(solved, state, variables, executionTime);
-
-    } catch (error) {
-      const executionTime = Date.now() - startTime;
-      console.error('传统排课算法执行失败:', error);
-      
-      return {
-        success: false,
-        scheduleState: this.initializeState(variables, fixedAssignments),
-        statistics: {
-          totalVariables: variables.length,
-          assignedVariables: 0,
-          unassignedVariables: variables.length,
-          hardViolations: 0,
-          softViolations: 0,
-          totalScore: 0,
-          iterations: 0,
-          executionTime
-        },
-        conflicts: [],
-        violations: [],
-        message: `传统排课算法执行失败: ${error instanceof Error ? error.message : '未知错误'}`,
-        suggestions: ['请检查排课规则配置', '建议减少约束条件', '尝试增加可用时间段']
-      };
-    }
-  }
-
-  /**
-   * 分阶段求解方法
-   * 
-   * Args:
-   *   stageType: 阶段类型
-   *   variables: 该阶段的排课变量
-   *   fixedAssignments: 固定安排
-   *   constraintPriority: 约束优先级
-   *   baseState: 基础状态（用于第二阶段）
-   * 
-   * Returns:
-   *   Promise<StageResult>: 阶段结果
-   */
-  private async solveStage(
-    stageType: StageType,
-    variables: ScheduleVariable[],
-    fixedAssignments: CourseAssignment[],
-    constraintPriority: 'high' | 'medium' | 'low',
-    baseState?: ScheduleState
-  ): Promise<StageResult> {
-    const startTime = Date.now();
-    
-    try {
-      // 获取阶段特定配置
-      const stageConfig = this.stageConfigs.get(stageType);
-      if (!stageConfig) {
-        throw new Error(`未找到阶段配置: ${stageType}`);
-      }
-
-      // 初始化状态
-      let state: ScheduleState;
-      if (baseState && stageType === StageType.GENERAL_COURSES) {
-        // 第二阶段：基于第一阶段结果初始化
-        state = this.initializeStateFromBase(variables, baseState);
-      } else {
-        // 第一阶段：全新初始化
-        state = this.initializeState(variables, fixedAssignments);
-      }
-
-      // 阶段特定的约束传播
-      this.reportStageProgress(stageType, 20, 
-        stageType === StageType.CORE_COURSES ? 20 : 50, 
-        '正在进行约束传播...', {
-          assignedVariables: 0,
-          unassignedVariables: variables.length,
-          hardViolations: 0,
-          softViolations: 0
-        });
-      this.propagateConstraints(state, variables);
-
-      // 执行回溯搜索
-      this.reportStageProgress(stageType, 40, 
-        stageType === StageType.CORE_COURSES ? 30 : 60, 
-        '正在执行回溯算法...', {
-          assignedVariables: 0,
-          unassignedVariables: variables.length,
-          hardViolations: 0,
-          softViolations: 0
-        });
-      const solved = await this.backtrackSearch(state, variables);
-
-      // 阶段特定的局部优化
-      if (solved && stageConfig.enableLocalOptimization) {
-        this.reportStageProgress(stageType, 60, 
-          stageType === StageType.CORE_COURSES ? 35 : 65, 
-          '正在进行局部优化...', {
-            assignedVariables: state.assignments.size,
-            unassignedVariables: state.unassigned.length,
-            hardViolations: state.violations.filter(v => v.isHard).length,
-            softViolations: state.violations.filter(v => !v.isHard).length
-          });
-        // 注意：这里需要传递完整的变量列表，而不仅仅是当前阶段的变量
-        // 因为 localOptimization 需要访问所有变量信息
-        await this.localOptimization(state, this.allVariables);
-      }
-
-      const endTime = Date.now();
-      const executionTime = endTime - startTime;
-
-      return {
-        stageType,
-        success: solved,
-        scheduleState: state,
-        assignedVariables: state.assignments.size,
-        unassignedVariables: state.unassigned.length,
-        hardViolations: state.violations.filter(v => v.isHard).length,
-        softViolations: state.violations.filter(v => !v.isHard).length,
-        executionTime,
-        message: solved ? `${stageType === StageType.CORE_COURSES ? '核心课程' : '一般课程'}排课成功` : 
-          `${stageType === StageType.CORE_COURSES ? '核心课程' : '一般课程'}排课失败`,
-        suggestions: solved ? [] : ['建议放宽约束条件', '考虑增加可用时间段']
-      };
-
-    } catch (error) {
-      const executionTime = Date.now() - startTime;
-      console.error(`${stageType} 阶段排课失败:`, error);
-      
-      return {
-        stageType,
-        success: false,
-        scheduleState: this.initializeState(variables, fixedAssignments),
-        assignedVariables: 0,
-        unassignedVariables: variables.length,
-        hardViolations: 0,
-        softViolations: 0,
-        executionTime,
-        message: `${stageType} 阶段排课异常: ${error instanceof Error ? error.message : '未知错误'}`,
-        suggestions: ['检查阶段配置', '验证输入数据', '调整算法参数']
-      };
-    }
-  }
-
-  /**
-   * 基于基础状态初始化新状态（用于第二阶段）
-   * 
-   * Args:
-   *   variables: 新阶段的变量
-   *   baseState: 基础状态（第一阶段结果）
-   * 
-   * Returns:
-   *   ScheduleState: 新初始化的状态
-   */
-  private initializeStateFromBase(
-    variables: ScheduleVariable[],
-    baseState: ScheduleState
-  ): ScheduleState {
-    // 复制基础状态
-    const newState: ScheduleState = {
-      assignments: new Map(baseState.assignments),
-      unassigned: [...variables.map(v => v.id)],
-      conflicts: [...baseState.conflicts],
-      violations: [...baseState.violations],
-      score: baseState.score,
-      isComplete: false,
-      isFeasible: baseState.isFeasible
-    };
-
-    // 更新未分配列表，排除已经在基础状态中分配的变量
-    newState.unassigned = variables
-      .filter(v => !baseState.assignments.has(v.id))
-      .map(v => v.id);
-
-    return newState;
-  }
-
-  /**
-   * 合并分阶段结果
-   * 
-   * Args:
-   *   coreResult: 核心课程阶段结果
-   *   generalResult: 一般课程阶段结果
-   * 
-   * Returns:
-   *   ScheduleState: 合并后的状态
-   */
-  private mergeStageResults(
-    coreResult: StageResult,
-    generalResult: StageResult
-  ): ScheduleState {
-    const mergedState: ScheduleState = {
-      assignments: new Map(),
-      unassigned: [],
-      conflicts: [],
-      violations: [],
-      score: 0,
-      isComplete: false,
-      isFeasible: true
-    };
-
-    // 合并核心课程结果
-    for (const [variableId, assignment] of coreResult.scheduleState.assignments) {
-      mergedState.assignments.set(variableId, assignment);
-    }
-
-    // 合并一般课程结果
-    for (const [variableId, assignment] of generalResult.scheduleState.assignments) {
-      mergedState.assignments.set(variableId, assignment);
-    }
-
-    // 合并未分配变量
-    mergedState.unassigned = [
-      ...coreResult.scheduleState.unassigned,
-      ...generalResult.scheduleState.unassigned
-    ];
-
-    // 合并冲突和违反
-    mergedState.conflicts = [
-      ...coreResult.scheduleState.conflicts,
-      ...generalResult.scheduleState.conflicts
-    ];
-
-    mergedState.violations = [
-      ...coreResult.scheduleState.violations,
-      ...generalResult.scheduleState.violations
-    ];
-
-    // 计算合并后的评分
-    mergedState.score = coreResult.scheduleState.score + generalResult.scheduleState.score;
-    
-    // 检查是否完成
-    mergedState.isComplete = mergedState.unassigned.length === 0;
-    
-    // 检查是否可行
-    mergedState.isFeasible = mergedState.violations.filter(v => v.isHard).length === 0;
-
-    console.log(`🔄 分阶段结果合并完成: 总分配 ${mergedState.assignments.size} 个，未分配 ${mergedState.unassigned.length} 个`);
-
-    return mergedState;
-  }
-
-  /**
-   * 报告分阶段进度
-   * 
-   * Args:
-   *   stageType: 当前阶段
-   *   stageProgress: 阶段进度 (0-100)
-   *   overallProgress: 总体进度 (0-100)
-   *   message: 阶段消息
-   *   stageStatistics: 阶段统计信息
-   */
-  private reportStageProgress(
-    stageType: StageType,
-    stageProgress: number,
-    overallProgress: number,
-    message: string,
-    stageStatistics: {
-      assignedVariables: number;
-      unassignedVariables: number;
-      hardViolations: number;
-      softViolations: number;
-    }
-  ): void {
-    this.stageProgress = {
-      currentStage: stageType,
-      totalStages: 2, // 核心课程 + 一般课程
-      stageProgress,
-      overallProgress,
-      stageMessage: message,
-      stageStatistics,
-      timestamp: Date.now()
-    };
-
-    if (this.progressCallback) {
-      this.progressCallback({
-        stage: stageType === StageType.CORE_COURSES ? 'core_courses' : 'general_courses',
-        percentage: overallProgress,
-        message: `[${stageType === StageType.CORE_COURSES ? '核心课程' : '一般课程'}] ${message}`,
-        assignedCount: stageStatistics.assignedVariables,
-        totalCount: stageStatistics.assignedVariables + stageStatistics.unassignedVariables
-      });
-    }
-
-    console.log(`📊 [${stageType}] 进度: ${stageProgress}% | 总体: ${overallProgress}% | ${message}`);
-  }
-
-  /**
-   * 获取分阶段进度信息
-   * 
-   * Returns:
-   *   StageProgress | null: 当前阶段进度信息
-   */
-  public getStageProgress(): StageProgress | null {
-    return this.stageProgress;
-  }
-
-  /**
-   * 获取分阶段结果
-   * 
-   * Returns:
-   *   Map<StageType, StageResult>: 各阶段结果
-   */
-  public getStageResults(): Map<StageType, StageResult> {
-    return this.stageResults;
-  }
-
-  /**
-   * 获取当前阶段
-   * 
-   * Returns:
-   *   StageType | null: 当前阶段
-   */
-  public getCurrentStage(): StageType | null {
-    return this.currentStage;
-  }
-
-  /**
-   * 重置分阶段状态
-   */
-  public resetStageState(): void {
-    this.currentStage = null;
-    this.stageResults.clear();
-    this.stageProgress = null; 
-    console.log('🔄 分阶段状态已重置');
-  }
-}

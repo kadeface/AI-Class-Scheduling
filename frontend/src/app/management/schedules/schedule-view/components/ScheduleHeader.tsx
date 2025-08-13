@@ -225,13 +225,13 @@ export function ScheduleHeader({
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">学年</label>
           <select 
-            value={filters.academicYear || '2024-2025'}
+            value={filters.academicYear || '2025-2026'}
             onChange={(e) => onFiltersChange({ ...filters, academicYear: e.target.value })}
             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
+            <option value="2025-2026">2025-2026</option>
             <option value="2024-2025">2024-2025</option>
             <option value="2023-2024">2023-2024</option>
-            <option value="2025-2026">2025-2026</option>
           </select>
         </div>
 

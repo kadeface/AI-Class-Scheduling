@@ -55,17 +55,28 @@ export class SchedulingController {
    */
   static async startScheduling(req: Request, res: Response): Promise<void> {
     try {
+      console.log('🔍 后端接收到的请求体:', JSON.stringify(req.body, null, 2));
+      
       const {
-        academicYear,
-        semester,
-        classIds,
-        rulesId,
-        algorithmConfig,
-        preserveExisting = false
+        academicYear,        // 学年 (如: "2024-2025")
+        semester,            // 学期 (1 或 2)
+        classIds,            // 指定班级ID数组 (可选)
+        rulesId,             // 排课规则ID (可选)
+        algorithmConfig,     // 算法配置参数 (可选)
+        preserveExisting = false  // 是否保留现有排课 (默认false)
       } = req.body;
+
+      console.log('🔍 排课规则参数检查:');
+      console.log('   rulesId原始值:', rulesId);
+      console.log('   rulesId类型:', typeof rulesId);
+      console.log('   rulesId是否为空:', !rulesId);
+      console.log('   rulesId是否为有效ObjectId:', rulesId ? mongoose.Types.ObjectId.isValid(rulesId) : 'N/A');
 
       // 验证必需参数
       if (!academicYear || !semester) {
+        console.error('❌ 参数验证失败: 学年或学期为空');
+        console.error('   academicYear:', academicYear);
+        console.error('   semester:', semester);
         res.status(400).json({
           success: false,
           error: '学年和学期不能为空'
@@ -73,8 +84,19 @@ export class SchedulingController {
         return;
       }
 
+      // 验证排课规则ID格式（如果提供）
+      if (rulesId && !mongoose.Types.ObjectId.isValid(rulesId)) {
+        console.error('❌ 排课规则ID格式无效:', rulesId);
+        res.status(400).json({
+          success: false,
+          error: `无效的排课规则ID格式: ${rulesId}`
+        });
+        return;
+      }
+
       // 生成任务ID
       const taskId = new mongoose.Types.ObjectId().toString();
+      console.log('✅ 生成任务ID:', taskId);
 
       // 构建排课请求
       const request: SchedulingRequest = {
@@ -85,6 +107,12 @@ export class SchedulingController {
         algorithmConfig,
         preserveExisting
       };
+
+      console.log('🔍 构建的排课请求:');
+      console.log('   rulesId转换后:', request.rulesId);
+      console.log('   rulesId类型:', typeof request.rulesId);
+      console.log('   rulesId是否为ObjectId:', request.rulesId instanceof mongoose.Types.ObjectId);
+      console.log('   完整请求对象:', JSON.stringify(request, null, 2));
 
       // 创建任务状态
       const task: SchedulingTask = {
@@ -101,35 +129,47 @@ export class SchedulingController {
       };
 
       SchedulingController.schedulingTasks.set(taskId, task);
+      console.log('✅ 任务状态已创建并存储');
 
       // 创建进度回调
       const progressCallback: ProgressCallback = (progress) => {
         task.progress = progress;
+        console.log(`📊 排课进度更新: ${progress.stage} - ${progress.percentage}% - ${progress.message}`);
       };
 
+      console.log('🚀 开始异步执行排课任务...');
+      
       // 异步执行排课
       SchedulingController.schedulingService.executeScheduling(request, progressCallback)
         .then(result => {
+          console.log('✅ 排课任务执行成功');
+          console.log('   结果:', JSON.stringify(result, null, 2));
           task.status = 'completed';
           task.result = result;
           task.endTime = new Date();
         })
         .catch(error => {
+          console.error('❌ 排课任务执行失败:', error);
           task.status = 'failed';
           task.error = error.message;
           task.endTime = new Date();
         });
 
+      console.log('📤 返回任务启动响应');
       res.json({
         success: true,
         data: {
           taskId,
-          message: '排课任务已启动'
+          message: '排课任务已启动',
+          rulesInfo: {
+            rulesId: rulesId || '使用默认规则',
+            rulesType: rulesId ? '指定规则' : '默认规则'
+          }
         }
       });
 
     } catch (error) {
-      console.error('启动排课任务失败:', error);
+      console.error('❌ 启动排课任务失败:', error);
       res.status(500).json({
         success: false,
         error: error instanceof Error ? error.message : '未知错误'

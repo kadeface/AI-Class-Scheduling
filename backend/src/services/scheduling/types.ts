@@ -43,6 +43,9 @@ export interface ScheduleVariable {
   courseId: mongoose.Types.ObjectId;   // 课程ID
   teacherId: mongoose.Types.ObjectId;  // 教师ID
   requiredHours: number;               // 需要的课时数
+  // 新增：课程信息字段
+  courseName?: string;                 // 课程名称
+  subject?: string;                    // 科目
   roomRequirements?: {                 // 教室需求
     roomType?: string;                 // 教室类型
     capacity?: number;                 // 容量需求
@@ -87,6 +90,7 @@ export enum ConstraintType {
   
   // 新增：科目特定约束类型
   SOFT_SUBJECT_CONSTRAINT = 'soft_subject_constraint', // 科目特定约束
+  HARD_SUBJECT_CONSTRAINT = 'hard_subject_constraint', // 科目特定硬约束
   SOFT_TEACHER_ROTATION = 'soft_teacher_rotation',    // 教师轮换约束
   
   // 新增：核心课程分布约束类型
@@ -250,4 +254,159 @@ export enum AlgorithmMode {
   CONSTRAINT_PROPAGATION = 'constraint_propagation',   // 约束传播
   HYBRID_ALGORITHM = 'hybrid',                         // 混合算法
   GENETIC_ALGORITHM = 'genetic',                       // 遗传算法
+}
+/**
+ * 分阶段排课相关类型定义
+ */
+
+/**
+ * 课程优先级枚举
+ */
+export enum CoursePriority {
+  CORE = 'core',           // 核心课程
+  GENERAL = 'general',     // 一般课程
+  SPECIAL = 'special'      // 特殊需求课程
+}
+
+/**
+ * 排课阶段枚举
+ */
+export enum SchedulingStage {
+  CORE_COURSES = 'core_courses',
+  GENERAL_COURSES = 'general_courses',
+  SPECIAL_REQUIREMENTS = 'special_requirements'
+}
+
+/**
+ * 阶段配置接口
+ */
+export interface StageConfig {
+  maxIterations: number;           // 最大迭代次数
+  timeLimit: number;               // 时间限制（秒）
+  enableOptimization: boolean;     // 是否启用优化
+  constraintPriority: 'high' | 'medium' | 'low'; // 约束优先级
+}
+
+/**
+ * 分阶段排课结果接口
+ */
+export interface StagedSchedulingResult {
+  success: boolean;                 // 是否成功
+  stage: SchedulingStage;          // 当前阶段
+  schedule: ScheduleState | null;  // 排课结果
+  message: string;                 // 结果信息
+  executionTime: number;           // 执行时间（毫秒）
+  iterations: number;              // 迭代次数
+  nextStage?: SchedulingStage;     // 下一阶段
+  stageProgress: number;           // 阶段进度 (0-100)
+  overallProgress: number;         // 总体进度 (0-100)
+}
+
+/**
+ * 分阶段排课配置接口
+ */
+export interface StagedSchedulingConfig {
+  coreCourses: StageConfig;        // 核心课程阶段配置
+  generalCourses: StageConfig;     // 一般课程阶段配置
+  specialRequirements: StageConfig; // 特殊需求阶段配置
+  enableProgressiveMode: boolean;  // 是否启用渐进模式
+  maxTotalTime: number;            // 最大总时间（秒）
+  enableFallback: boolean;         // 是否启用回退机制
+}
+
+/**
+ * 核心课程约束类型
+ */
+export interface CoreConstraint {
+  id: string;
+  type: 'teacher_conflict' | 'class_conflict' | 'room_conflict' | 'time_preference';
+  priority: 'high' | 'medium' | 'low';
+  description: string;
+  isHard: boolean;
+}
+
+/**
+ * 分阶段进度回调接口
+ */
+export type StagedProgressCallback = (progress: {
+  currentStage: SchedulingStage;   // 当前阶段
+  stageProgress: number;           // 阶段进度 (0-100)
+  overallProgress: number;         // 总体进度 (0-100)
+  message: string;                 // 当前操作信息
+  stageResults: Map<SchedulingStage, StagedSchedulingResult>; // 各阶段结果
+  timestamp: number;               // 时间戳
+}) => void;
+
+/**
+ * 分阶段排课相关类型定义
+ */
+
+/**
+ * 阶段类型枚举
+ */
+export enum StageType {
+  CORE_COURSES = 'core_courses',           // 核心课程阶段
+  GENERAL_COURSES = 'general_courses'      // 一般课程阶段
+}
+
+/**
+ * 分阶段配置
+ */
+export interface StagedSchedulingStageConfig {
+  stageType: StageType;                    // 阶段类型
+  maxIterations: number;                   // 最大迭代次数
+  timeLimit: number;                       // 时间限制（秒）
+  enableLocalOptimization: boolean;        // 是否启用局部优化
+  localOptimizationIterations: number;     // 局部优化迭代次数
+  constraintPriority: 'high' | 'medium' | 'low';  // 约束优先级
+  enableBacktracking: boolean;             // 是否启用回溯搜索
+}
+
+/**
+ * 分阶段结果
+ */
+export interface StageResult {
+  stageType: StageType;                    // 阶段类型
+  success: boolean;                         // 是否成功
+  scheduleState: ScheduleState;             // 排课状态
+  assignedVariables: number;                // 已分配变量数
+  unassignedVariables: number;             // 未分配变量数
+  hardViolations: number;                  // 硬约束违反数
+  softViolations: number;                  // 软约束违反数
+  executionTime: number;                   // 执行时间
+  message: string;                          // 结果消息
+  suggestions: string[];                    // 改进建议
+}
+
+/**
+ * 分阶段进度信息
+ */
+export interface StageProgress {
+  currentStage: StageType;                 // 当前阶段
+  totalStages: number;                     // 总阶段数
+  stageProgress: number;                   // 当前阶段进度 (0-100)
+  overallProgress: number;                 // 总体进度 (0-100)
+  stageMessage: string;                    // 阶段消息
+  stageStatistics: {                       // 阶段统计
+    assignedVariables: number;             // 已分配变量数
+    unassignedVariables: number;           // 未分配变量数
+    hardViolations: number;                // 硬约束违反数
+    softViolations: number;                // 软约束违反数
+  };
+  timestamp: number;                        // 时间戳
+}
+
+/**
+ * 课程分类结果
+ */
+export interface CourseClassification {
+  coreCourses: ScheduleVariable[];         // 核心课程变量
+  generalCourses: ScheduleVariable[];      // 一般课程变量
+  coreSubjects: string[];                  // 核心科目列表
+  classificationStats: {                   // 分类统计
+    totalVariables: number;                // 总变量数
+    coreCourseCount: number;               // 核心课程数量
+    generalCourseCount: number;            // 一般课程数量
+    coreSubjects: string[];                // 识别的核心科目
+  };
 }

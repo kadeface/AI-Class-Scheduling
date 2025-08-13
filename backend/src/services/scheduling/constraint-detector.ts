@@ -77,7 +77,7 @@ export class ConstraintDetector {
   ): ConflictInfo | null {
     const conflictingVariables: string[] = [];
 
-    for (const [variableId, existing] of existingAssignments) {
+    for (const [variableId, existing] of Array.from(existingAssignments.entries())) {
       if (existing.teacherId.equals(assignment.teacherId) &&
           this.isTimeSlotOverlap(assignment.timeSlot, existing.timeSlot)) {
         conflictingVariables.push(variableId);
@@ -114,7 +114,7 @@ export class ConstraintDetector {
   ): ConflictInfo | null {
     const conflictingVariables: string[] = [];
 
-    for (const [variableId, existing] of existingAssignments) {
+    for (const [variableId, existing] of Array.from(existingAssignments.entries())) {
       if (existing.classId.equals(assignment.classId) &&
           this.isTimeSlotOverlap(assignment.timeSlot, existing.timeSlot)) {
         conflictingVariables.push(variableId);
@@ -143,38 +143,54 @@ export class ConstraintDetector {
    *   existingAssignments: 已有的课程安排
    * 
    * Returns:
-   *   ConflictInfo | null: 如果有冲突返回冲突信息，否则返回null
+   *   Promise<ConflictInfo | null>: 如果有冲突返回冲突信息，否则返回null
    */
-  checkRoomTimeConflict(
+  async checkRoomTimeConflict(
     assignment: CourseAssignment,
     existingAssignments: Map<string, CourseAssignment>
-  ): ConflictInfo | null {
-    // 如果规则允许教室共享，则跳过检测
-    if (this.rules.roomConstraints.allowRoomSharing) {
+  ): Promise<ConflictInfo | null> {
+    try {
+      // 如果规则允许教室共享，则跳过检测
+      if (this.rules.roomConstraints.allowRoomSharing) {
+        return null;
+      }
+
+      // 检查是否为行政班使用固定教室
+      const classInfo = await mongoose.model('Class').findById(assignment.classId);
+      if (classInfo?.homeroom && classInfo.homeroom.equals(assignment.roomId)) {
+        // 行政班使用固定教室，只需要检查班级时间冲突
+        // 教室时间冲突检测可以跳过，因为班级冲突检测已经覆盖了这种情况
+        console.log(`✅ 行政班 ${classInfo.name} 使用固定教室，跳过教室冲突检测`);
+        return null;
+      }
+
+      // 检查其他教室的时间冲突
+      const conflictingVariables: string[] = [];
+
+      for (const [variableId, existing] of Array.from(existingAssignments.entries())) {
+        if (existing.roomId.equals(assignment.roomId) &&
+            this.isTimeSlotOverlap(assignment.timeSlot, existing.timeSlot)) {
+          conflictingVariables.push(variableId);
+        }
+      }
+
+      if (conflictingVariables.length > 0) {
+        return {
+          type: 'room',
+          resourceId: assignment.roomId,
+          timeSlot: assignment.timeSlot,
+          conflictingVariables,
+          severity: 'critical',
+          message: `教室在 ${this.formatTimeSlot(assignment.timeSlot)} 时间段有冲突安排`
+        };
+      }
+
+      return null;
+    } catch (error) {
+      console.error('教室冲突检测失败:', error);
+      // 如果检测失败，返回null以避免阻塞排课流程
       return null;
     }
-
-    const conflictingVariables: string[] = [];
-
-    for (const [variableId, existing] of existingAssignments) {
-      if (existing.roomId.equals(assignment.roomId) &&
-          this.isTimeSlotOverlap(assignment.timeSlot, existing.timeSlot)) {
-        conflictingVariables.push(variableId);
-      }
-    }
-
-    if (conflictingVariables.length > 0) {
-      return {
-        type: 'room',
-        resourceId: assignment.roomId,
-        timeSlot: assignment.timeSlot,
-        conflictingVariables,
-        severity: 'critical',
-        message: `教室在 ${this.formatTimeSlot(assignment.timeSlot)} 时间段有冲突安排`
-      };
-    }
-
-    return null;
   }
 
   /**
@@ -265,7 +281,7 @@ export class ConstraintDetector {
     }
 
     // 检查每日最大课时约束
-    for (const [day, dayAssignments] of dailyAssignments) {
+    for (const [day, dayAssignments] of Array.from(dailyAssignments.entries())) {
       if (dayAssignments.length > teacherConstraints.maxDailyHours) {
         violations.push({
           constraintType: ConstraintType.SOFT_WORKLOAD_BALANCE,
@@ -385,12 +401,12 @@ export class ConstraintDetector {
    *   existingAssignments: 已有的课程安排
    * 
    * Returns:
-   *   ConflictInfo[]: 冲突列表
+   *   Promise<ConflictInfo[]>: 冲突列表
    */
-  checkAllConflicts(
+  async checkAllConflicts(
     assignment: CourseAssignment,
     existingAssignments: Map<string, CourseAssignment>
-  ): ConflictInfo[] {
+  ): Promise<ConflictInfo[]> {
     const conflicts: ConflictInfo[] = [];
 
     // 检测教师冲突
@@ -401,8 +417,8 @@ export class ConstraintDetector {
     const classConflict = this.checkClassTimeConflict(assignment, existingAssignments);
     if (classConflict) conflicts.push(classConflict);
 
-    // 检测教室冲突
-    const roomConflict = this.checkRoomTimeConflict(assignment, existingAssignments);
+    // 检测教室冲突（异步）
+    const roomConflict = await this.checkRoomTimeConflict(assignment, existingAssignments);
     if (roomConflict) conflicts.push(roomConflict);
 
     return conflicts;
@@ -524,25 +540,31 @@ export class ConstraintDetector {
   ): ConstraintViolation[] {
     const violations: ConstraintViolation[] = [];
 
-    // 1. 体育课特殊约束
+    // 1. 非核心课程每日限制检测（新增）
+    const dailyLimitViolation = this.checkNonCoreSubjectDailyLimit(assignment, existingAssignments);
+    if (dailyLimitViolation) {
+      violations.push(dailyLimitViolation);
+    }
+
+    // 2. 体育课特殊约束
     if (subjectName === '体育') {
       const peViolations = this.checkPhysicalEducationConstraints(assignment, existingAssignments);
       violations.push(...peViolations);
     }
 
-    // 2. 艺术课特殊约束
+    // 3. 艺术课特殊约束
     if (['音乐', '美术'].includes(subjectName)) {
       const artViolations = this.checkArtSubjectConstraints(assignment, existingAssignments);
       violations.push(...artViolations);
     }
 
-    // 3. 实验课特殊约束
+    // 4. 实验课特殊约束
     if (['物理', '化学', '生物'].includes(subjectName)) {
       const labViolations = this.checkLabSubjectConstraints(assignment, existingAssignments);
       violations.push(...labViolations);
     }
 
-    // 4. 核心课程黄金时段保护
+    // 5. 核心课程黄金时段保护
     if (this.isCoreSubject(subjectName)) {
       const coreViolations = this.checkCoreSubjectGoldenTimeProtection(assignment, existingAssignments);
       violations.push(...coreViolations);
@@ -563,7 +585,7 @@ export class ConstraintDetector {
     if (!subjectName) return null;
 
     // 检查是否有连续安排
-    for (const [_, existing] of existingAssignments) {
+    for (const [_, existing] of Array.from(existingAssignments.entries())) {
       if (existing.classId.equals(assignment.classId) && 
           this.getSubjectNameSync(existing.courseId) === subjectName) {
         
@@ -598,7 +620,7 @@ export class ConstraintDetector {
     if (!subjectName) return null;
     const minInterval = subjectRule.minInterval;
     
-    for (const [_, existing] of existingAssignments) {
+    for (const [_, existing] of Array.from(existingAssignments.entries())) {
       if (existing.classId.equals(assignment.classId) && 
           this.getSubjectNameSync(existing.courseId) === subjectName) {
         
@@ -636,7 +658,7 @@ export class ConstraintDetector {
     
     let dailyCount = 1; // 当前要安排的课程
     
-    for (const [_, existing] of existingAssignments) {
+    for (const [_, existing] of Array.from(existingAssignments.entries())) {
       if (existing.classId.equals(assignment.classId) && 
           this.getSubjectNameSync(existing.courseId) === subjectName &&
           existing.timeSlot.dayOfWeek === assignment.timeSlot.dayOfWeek) {
@@ -672,7 +694,7 @@ export class ConstraintDetector {
     
     if (minRestPeriods === 0) return null;
     
-    for (const [_, existing] of existingAssignments) {
+    for (const [_, existing] of Array.from(existingAssignments.entries())) {
       if (existing.classId.equals(assignment.classId) && 
           this.getSubjectNameSync(existing.courseId) === subjectName) {
         
@@ -717,21 +739,25 @@ export class ConstraintDetector {
       });
     }
 
-    // 2. 检查连排体育课的合理性
+    // 2. 检查连排体育课约束（硬约束：体育课不能连排）
     if (this.isContinuousPhysicalEducation(assignment, existingAssignments)) {
-      if (!this.isSuitableForContinuousPE(assignment.timeSlot)) {
-        violations.push({
-          constraintType: ConstraintType.SOFT_SUBJECT_CONSTRAINT,
-          isHard: false,
-          penalty: 60,
-          variables: [assignment.variableId],
-          message: '连排体育课时间安排不合理',
-          suggestion: '建议调整到更适合连排的时段'
-        });
-      }
+      violations.push({
+        constraintType: ConstraintType.HARD_SUBJECT_CONSTRAINT,
+        isHard: true,
+        penalty: 1000, // 高惩罚分数，确保不会被违反
+        variables: [assignment.variableId],
+        message: '体育课不能进行连排',
+        suggestion: '必须将体育课安排在不同时间段'
+      });
     }
 
-    // 3. 检查体育课与理论课的间隔
+    // 3. 检查同一天体育课数量约束（硬约束：不能同一天两节体育课）
+    const dailyPEViolation = this.checkDailyPhysicalEducationLimit(assignment, existingAssignments);
+    if (dailyPEViolation) {
+      violations.push(dailyPEViolation);
+    }
+
+    // 4. 检查体育课与理论课的间隔
     const theoryIntervalViolation = this.checkPETheoryInterval(assignment, existingAssignments);
     if (theoryIntervalViolation) {
       violations.push(theoryIntervalViolation);
@@ -809,7 +835,7 @@ export class ConstraintDetector {
   ): ConstraintViolation[] {
     const violations: ConstraintViolation[] = [];
     
-    for (const [_, existing] of existingAssignments) {
+    for (const [_, existing] of Array.from(existingAssignments.entries())) {
       if (existing.classId.equals(assignment.classId) && 
           this.isCoreSubject(this.getSubjectNameSync(existing.courseId) || '')) {
         // 检查核心课程是否被安排在非黄金时段
@@ -915,7 +941,7 @@ export class ConstraintDetector {
     const maxDaily = strategy.maxDailyOccurrences;
     let dailyCount = 1; // 当前要安排的课程
     
-    for (const [_, existing] of existingAssignments) {
+    for (const [_, existing] of Array.from(existingAssignments.entries())) {
       if (existing.classId.equals(assignment.classId) && 
           this.getSubjectNameSync(existing.courseId) === subjectName &&
           existing.timeSlot.dayOfWeek === assignment.timeSlot.dayOfWeek) {
@@ -952,7 +978,7 @@ export class ConstraintDetector {
     // 统计当前已安排的天数
     const scheduledDays = new Set<number>();
     
-    for (const [_, existing] of existingAssignments) {
+    for (const [_, existing] of Array.from(existingAssignments.entries())) {
       if (existing.classId.equals(classId) && 
           this.getSubjectNameSync(existing.courseId) === subjectName) {
         scheduledDays.add(existing.timeSlot.dayOfWeek);
@@ -995,7 +1021,7 @@ export class ConstraintDetector {
     let hasPrevDay = false;
     let hasNextDay = false;
     
-    for (const [_, existing] of existingAssignments) {
+    for (const [_, existing] of Array.from(existingAssignments.entries())) {
       if (existing.classId.equals(classId) && 
           this.getSubjectNameSync(existing.courseId) === subjectName) {
         if (existing.timeSlot.dayOfWeek === prevDay) {
@@ -1039,7 +1065,7 @@ export class ConstraintDetector {
     
     // 按天排序，检查连续安排
     const scheduledDays = new Set<number>();
-    for (const [_, existing] of existingAssignments) {
+    for (const [_, existing] of Array.from(existingAssignments.entries())) {
       if (existing.classId.equals(classId) && 
           this.getSubjectNameSync(existing.courseId) === subjectName) {
         scheduledDays.add(existing.timeSlot.dayOfWeek);
@@ -1164,7 +1190,7 @@ export class ConstraintDetector {
     }
     
     // 统计已有安排
-    for (const [_, existing] of existingAssignments) {
+    for (const [_, existing] of Array.from(existingAssignments.entries())) {
       if (existing.classId.equals(classId) && 
           this.getSubjectNameSync(existing.courseId) === subjectName) {
         const day = existing.timeSlot.dayOfWeek;
@@ -1202,6 +1228,58 @@ export class ConstraintDetector {
   }
 
   /**
+   * 检测非核心课程每日限制约束（硬约束）
+   * 
+   * Args:
+   *   assignment: 当前课程安排
+   *   existingAssignments: 现有安排
+   * 
+   * Returns:
+   *   ConstraintViolation | null: 约束违反信息
+   */
+  private checkNonCoreSubjectDailyLimit(
+    assignment: CourseAssignment,
+    existingAssignments: Map<string, CourseAssignment>
+  ): ConstraintViolation | null {
+    const subjectName = this.getSubjectNameSync(assignment.courseId);
+    if (!subjectName) {
+      return null;
+    }
+
+    // 跳过核心课程检查
+    if (this.isCoreSubject(subjectName)) {
+      return null;
+    }
+
+    const classId = assignment.classId;
+    const dayOfWeek = assignment.timeSlot.dayOfWeek;
+    let dailyCount = 1; // 当前要安排的课程
+
+    // 统计当天该科目的课程数量
+    for (const [_, existing] of Array.from(existingAssignments.entries())) {
+      if (existing.classId.equals(classId) && 
+          existing.timeSlot.dayOfWeek === dayOfWeek &&
+          this.getSubjectNameSync(existing.courseId) === subjectName) {
+        dailyCount++;
+      }
+    }
+
+    // 非核心课程每日最多1节
+    if (dailyCount > 1) {
+      return {
+        constraintType: ConstraintType.HARD_SUBJECT_CONSTRAINT,
+        isHard: true,
+        penalty: 1500, // 高惩罚分数，确保不会被违反
+        variables: [assignment.variableId],
+        message: `非核心课程 ${subjectName} 在同一天安排了 ${dailyCount} 节课，超过每日限制`,
+        suggestion: `必须将 ${subjectName} 安排到其他天，每日最多1节`
+      };
+    }
+
+    return null;
+  }
+
+  /**
    * 判断是否为核心课程黄金时段
    */
   private isGoldenTimeForCoreSubjects(timeSlot: TimeSlot): boolean {
@@ -1217,7 +1295,7 @@ export class ConstraintDetector {
     existingAssignments: Map<string, CourseAssignment>
   ): boolean {
     // 检查同一天相邻节次是否有体育课
-    for (const [_, existing] of existingAssignments) {
+    for (const [_, existing] of Array.from(existingAssignments.entries())) {
       if (existing.classId.equals(assignment.classId) && 
           this.getSubjectNameSync(existing.courseId) === '体育' &&
           existing.timeSlot.dayOfWeek === assignment.timeSlot.dayOfWeek &&
@@ -1262,7 +1340,7 @@ export class ConstraintDetector {
   ): ConstraintViolation | null {
     const theorySubjects = ['语文', '数学', '英语', '物理', '化学', '生物', '历史', '地理', '政治'];
     
-    for (const [_, existing] of existingAssignments) {
+    for (const [_, existing] of Array.from(existingAssignments.entries())) {
       if (existing.classId.equals(assignment.classId) && 
           this.getSubjectNameSync(existing.courseId) === '体育' &&
           theorySubjects.includes(this.getSubjectNameSync(existing.courseId) || '')) {
@@ -1293,7 +1371,7 @@ export class ConstraintDetector {
     assignment: CourseAssignment,
     existingAssignments: Map<string, CourseAssignment>
   ): ConstraintViolation | null {
-    for (const [_, existing] of existingAssignments) {
+    for (const [_, existing] of Array.from(existingAssignments.entries())) {
       if (existing.classId.equals(assignment.classId) && 
           this.isCoreSubject(this.getSubjectNameSync(existing.courseId) || '')) {
         
@@ -1332,7 +1410,7 @@ export class ConstraintDetector {
     
     // 检查是否在同一天有对应的理论课
     let hasTheoryClass = false;
-    for (const [_, existing] of existingAssignments) {
+    for (const [_, existing] of Array.from(existingAssignments.entries())) {
       if (existing.classId.equals(assignment.classId) && 
           this.getSubjectNameSync(existing.courseId) === theorySubject &&
           existing.timeSlot.dayOfWeek === assignment.timeSlot.dayOfWeek) {
@@ -1397,6 +1475,45 @@ export class ConstraintDetector {
     if (this.subjectNameCache && this.subjectNameCache.has(courseId.toString())) {
       return this.subjectNameCache.get(courseId.toString())!;
     }
+    return null;
+  }
+
+
+
+  /**
+   * 检测同一天体育课数量约束（硬约束）
+   * 
+   * @deprecated 已废弃，请使用 checkNonCoreSubjectDailyLimit 方法
+   */
+  private checkDailyPhysicalEducationLimit(
+    assignment: CourseAssignment,
+    existingAssignments: Map<string, CourseAssignment>
+  ): ConstraintViolation | null {
+    const subjectName = this.getSubjectNameSync(assignment.courseId);
+    if (!subjectName || subjectName !== '体育') {
+      return null; // 只对体育课进行同一天两节限制
+    }
+
+    let dailyCount = 0;
+    for (const [_, existing] of Array.from(existingAssignments.entries())) {
+      if (existing.classId.equals(assignment.classId) && 
+          this.getSubjectNameSync(existing.courseId) === '体育' &&
+          existing.timeSlot.dayOfWeek === assignment.timeSlot.dayOfWeek) {
+        dailyCount++;
+      }
+    }
+
+    if (dailyCount >= 2) {
+      return {
+        constraintType: ConstraintType.HARD_SUBJECT_CONSTRAINT,
+        isHard: true,
+        penalty: 1000, // 高惩罚分数，确保不会被违反
+        variables: [assignment.variableId],
+        message: '体育课不能在同一天安排两节',
+        suggestion: '必须将体育课安排在不同时间段'
+      };
+    }
+
     return null;
   }
 }

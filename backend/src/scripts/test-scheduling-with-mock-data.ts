@@ -4,10 +4,10 @@
  * 验证生成的数据是否能够成功进行智能排课
  */
 
-import dotenv from 'dotenv';
-import path from 'path';
+import * as dotenv from 'dotenv';
+import * as path from 'path';
 import mongoose from 'mongoose';
-import axios from 'axios';
+import * as axios from 'axios';
 
 // 加载环境变量
 dotenv.config({ path: path.join(__dirname, '../../.env') });
@@ -53,8 +53,9 @@ async function checkBackendService(): Promise<boolean> {
 async function getTeachingPlans(): Promise<any[]> {
   try {
     const response = await axios.get(`${API_BASE_URL}/teaching-plans`);
-    console.log(`✅ 获取到 ${response.data.data.length} 个教学计划`);
-    return response.data.data;
+    const data = response.data as any;
+    console.log(`✅ 获取到 ${data.data.length} 个教学计划`);
+    return data.data;
   } catch (error) {
     console.error('❌ 获取教学计划失败:', error);
     throw error;
@@ -78,8 +79,9 @@ async function testSchedulingAPI(teachingPlanId: string): Promise<void> {
       }
     });
 
-    if (response.data.success) {
-      const taskId = response.data.data.taskId;
+    const data = response.data as any;
+    if (data.success) {
+      const taskId = data.data.taskId;
       console.log(`✅ 排课任务创建成功，任务ID: ${taskId}`);
       
       // 轮询检查任务状态
@@ -91,13 +93,14 @@ async function testSchedulingAPI(teachingPlanId: string): Promise<void> {
         
         try {
           const statusResponse = await axios.get(`${API_BASE_URL}/scheduling/status/${taskId}`);
-          const status = statusResponse.data.data.status;
-          const progress = statusResponse.data.data.progress;
+          const statusData = statusResponse.data as any;
+          const status = statusData.data.status;
+          const progress = statusData.data.progress;
           
           console.log(`📊 排课进度: ${status} - ${(progress * 100).toFixed(1)}%`);
           
           if (status === 'completed') {
-            const result = statusResponse.data.data.result;
+            const result = statusData.data.result;
             console.log('🎉 排课完成!');
             console.log(`   成功率: ${(result.successRate * 100).toFixed(1)}%`);
             console.log(`   总时段: ${result.totalSlots}`);
@@ -106,7 +109,7 @@ async function testSchedulingAPI(teachingPlanId: string): Promise<void> {
             console.log(`   执行时间: ${result.executionTime}ms`);
             return;
           } else if (status === 'failed') {
-            console.error('❌ 排课失败:', statusResponse.data.data.error);
+            console.error('❌ 排课失败:', statusData.data.error);
             return;
           }
           
@@ -122,7 +125,7 @@ async function testSchedulingAPI(teachingPlanId: string): Promise<void> {
       }
       
     } else {
-      console.error('❌ 排课任务创建失败:', response.data.message);
+      console.error('❌ 排课任务创建失败:', data.message);
     }
   } catch (error: any) {
     console.error('❌ 排课测试失败:', error.response?.data?.message || error.message);

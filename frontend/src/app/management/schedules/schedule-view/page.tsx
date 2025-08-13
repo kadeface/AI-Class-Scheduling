@@ -34,7 +34,7 @@ export default function ScheduleViewPage() {
   const [availableTargets, setAvailableTargets] = useState<ScheduleOption[]>([]);
   const [scheduleData, setScheduleData] = useState<ScheduleViewData>();
   const [filters, setFilters] = useState<ScheduleFilters>({
-    academicYear: '2024-2025',
+    academicYear: '2025-2026',
     semester: '1'
   });
 
