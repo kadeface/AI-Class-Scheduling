@@ -786,7 +786,41 @@ export class SchedulingService {
    */
   private async loadRooms(teachingPlans: ITeachingPlan[]): Promise<any[]> {
     try {
-      console.log('🔍 [教室加载] 开始根据班级homeroom加载固定教室...');
+      console.log('🔍 [教室加载] 开始加载所有可用教室...');
+      
+      // 1. 加载固定教室（班级专用）
+      const fixedRooms = await this.loadFixedRooms(teachingPlans);
+      
+      // 2. 加载功能教室（共享使用）
+      const functionalRooms = await this.loadFunctionalRooms();
+      
+      // 3. 合并所有教室
+      const allRooms = [...fixedRooms, ...functionalRooms];
+      
+      console.log(`   📊 教室加载完成: 总计 ${allRooms.length} 个教室`);
+      console.log(`      - 固定教室: ${fixedRooms.length} 个`);
+      console.log(`      - 功能教室: ${functionalRooms.length} 个`);
+      
+      return allRooms;
+      
+    } catch (error) {
+      console.error('❌ 加载教室失败，使用默认配置:', error);
+      return this.getDefaultRooms();
+    }
+  }
+  
+  /**
+   * 加载固定教室（班级专用）
+   * 
+   * Args:
+   *   teachingPlans: 教学计划列表
+   * 
+   * Returns:
+   *   Promise<any[]>: 固定教室列表
+   */
+  private async loadFixedRooms(teachingPlans: ITeachingPlan[]): Promise<any[]> {
+    try {
+      console.log('   🔍 [固定教室] 开始加载班级固定教室...');
       
       // 1. 收集所有班级ID
       const classIds = new Set<string>();
@@ -797,14 +831,12 @@ export class SchedulingService {
         }
       }
       
-      //console.log(`   📊 涉及班级数量: ${classIds.size}`);
-      
       if (classIds.size === 0) {
-        console.log('⚠️ 没有找到班级信息，使用默认教室配置');
-        return this.getDefaultRooms();
+        console.log('      ⚠️ 没有找到班级信息');
+        return [];
       }
       
-      // 2. 直接加载班级的固定教室（homeroom）
+      // 2. 加载班级的固定教室（homeroom）
       const fixedRooms: any[] = [];
       const classes = await Class.find({ 
         _id: { $in: Array.from(classIds).map(id => new mongoose.Types.ObjectId(id)) }
@@ -819,28 +851,65 @@ export class SchedulingService {
             assignedClass: classInfo._id,
             className: classInfo.name
           });
- //         console.log(`   🏠 班级 ${classInfo.name} -> 固定教室: ${room.name} (${room._id})`);
+          console.log(`      🏠 班级 ${classInfo.name} -> 固定教室: ${room.name} (${room._id})`);
         } else {
-          console.log(`   ⚠️ 班级 ${classInfo.name} 没有固定教室配置`);
+          console.log(`      ⚠️ 班级 ${classInfo.name} 没有固定教室配置`);
         }
       }
       
-      // 3. 如果没有找到固定教室，使用默认配置
-      if (fixedRooms.length === 0) {
-        console.log('⚠️ 没有找到任何固定教室，使用默认教室配置');
-        return this.getDefaultRooms();
-      }
-      
-      console.log(`   📊 教室加载完成: 总计 ${fixedRooms.length} 个固定教室`);
-      
+      console.log(`      📊 固定教室加载完成: ${fixedRooms.length} 个`);
       return fixedRooms;
       
     } catch (error) {
-      console.error('❌ 加载固定教室失败，使用默认配置:', error);
-      return this.getDefaultRooms();
+      console.error('      ❌ 加载固定教室失败:', error);
+      return [];
     }
   }
-  
+
+  /**
+   * 加载功能教室（共享使用）
+   * 
+   * Returns:
+   *   Promise<any[]>: 功能教室列表
+   */
+  private async loadFunctionalRooms(): Promise<any[]> {
+    try {
+      console.log('   🔍 [功能教室] 开始加载功能教室...');
+      
+      // 1. 定义功能教室类型
+      const functionalRoomTypes = [
+        '体育馆', '体育场', '操场', '实验室', '物理实验室', '化学实验室', 
+        '计算机教室', '电脑教室', '音乐教室', '美术教室', '舞蹈教室'
+      ];
+      
+      // 2. 从数据库加载功能教室
+      const Room = mongoose.model('Room');
+      const functionalRooms = await Room.find({
+        type: { $in: functionalRoomTypes },
+        isActive: true
+      });
+      
+      // 3. 标记为功能教室
+      const markedRooms = functionalRooms.map(room => ({
+        ...room.toObject(),
+        isFixedClassroom: false,
+        assignedClass: null, // 功能教室不固定分配给班级
+        className: null
+      }));
+      
+      console.log(`      📊 功能教室加载完成: ${markedRooms.length} 个`);
+      markedRooms.forEach(room => {
+        console.log(`         🏟️ ${room.name} (${room.type}) - ${room._id}`);
+      });
+      
+      return markedRooms;
+      
+    } catch (error) {
+      console.error('      ❌ 加载功能教室失败:', error);
+      return [];
+    }
+  }
+
   /**
    * 获取默认教室配置
    * 
@@ -1188,7 +1257,7 @@ export class SchedulingService {
         };
         
         scheduleDocuments.push(scheduleDoc);
-        console.log(`✅ 准备保存课程: ${assignment.courseId} -> 班级: ${assignment.classId} -> 教师: ${assignment.teacherId} -> 时间: 周${assignment.timeSlot.dayOfWeek}第${assignment.timeSlot.period}节`);
+        //console.log(`✅ 准备保存课程: ${assignment.courseId} -> 班级: ${assignment.classId} -> 教师: ${assignment.teacherId} -> 时间: 周${assignment.timeSlot.dayOfWeek}第${assignment.timeSlot.period}节`);
       }
 
       if (scheduleDocuments.length > 0) {
@@ -1264,7 +1333,7 @@ export class SchedulingService {
           continue;
         }
         
-        const variableId = `${assignment.classId}_${assignment.courseId}_${assignment.teacherId}_${assignment.timeSlot.period}`;
+        const variableId = `${assignment.classId}_${assignment.courseId}_${assignment.teacherId}_${assignment.timeSlot.dayOfWeek}_${assignment.timeSlot.period}`;
         
         const scheduleAssignment: CourseAssignment = {
           variableId: variableId,

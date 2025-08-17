@@ -747,12 +747,12 @@ export class K12SchedulingEngine {
       console.log(`   🔍 开始转换 ${this.currentAssignments.size} 个排课分配...`);
       
       for (const [variableId, assignment] of this.currentAssignments.entries()) {
-        console.log(`   📋 处理分配 ${variableId}:`);
-        console.log(`      班级ID: ${assignment.classId}`);
-        console.log(`      课程ID: ${assignment.courseId}`);
-        console.log(`      教师ID: ${assignment.teacherId}`);
-        console.log(`      教室ID: ${assignment.roomId}`);
-        console.log(`      时间: 周${assignment.timeSlot.dayOfWeek}第${assignment.timeSlot.period}节`);
+//       console.log(`   📋 处理分配 ${variableId}:`);
+//        console.log(`      班级ID: ${assignment.classId}`);
+//        console.log(`      课程ID: ${assignment.courseId}`);
+//        console.log(`      教师ID: ${assignment.teacherId}`);
+//        console.log(`      教室ID: ${assignment.roomId}`);
+//        console.log(`      时间: 周${assignment.timeSlot.dayOfWeek}第${assignment.timeSlot.period}节`);
         
         const scheduleDoc = {
           academicYear: this.academicYear,
@@ -769,7 +769,7 @@ export class K12SchedulingEngine {
         };
         
         scheduleDocuments.push(scheduleDoc);
-        console.log(`      ✅ 转换完成`);
+ //       console.log(`      ✅ 转换完成`);
       }
       
       // 🔧 修改：不再直接保存到数据库，只进行数据转换和验证
@@ -1174,7 +1174,7 @@ private isTimeSlotFeasible(
   timeSlot: BaseTimeSlot, 
   assignments: Map<string, CourseAssignment>
 ): boolean {
-  console.log(`         🔍 [预检查机制] 检查变量 ${variable.id} 在时间槽 ${timeSlot.dayOfWeek}-${timeSlot.period} 的可行性...`);
+//  console.log(`         🔍 [预检查机制] 检查变量 ${variable.id} 在时间槽 ${timeSlot.dayOfWeek}-${timeSlot.period} 的可行性...`);
   
   // 直接使用预检查机制，避免重复的课室分配逻辑
   return this.isAssignmentFeasible(variable, timeSlot);
@@ -1190,7 +1190,7 @@ private checkCompleteConstraints(
   room: any, 
   assignments: Map<string, CourseAssignment>
 ): boolean {
-  console.log(`         🔍 [完整约束检测] 执行完整约束检测...`);
+//  console.log(`         🔍 [完整约束检测] 执行完整约束检测...`);
   
   try {
     // 性能优化：快速预检查
@@ -1215,11 +1215,11 @@ private checkCompleteConstraints(
       return false;
     }
     
-    console.log(`            ✅ 完整约束检测通过`);
+  //  console.log(`            ✅ 完整约束检测通过`);
     return true;
     
   } catch (error) {
-    console.error(`            ❌ 完整约束检测过程中发生错误:`, error);
+  //  console.error(`            ❌ 完整约束检测过程中发生错误:`, error);
     return false;
   }
 }
@@ -1236,20 +1236,20 @@ private quickPreCheck(
 ): boolean {
   // 1. 基本有效性检查
   if (!variable || !timeSlot || !room) {
-    console.log(`            ❌ 快速预检查失败: 参数无效`);
+  //  console.log(`            ❌ 快速预检查失败: 参数无效`);
     return false;
   }
   
   // 2. 课室状态快速检查
   if (room.isActive === false) {
-    console.log(`            ❌ 快速预检查失败: 课室未激活`);
+  //  console.log(`            ❌ 快速预检查失败: 课室未激活`);
     return false;
   }
   
   // 3. 时间槽有效性检查
   if (timeSlot.dayOfWeek < 1 || timeSlot.dayOfWeek > 5 || 
       timeSlot.period < 1 || timeSlot.period > 8) {
-    console.log(`            ❌ 快速预检查失败: 时间槽无效`);
+  //  console.log(`            ❌ 快速预检查失败: 时间槽无效`);
     return false;
   }
   
@@ -1266,7 +1266,7 @@ private checkRoomConflict(
   assignments: Map<string, CourseAssignment>
 ): boolean {
   try {
-    console.log(`            🔍 [课室冲突检测] 检查课室 ${room._id} 在时间槽 ${timeSlot.dayOfWeek}-${timeSlot.period} 的冲突...`);
+  //  console.log(`            🔍 [课室冲突检测] 检查课室 ${room._id} 在时间槽 ${timeSlot.dayOfWeek}-${timeSlot.period} 的冲突...`);
     
     let conflictCount = 0;
     for (const assignment of assignments.values()) {
@@ -1276,23 +1276,23 @@ private checkRoomConflict(
           assignment.timeSlot.period === timeSlot.period) {
         
         conflictCount++;
-        console.log(`               ⚠️ 发现课室冲突: 与分配 ${assignment.variableId} 冲突`);
-        console.log(`                  - 冲突分配: ${assignment.variableId}`);
-        console.log(`                  - 冲突时间: ${assignment.timeSlot.dayOfWeek}-${assignment.timeSlot.period}`);
-        console.log(`                  - 冲突课室: ${assignment.roomId}`);
+//        console.log(`               ⚠️ 发现课室冲突: 与分配 ${assignment.variableId} 冲突`);
+//        console.log(`                  - 冲突分配: ${assignment.variableId}`);
+//        console.log(`                  - 冲突时间: ${assignment.timeSlot.dayOfWeek}-${assignment.timeSlot.period}`);
+//        console.log(`                  - 冲突课室: ${assignment.roomId}`);
       }
     }
     
     if (conflictCount > 0) {
-      console.log(`            ❌ 课室冲突检测完成: 发现 ${conflictCount} 个冲突`);
+  //    console.log(`            ❌ 课室冲突检测完成: 发现 ${conflictCount} 个冲突`);
       return true; // 存在冲突
     }
     
-    console.log(`            ✅ 课室冲突检测完成: 无冲突`);
+  //  console.log(`            ✅ 课室冲突检测完成: 无冲突`);
     return false; // 无冲突
     
   } catch (error) {
-    console.error(`            ❌ 课室冲突检测过程中发生错误:`, error);
+  //  console.error(`            ❌ 课室冲突检测过程中发生错误:`, error);
     // 发生错误时，为了安全起见，认为存在冲突
     return true;
   }
@@ -1314,7 +1314,7 @@ private checkRoomRequirements(room: any, courseRequirements: any): boolean {
     // 检查容量要求
     if (courseRequirements.capacity && room.capacity) {
       if (room.capacity < courseRequirements.capacity) {
-        console.log(`         ❌ 课室容量不满足要求: 需要 ${courseRequirements.capacity}, 课室容量 ${room.capacity}`);
+  //      console.log(`         ❌ 课室容量不满足要求: 需要 ${courseRequirements.capacity}, 课室容量 ${room.capacity}`);
         return false;
       }
     }
@@ -1336,16 +1336,16 @@ private checkRoomRequirements(room: any, courseRequirements: any): boolean {
     if (courseRequirements.types && courseRequirements.types.length > 0) {
       const roomType = room.type || room.roomType;
       if (!courseRequirements.types.includes(roomType)) {
-        console.log(`         ❌ 课室类型不满足要求: 需要 ${courseRequirements.types.join(', ')}, 课室类型 ${roomType}`);
+  //      console.log(`         ❌ 课室类型不满足要求: 需要 ${courseRequirements.types.join(', ')}, 课室类型 ${roomType}`);
         return false;
       }
     }
 
-    console.log(`         ✅ 课室要求检查通过`);
+  //  console.log(`         ✅ 课室要求检查通过`);
     return true;
 
   } catch (error) {
-    console.error(`         ❌ 课室要求检查过程中发生错误:`, error);
+  //  console.error(`         ❌ 课室要求检查过程中发生错误:`, error);
     return false;
   }
 }
@@ -1359,14 +1359,14 @@ private checkBasicConflicts(
   timeSlot: BaseTimeSlot, 
   assignments: Map<string, CourseAssignment>
 ): boolean {
-  console.log(`         🔍 [基本约束检测] 检查基本冲突...`);
+//    console.log(`         🔍 [基本约束检测] 检查基本冲突...`);
   
   // 检查教师冲突
   for (const assignment of assignments.values()) {
     if (assignment.teacherId.toString() === variable.teacherId.toString() &&
         assignment.timeSlot.dayOfWeek === timeSlot.dayOfWeek &&
         assignment.timeSlot.period === timeSlot.period) {
-      console.log(`            ❌ 教师冲突: 教师 ${variable.teacherId} 在时间槽 ${timeSlot.dayOfWeek}-${timeSlot.period} 已有课程`);
+  //    console.log(`            ❌ 教师冲突: 教师 ${variable.teacherId} 在时间槽 ${timeSlot.dayOfWeek}-${timeSlot.period} 已有课程`);
       return false;
     }
   }
@@ -1376,12 +1376,12 @@ private checkBasicConflicts(
     if (assignment.classId.toString() === variable.classId.toString() &&
         assignment.timeSlot.dayOfWeek === timeSlot.dayOfWeek &&
         assignment.timeSlot.period === timeSlot.period) {
-      console.log(`            ❌ 班级冲突: 班级 ${variable.classId} 在时间槽 ${timeSlot.dayOfWeek}-${timeSlot.period} 已有课程`);
+  //    console.log(`            ❌ 班级冲突: 班级 ${variable.classId} 在时间槽 ${timeSlot.dayOfWeek}-${timeSlot.period} 已有课程`);
       return false;
     }
   }
   
-  console.log(`            ✅ 基本约束检测通过`);
+  //console.log(`            ✅ 基本约束检测通过`);
   return true;
 }
 
@@ -1393,21 +1393,21 @@ private checkBasicConflicts(
  * @returns 是否可行
  */
 private isAssignmentFeasible(variable: ScheduleVariable, timeSlot: BaseTimeSlot): boolean {
-  console.log(`         🔍 [预检查] 检查变量 ${variable.id} 在时间槽 ${timeSlot.dayOfWeek}-${timeSlot.period} 的可行性...`);
+  //console.log(`         🔍 [预检查] 检查变量 ${variable.id} 在时间槽 ${timeSlot.dayOfWeek}-${timeSlot.period} 的可行性...`);
   
   // 1. 检查教师冲突
   if (this.hasTeacherConflict(variable.teacherId, timeSlot)) {
-    console.log(`            ❌ [预检查] 教师冲突: 教师 ${variable.teacherId} 在时间槽 ${timeSlot.dayOfWeek}-${timeSlot.period} 已有课程`);
+  //  console.log(`            ❌ [预检查] 教师冲突: 教师 ${variable.teacherId} 在时间槽 ${timeSlot.dayOfWeek}-${timeSlot.period} 已有课程`);
     return false;
   }
   
   // 2. 检查班级冲突
   if (this.hasClassConflict(variable.classId, timeSlot)) {
-    console.log(`            ❌ [预检查] 班级冲突: 班级 ${variable.classId} 在时间槽 ${timeSlot.dayOfWeek}-${timeSlot.period} 已有课程`);
+  //  console.log(`            ❌ [预检查] 班级冲突: 班级 ${variable.classId} 在时间槽 ${timeSlot.dayOfWeek}-${timeSlot.period} 已有课程`);
     return false;
   }
   
-  console.log(`            ✅ [预检查] 时间可行性检查通过`);
+ // console.log(`            ✅ [预检查] 时间可行性检查通过`);
   return true;
 }
 
@@ -1456,19 +1456,19 @@ private hasClassConflict(classId: mongoose.Types.ObjectId, timeSlot: BaseTimeSlo
  * @returns 分配是否成功
  */
 private async assignCourse(variable: ScheduleVariable, timeSlot: BaseTimeSlot, state?: ScheduleState): Promise<boolean> {
-  console.log(`         🔄 [同步分配] 开始为变量 ${variable.id} 分配课室和时间...`);
+  //console.log(`         🔄 [同步分配] 开始为变量 ${variable.id} 分配课室和时间...`);
   
   try {
     // 1. 先检查时间可行性
     if (!this.isAssignmentFeasible(variable, timeSlot)) {
-      console.log(`            ❌ [同步分配] 时间可行性检查失败`);
+      //console.log(`            ❌ [同步分配] 时间可行性检查失败`);
       return false;
     }
     
     // 2. 分配课室
     const courseInfo = this.findCourseInTeachingPlans(variable.courseId);
     if (!courseInfo) {
-      console.log(`            ❌ [同步分配] 无法获取课程信息`);
+      //console.log(`            ❌ [同步分配] 无法获取课程信息`);
       return false;
     }
     
@@ -1493,7 +1493,7 @@ private async assignCourse(variable: ScheduleVariable, timeSlot: BaseTimeSlot, s
       state.assignments.set(variable.id, assignment);
     }
     
-    console.log(`            ✅ [同步分配] 成功分配: 课程 ${courseInfo.subject || '未知'} -> 时间 ${timeSlot.dayOfWeek}-${timeSlot.period} -> 课室 ${room.name}`);
+    //console.log(`            ✅ [同步分配] 成功分配: 课程 ${courseInfo.subject || '未知'} -> 时间 ${timeSlot.dayOfWeek}-${timeSlot.period} -> 课室 ${room.name}`);
     return true;
     
   } catch (error) {

@@ -26,25 +26,28 @@ export class K12RoomAllocator {
     classes?: any[]
   ): any | null {
     
+    console.log(`🚀 [课室分配] 课程: ${course.subject}, 班级: ${classId}, 可用课室: ${rooms?.length || 0} 个`);
+    
     // 情况1：必须使用功能教室的课程
     if (this.mustUseSpecialRoom(course.subject)) {
       const specialRoom = this.findSpecialRoomForCourse(course, rooms);
       if (specialRoom) {
-        console.log(`🏟️ 课程 ${course.subject} 分配功能教室: ${specialRoom.name}`);
+        console.log(`   ✅ 功能教室分配成功: ${specialRoom.name}`);
         return specialRoom;
       }
-      console.log(`❌ 课程 ${course.subject} 必须使用功能教室，但找不到可用教室`);
+      
+      console.log(`   ❌ 找不到可用的功能教室`);
       return null;
     }
     
     // 情况2：其他所有课程使用固定教室
     const fixedRoom = this.getFixedRoomForClass(classId, rooms, classes);
     if (fixedRoom) {
-      console.log(`🏫 课程 ${course.subject} 分配固定教室: ${fixedRoom.name}`);
+      console.log(`   ✅ 固定教室分配成功: ${fixedRoom.name}`);
       return fixedRoom;
     }
     
-    console.log(`❌ 课程 ${course.subject} 无法获取固定教室，排课失败`);
+    console.log(`   ❌ 无法获取固定教室`);
     return null;
   }
 
@@ -59,6 +62,7 @@ export class K12RoomAllocator {
       '体育',      // 需要运动场地
       '信息技术'   // 需要计算机教室
     ];
+    
     return mustUseSpecialRoomSubjects.includes(subject);
   }
 
@@ -66,6 +70,8 @@ export class K12RoomAllocator {
    * 查找课程的功能教室
    */
   private findSpecialRoomForCourse(course: any, rooms: any[]): any | null {
+    console.log(`🔍 [功能教室查找] 课程: ${course.subject}, 可用课室: ${rooms?.length || 0} 个`);
+    
     const roomMapping: { [key: string]: string[] } = {
       '物理': ['实验室', '物理实验室'],
       '化学': ['实验室', '化学实验室'],
@@ -74,15 +80,38 @@ export class K12RoomAllocator {
     };
     
     const roomTypes = roomMapping[course.subject];
-    if (!roomTypes) return null;
+    if (!roomTypes) {
+      console.log(`   ❌ 课程 ${course.subject} 不需要功能教室`);
+      return null;
+    }
     
-    return rooms.find(room => 
-      room.isActive && 
-      !room.assignedClass &&  // 未固定分配
-      roomTypes.some((type: string) => 
+    console.log(`   🎯 期望类型: ${roomTypes.join(', ')}`);
+    
+    if (!rooms || rooms.length === 0) {
+      console.log(`   ❌ 没有可用课室`);
+      return null;
+    }
+    
+    // 查找匹配的课室
+    const matchedRoom = rooms.find(room => {
+      // 快速检查：激活状态 + 未固定分配 + 类型匹配
+      if (!room.isActive || room.assignedClass) {
+        return false;
+      }
+      
+      return roomTypes.some(type => 
         room.type?.includes(type) || room.name?.includes(type)
-      )
-    );
+      );
+    });
+    
+    if (matchedRoom) {
+      console.log(`   ✅ 找到功能教室: ${matchedRoom.name} (${matchedRoom.type})`);
+    } else {
+      console.log(`   ❌ 未找到匹配的功能教室`);
+      console.log(`   💡 原因: 课室类型不匹配或已被固定分配`);
+    }
+    
+    return matchedRoom || null;
   }
 
   /**
