@@ -78,25 +78,25 @@ export interface CourseAssignment {
  * 约束类型枚举
  */
 export enum ConstraintType {
-  HARD_TEACHER_CONFLICT = 'hard_teacher_conflict',     // 教师时间冲突
-  HARD_CLASS_CONFLICT = 'hard_class_conflict',         // 班级时间冲突
-  HARD_ROOM_CONFLICT = 'hard_room_conflict',           // 教室时间冲突
-  HARD_ROOM_REQUIREMENT = 'hard_room_requirement',     // 教室需求不满足
-  HARD_TIME_FORBIDDEN = 'hard_time_forbidden',         // 禁用时间段
-  SOFT_TIME_PREFERENCE = 'soft_time_preference',       // 时间偏好不满足
-  SOFT_WORKLOAD_BALANCE = 'soft_workload_balance',     // 工作量不均衡
-  SOFT_CONTINUOUS_PREFERRED = 'soft_continuous_preferred', // 连排偏好
-  SOFT_CORE_SUBJECT_PRIORITY = 'soft_core_subject_priority', // 核心科目优先级
+  HARD_TEACHER_CONFLICT = 'HARD_TEACHER_CONFLICT',     // 教师时间冲突
+  HARD_CLASS_CONFLICT = 'HARD_CLASS_CONFLICT',         // 班级时间冲突
+  HARD_ROOM_CONFLICT = 'HARD_ROOM_CONFLICT',           // 教室时间冲突
+  HARD_ROOM_REQUIREMENT = 'HARD_ROOM_REQUIREMENT',     // 教室需求不满足
+  HARD_TIME_FORBIDDEN = 'HARD_TIME_FORBIDDEN',         // 禁用时间段
+  SOFT_TIME_PREFERENCE = 'SOFT_TIME_PREFERENCE',       // 时间偏好不满足
+  SOFT_WORKLOAD_BALANCE = 'SOFT_WORKLOAD_BALANCE',     // 工作量不均衡
+  SOFT_CONTINUOUS_PREFERRED = 'SOFT_CONTINUOUS_PREFERRED', // 连排偏好
+  SOFT_CORE_SUBJECT_PRIORITY = 'SOFT_CORE_SUBJECT_PRIORITY', // 核心科目优先级
   
   // 新增：科目特定约束类型
-  SOFT_SUBJECT_CONSTRAINT = 'soft_subject_constraint', // 科目特定约束
-  HARD_SUBJECT_CONSTRAINT = 'hard_subject_constraint', // 科目特定硬约束
-  SOFT_TEACHER_ROTATION = 'soft_teacher_rotation',    // 教师轮换约束
+  SOFT_SUBJECT_CONSTRAINT = 'SOFT_SUBJECT_CONSTRAINT', // 科目特定约束
+  HARD_SUBJECT_CONSTRAINT = 'HARD_SUBJECT_CONSTRAINT', // 科目特定硬约束
+  SOFT_TEACHER_ROTATION = 'SOFT_TEACHER_ROTATION',    // 教师轮换约束
   
   // 新增：核心课程分布约束类型
-  SOFT_CORE_SUBJECT_DISTRIBUTION = 'soft_core_subject_distribution', // 核心课程分布约束（软约束）
-  SOFT_CORE_SUBJECT_TIME_PREFERENCE = 'soft_core_subject_time_preference', // 核心课程时间偏好约束
-  HARD_CORE_SUBJECT_DISTRIBUTION = 'hard_core_subject_distribution', // 核心课程分布约束（硬约束）
+  SOFT_CORE_SUBJECT_DISTRIBUTION = 'SOFT_CORE_SUBJECT_DISTRIBUTION', // 核心课程分布约束（软约束）
+  SOFT_CORE_SUBJECT_TIME_PREFERENCE = 'SOFT_CORE_SUBJECT_TIME_PREFERENCE', // 核心课程时间偏好约束
+  HARD_CORE_SUBJECT_DISTRIBUTION = 'HARD_CORE_SUBJECT_DISTRIBUTION', // 核心课程分布约束（硬约束）
 }
 
 /**
@@ -127,7 +127,7 @@ export interface ConstraintViolation {
  * 冲突信息
  */
 export interface ConflictInfo {
-  type: 'teacher' | 'class' | 'room';  // 冲突类型
+  type: 'teacher' | 'class' | 'room' | 'special_course_room';  // 冲突类型
   resourceId: mongoose.Types.ObjectId; // 冲突资源ID
   timeSlot: TimeSlot;                  // 冲突时间段
   conflictingVariables: string[];      // 冲突的变量ID
@@ -149,6 +149,15 @@ export interface ScheduleState {
 }
 
 /**
+ * 调试级别枚举
+ */
+export enum DebugLevel {
+  NONE = 'none',           // 无调试信息
+  MINIMAL = 'minimal',     // 最小调试信息（仅错误和警告）
+  DETAILED = 'detailed'    // 详细调试信息（包含所有步骤）
+}
+
+/**
  * 算法配置
  */
 export interface AlgorithmConfig {
@@ -159,6 +168,7 @@ export interface AlgorithmConfig {
   enableLocalOptimization: boolean;    // 是否启用局部优化
   localOptimizationIterations: number; // 局部优化迭代次数
   verbose: boolean;                    // 是否输出详细日志
+  debugLevel: DebugLevel;              // 调试级别控制
 }
 
 /**
@@ -360,6 +370,10 @@ export interface StagedSchedulingStageConfig {
   localOptimizationIterations: number;     // 局部优化迭代次数
   constraintPriority: 'high' | 'medium' | 'low';  // 约束优先级
   enableBacktracking: boolean;             // 是否启用回溯搜索
+  // 新增：一般课程特定配置
+  enableConflictAvoidance?: boolean;       // 是否启用冲突避免
+  enableSubjectOptimization?: boolean;     // 是否启用科目优化
+  enableContinuousOptimization?: boolean;  // 是否启用连排优化
 }
 
 /**
@@ -409,4 +423,221 @@ export interface CourseClassification {
     generalCourseCount: number;            // 一般课程数量
     coreSubjects: string[];                // 识别的核心科目
   };
+}
+
+/**
+ * K12排课特有类型定义
+ */
+
+/**
+ * K12排课阶段枚举
+ */
+export enum K12SchedulingStage {
+  CORE_SUBJECTS = 'core_subjects',           // 阶段1：主科优先排课
+  ELECTIVE_SUBJECTS = 'elective_subjects',   // 阶段2：副科填充排课
+  SPECIAL_CONSTRAINTS = 'special_constraints' // 阶段3：特殊约束处理
+}
+
+/**
+ * K12课程类型枚举
+ */
+export enum K12CourseType {
+  CORE = 'core',           // 核心课程（语文、数学、英语）
+  ELECTIVE = 'elective',   // 副科课程（音体美、信息技术等）
+  SPECIAL = 'special'      // 特殊课程（连堂课、班主任课程等）
+}
+
+/**
+ * K12约束类型枚举
+ */
+export enum K12ConstraintType {
+  // 硬约束（必须满足）
+  HARD_TEACHER_CONFLICT = 'hard_teacher_conflict',     // 教师不可同时在两个班上课
+  HARD_CLASS_TIME_CONFLICT = 'hard_class_time_conflict', // 同一班级不能在同一时间槽安排多门课
+  HARD_ROOM_CONFLICT = 'hard_room_conflict',           // 同一课室不能在同一时间槽安排多门课
+  HARD_ROOM_REQUIREMENT = 'hard_room_requirement',     // 课室必须满足课程的基本要求
+  
+  // 软约束（尽量满足）
+  SOFT_CORE_SUBJECT_DISTRIBUTION = 'soft_core_subject_distribution', // 主科分散度
+  SOFT_TEACHER_WORKLOAD_BALANCE = 'soft_teacher_workload_balance',   // 教师工作量平衡
+  SOFT_STUDENT_FATIGUE_REDUCTION = 'soft_student_fatigue_reduction', // 学生疲劳度减少
+  SOFT_COURSE_DISPERSION = 'soft_course_dispersion',                 // 课程分布均匀性
+  SOFT_TIME_PREFERENCE = 'soft_time_preference',                     // 时间偏好满足
+  SOFT_CONTINUOUS_COURSE = 'soft_continuous_course'                 // 连堂课安排
+}
+
+/**
+ * K12约束定义
+ */
+export interface K12Constraint {
+  type: K12ConstraintType;                  // 约束类型
+  isHard: boolean;                          // 是否为硬约束
+  weight: number;                           // 权重 (软约束使用)
+  description: string;                      // 约束描述
+  check(assignments: Map<string, CourseAssignment>): K12ConstraintViolation | null;
+}
+
+/**
+ * K12约束违反信息
+ */
+export interface K12ConstraintViolation {
+  constraintType: K12ConstraintType;        // 违反的约束类型
+  isHard: boolean;                          // 是否为硬约束违反
+  penalty: number;                          // 惩罚分数
+  message: string;                          // 错误信息
+  suggestion?: string;                      // 修复建议
+}
+
+/**
+ * K12排课变量（扩展版）
+ */
+export interface K12ScheduleVariable extends ScheduleVariable {
+  subject: string;                           // 科目名称
+  weeklyHours: number;                       // 每周课时数
+  requiresContinuous: boolean;               // 是否需要连排
+  continuousHours: number;                   // 连排课时数
+  courseType: K12CourseType;                 // 课程类型
+  priority: number;                          // 优先级 (1-10, 10最高)
+  timePreferences?: TimeSlot[];              // 时间偏好
+  avoidTimeSlots?: TimeSlot[];               // 避免时间段
+}
+
+/**
+ * K12课程分配结果
+ */
+export interface K12CourseAssignment extends CourseAssignment {
+  id: string;                                // 分配ID
+  semester: number;                          // 学期
+  academicYear: string;                      // 学年
+  courseType: K12CourseType;                 // 课程类型
+  subject: string;                           // 科目名称
+  softConstraintScore: number;               // 软约束评分
+}
+
+/**
+ * K12排课结果
+ */
+export interface K12ScheduleResult {
+  success: boolean;                          // 是否成功
+  assignedVariables: number;                 // 已分配变量数
+  unassignedVariables: number;               // 未分配变量数
+  hardConstraintViolations: number;          // 硬约束违反数
+  softConstraintViolations: number;          // 软约束违反数
+  totalScore: number;                        // 总评分
+  // 🔧 新增：返回实际的排课分配结果
+  assignments?: K12CourseAssignment[];       // 排课分配结果
+  stageResults: Map<K12SchedulingStage, {   // 各阶段结果
+    assignedCount: number;                   // 已分配数量
+    unassignedCount: number;                // 未分配数量
+    executionTime: number;                  // 执行时间
+    message: string;                         // 阶段消息
+  }>;
+  message: string;                           // 结果信息
+  suggestions: string[];                     // 改进建议
+}
+
+/**
+ * K12排课配置
+ */
+export interface K12SchedulingConfig {
+  // 阶段配置
+  coreSubjects: {
+    maxIterations: number;                   // 最大迭代次数
+    timeLimit: number;                       // 时间限制（秒）
+    priorityOrder: string[];                 // 优先级顺序
+  };
+  electiveSubjects: {
+    maxIterations: number;                   // 最大迭代次数
+    timeLimit: number;                       // 时间限制（秒）
+    enableDispersionOptimization: boolean;   // 是否启用分散度优化
+  };
+  specialConstraints: {
+    maxIterations: number;                   // 最大迭代次数
+    timeLimit: number;                       // 时间限制（秒）
+    enableContinuousOptimization: boolean;   // 是否启用连排优化
+  };
+  
+  // 约束权重配置
+  constraintWeights: {
+    coreSubjectDistribution: number;         // 主科分散度权重
+    teacherWorkloadBalance: number;          // 教师工作量平衡权重
+    studentFatigueReduction: number;         // 学生疲劳度减少权重
+    courseDispersion: number;                // 课程分布均匀性权重
+    timePreference: number;                  // 时间偏好权重
+  };
+  
+  // 时间偏好配置
+  timePreferences: {
+    coreSubjectsMorning: boolean;            // 主科是否优先安排在上午
+    avoidConsecutiveCoreSubjects: boolean;   // 是否避免连续安排主科
+    maxDailyCoreSubjects: number;            // 每天最大主科数量
+    preferredTimeSlots: TimeSlot[];          // 偏好时间段
+    avoidTimeSlots: TimeSlot[];              // 避免时间段
+  };
+}
+
+/**
+ * K12教室分配策略枚举
+ */
+export enum K12RoomAllocationStrategy {
+  FIXED_CLASSROOM = 'fixed_classroom',       // 固定课室策略（行政班）
+  INTELLIGENT_MATCHING = 'intelligent_matching', // 智能匹配策略
+  FALLBACK_ALLOCATION = 'fallback_allocation'    // 备用分配策略
+}
+
+/**
+ * K12教室分配结果
+ */
+export interface K12RoomAllocation {
+  roomId: mongoose.Types.ObjectId;           // 分配的课室ID
+  strategy: K12RoomAllocationStrategy;       // 使用的分配策略
+  score: number;                             // 分配评分
+  message: string;                           // 分配说明
+  isFixedClassroom: boolean;                 // 是否为固定课室
+}
+
+/**
+ * K12评分维度
+ */
+export interface K12ScoreDimensions {
+  coreSubjectDistribution: number;           // 主科分散度评分 (0-25)
+  teacherWorkloadBalance: number;            // 教师工作量平衡评分 (0-25)
+  studentFatigueReduction: number;           // 学生疲劳度评分 (0-25)
+  courseDispersion: number;                  // 课程分布均匀性评分 (0-25)
+  totalScore: number;                        // 总评分 (0-100)
+}
+
+/**
+ * K12排课进度信息
+ */
+export interface K12SchedulingProgress {
+  currentStage: K12SchedulingStage;          // 当前阶段
+  totalStages: number;                       // 总阶段数
+  stageProgress: number;                     // 当前阶段进度 (0-100)
+  overallProgress: number;                   // 总体进度 (0-100)
+  stageMessage: string;                      // 阶段消息
+  currentOperation: string;                  // 当前操作
+  assignedCount: number;                     // 已分配数量
+  totalCount: number;                        // 总数量
+  timestamp: number;                         // 时间戳
+}
+
+/**
+ * K12排课统计信息
+ */
+export interface K12SchedulingStatistics {
+  totalVariables: number;                    // 总变量数
+  assignedVariables: number;                 // 已分配变量数
+  unassignedVariables: number;               // 未分配变量数
+  hardConstraintViolations: number;          // 硬约束违反数
+  softConstraintViolations: number;          // 软约束违反数
+  totalScore: number;                        // 总评分
+  stageResults: Map<K12SchedulingStage, {    // 各阶段统计
+    assignedCount: number;                   // 已分配数量
+    unassignedCount: number;                // 未分配数量
+    executionTime: number;                  // 执行时间
+    constraintViolations: number;            // 约束违反数
+  }>;
+  executionTime: number;                     // 总执行时间
+  message: string;                           // 统计信息
 }

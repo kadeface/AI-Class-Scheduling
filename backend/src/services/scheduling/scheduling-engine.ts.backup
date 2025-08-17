@@ -39,7 +39,7 @@ export class SchedulingEngine {
   
   // 新增：教师轮换状态管理
   private teacherRotationStates: Map<string, TeacherRotationState> = new Map();
-  n  // 新增：核心课程引擎n  private coreCourseEngine: CoreCourseEngine;n  
+    // 新增：核心课程引擎n  private coreCourseEngine: CoreCourseEngine;n  
   // 新增：课程名称缓存
   private courseNameCache: Map<string, string> = new Map();
 
@@ -63,7 +63,7 @@ export class SchedulingEngine {
     
     // 初始化教师轮换状态
     this.initializeTeacherRotation([]);
-    n    // 初始化核心课程引擎n    this.coreCourseEngine = new CoreCourseEngine();n    
+        // 初始化核心课程引擎n    this.coreCourseEngine = new CoreCourseEngine();n    
     // 延迟初始化课程名称缓存
     this.initializeCourseNameCache().catch(error => {
       console.warn('课程名称缓存初始化失败:', error);
@@ -355,7 +355,7 @@ export class SchedulingEngine {
    *   Promise<SchedulingResult>: 排课结果
    */
   async solve(
-    n    // 分阶段排课：第一阶段 - 核心课程n    console.log("[排课引擎] 开始分阶段排课 - 第一阶段：核心课程");n    n    // 分离核心课程和一般课程n    const coreCourses = this.coreCourseEngine.filterCoreCourses(variables);n    const generalCourses = variables.filter(variable => !this.coreCourseEngine.isCoreCourse(variable));n    n    console.log(`[排课引擎] 核心课程数量: ${coreCourses.length}, 一般课程数量: ${generalCourses.length}`);n    n    // 如果存在核心课程，优先处理n    if (coreCourses.length > 0) {n      try {n        const coreResult = await this.scheduleCoreCourses(coreCourses, fixedAssignments);n        if (!coreResult.success) {n          console.warn("[排课引擎] 核心课程排课失败，继续处理一般课程");n        } else {n          console.log("[排课引擎] 核心课程排课成功，已分配", coreResult.scheduleState.assignments.size, "个课程");n        }n      } catch (error) {n        console.error("[排课引擎] 核心课程排课异常:", error);n      }n    }n    variables: ScheduleVariable[],
+        // 分阶段排课：第一阶段 - 核心课程n    console.log("[排课引擎] 开始分阶段排课 - 第一阶段：核心课程");n    n    // 分离核心课程和一般课程n    const coreCourses = this.coreCourseEngine.filterCoreCourses(variables);n    const generalCourses = variables.filter(variable => !this.coreCourseEngine.isCoreCourse(variable));n    n    console.log(`[排课引擎] 核心课程数量: ${coreCourses.length}, 一般课程数量: ${generalCourses.length}`);n    n    // 如果存在核心课程，优先处理n    if (coreCourses.length > 0) {n      try {n        const coreResult = await this.scheduleCoreCourses(coreCourses, fixedAssignments);n        if (!coreResult.success) {n          console.warn("[排课引擎] 核心课程排课失败，继续处理一般课程");n        } else {n          console.log("[排课引擎] 核心课程排课成功，已分配", coreResult.scheduleState.assignments.size, "个课程");n        }n      } catch (error) {n        console.error("[排课引擎] 核心课程排课异常:", error);n      }n    }n    variables: ScheduleVariable[],
     fixedAssignments: CourseAssignment[] = []
   ): Promise<SchedulingResult> {
     const startTime = Date.now();

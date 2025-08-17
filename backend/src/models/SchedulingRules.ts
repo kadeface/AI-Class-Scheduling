@@ -24,6 +24,11 @@ export interface ITimeRules {
     dayOfWeek: number;
     periods: number[];
   }[];
+    // 新增属性
+    maxMorningPeriods?: number;          // 上午最多课时数
+    maxAfternoonPeriods?: number;        // 下午最多课时数
+    morningStartPeriod?: number;         // 上午开始节次
+    afternoonStartPeriod?: number;       // 下午开始节次
 }
 
 /**

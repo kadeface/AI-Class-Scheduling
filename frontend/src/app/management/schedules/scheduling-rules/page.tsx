@@ -147,6 +147,7 @@ export default function SchedulingRulesPage() {
       lunchBreakDuration: 60,
       morningPeriods: [1, 2, 3, 4],
       afternoonPeriods: [5, 6, 7, 8],
+
     },
     teacherConstraints: {
       maxDailyHours: 6,
@@ -332,7 +333,11 @@ export default function SchedulingRulesPage() {
       schoolType: rules.schoolType,
       academicYear: rules.academicYear,
       semester: rules.semester,
-      timeRules: rules.timeRules,
+      timeRules: {
+        ...rules.timeRules,
+        morningPeriods: rules.timeRules.morningPeriods || [1, 2, 3, 4],
+        afternoonPeriods: rules.timeRules.afternoonPeriods || [5, 6, 7, 8],
+      },
       teacherConstraints: rules.teacherConstraints,
       roomConstraints: rules.roomConstraints,
       courseArrangementRules: {
@@ -462,6 +467,7 @@ export default function SchedulingRulesPage() {
     setOperationError('');
     
     try {
+      console.log('开始更新排课规则:', formData);
       const response = await schedulingRulesApi.update(selectedRules._id, formData);
       if (response.success) {
         closeDialogs();
@@ -1025,6 +1031,77 @@ export default function SchedulingRulesPage() {
                       ))}
                     </div>
                   </div>
+                  <Separator className="my-4" />
+                {/* 上下午节次设置 */}
+                <Separator className="my-4" />
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <Label>上午节次设置</Label>
+                    <div className="mt-2 space-y-2">
+                      <div className="flex flex-wrap gap-1">
+                        {[1, 2, 3, 4, 5, 6, 7, 8].map(period => (
+                          <button
+                            key={period}
+                            type="button"
+                            onClick={() => {
+                              const current = formData.timeRules.morningPeriods;
+                              const newPeriods = current.includes(period)
+                                ? current.filter(p => p !== period)
+                                : [...current, period];
+                              setFormData(prev => ({
+                                ...prev,
+                                timeRules: { ...prev.timeRules, morningPeriods: newPeriods }
+                              }));
+                            }}
+                            className={cn(
+                              'px-2 py-1 text-xs rounded border',
+                              formData.timeRules.morningPeriods.includes(period)
+                                ? 'bg-blue-500 text-white border-blue-500'
+                                : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
+                            )}
+                          >
+                            第{period}节
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-xs text-gray-500">点击选择上午的节次</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label>下午节次设置</Label>
+                    <div className="mt-2 space-y-2">
+                      <div className="flex flex-wrap gap-1">
+                        {[1, 2, 3, 4, 5, 6, 7, 8].map(period => (
+                          <button
+                            key={period}
+                            type="button"
+                            onClick={() => {
+                              const current = formData.timeRules.afternoonPeriods;
+                              const newPeriods = current.includes(period)
+                                ? current.filter(p => p !== period)
+                                : [...current, period];
+                              setFormData(prev => ({
+                                ...prev,
+                                timeRules: { ...prev.timeRules, afternoonPeriods: newPeriods }
+                              }));
+                            }}
+                            className={cn(
+                              'px-2 py-1 text-xs rounded border',
+                              formData.timeRules.afternoonPeriods.includes(period)
+                                ? 'bg-blue-500 text-white border-blue-500'
+                                : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
+                            )}
+                          >
+                            第{period}节
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-xs text-gray-500">点击选择下午的节次</p>
+                    </div>
+                  </div>
+                </div>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -2028,9 +2105,80 @@ export default function SchedulingRulesPage() {
                       ))}
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
+                        
+      {/* 上下午节次设置 - 在编辑对话框中添加 */}
+      <Separator className="my-4" />
+      
+      <div className="grid gap-4 md:grid-cols-2">
+        <div>
+          <Label>上午节次设置</Label>
+          <div className="mt-2 space-y-2">
+            <div className="flex flex-wrap gap-1">
+              {[1, 2, 3, 4, 5, 6, 7, 8].map(period => (
+                <button
+                  key={period}
+                  type="button"
+                  onClick={() => {
+                    const current = formData.timeRules.morningPeriods;
+                    const newPeriods = current.includes(period)
+                      ? current.filter(p => p !== period)
+                      : [...current, period];
+                    setFormData(prev => ({
+                      ...prev,
+                      timeRules: { ...prev.timeRules, morningPeriods: newPeriods }
+                    }));
+                  }}
+                  className={cn(
+                    'px-2 py-1 text-xs rounded border',
+                    formData.timeRules.morningPeriods.includes(period)
+                      ? 'bg-blue-500 text-white border-blue-500'
+                      : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
+                  )}
+                >
+                  第{period}节
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500">点击选择上午的节次</p>
+          </div>
+        </div>
+
+        <div>
+          <Label>下午节次设置</Label>
+          <div className="mt-2 space-y-2">
+            <div className="flex flex-wrap gap-1">
+              {[1, 2, 3, 4, 5, 6, 7, 8].map(period => (
+                <button
+                  key={period}
+                  type="button"
+                  onClick={() => {
+                    const current = formData.timeRules.afternoonPeriods;
+                    const newPeriods = current.includes(period)
+                      ? current.filter(p => p !== period)
+                      : [...current, period];
+                    setFormData(prev => ({
+                      ...prev,
+                      timeRules: { ...prev.timeRules, afternoonPeriods: newPeriods }
+                    }));
+                  }}
+                  className={cn(
+                    'px-2 py-1 text-xs rounded border',
+                    formData.timeRules.afternoonPeriods.includes(period)
+                      ? 'bg-blue-500 text-white border-blue-500'
+                      : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
+                  )}
+                >
+                  第{period}节
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500">点击选择下午的节次</p>
+          </div>
+        </div>
+      </div>
+    </CardContent>
+  </Card>
+</TabsContent>
 
             {/* 教师约束 - 复用创建对话框内容 */}
             <TabsContent value="teacher" className="space-y-4">

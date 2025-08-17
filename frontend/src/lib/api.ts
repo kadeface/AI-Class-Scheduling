@@ -559,6 +559,7 @@ export interface TimeRules {
   morningPeriods: number[];
   afternoonPeriods: number[];
   forbiddenSlots?: TimeSlot[];
+
 }
 
 /**

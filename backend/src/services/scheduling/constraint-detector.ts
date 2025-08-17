@@ -54,7 +54,7 @@ export class ConstraintDetector {
         this.subjectNameCache.set((course as any)._id.toString(), (course as any).name || '未知科目');
       }
       
-      console.log(`✅ 科目名称缓存初始化完成，共缓存 ${this.subjectNameCache.size} 个科目`);
+  //    console.log(`✅ 科目名称缓存初始化完成，共缓存 ${this.subjectNameCache.size} 个科目`);
     } catch (error) {
       console.warn('科目名称缓存初始化失败:', error);
       // 缓存初始化失败不影响主要功能
@@ -135,63 +135,7 @@ export class ConstraintDetector {
     return null;
   }
 
-  /**
-   * 检测教室时间冲突
-   * 
-   * Args:
-   *   assignment: 新的课程安排
-   *   existingAssignments: 已有的课程安排
-   * 
-   * Returns:
-   *   Promise<ConflictInfo | null>: 如果有冲突返回冲突信息，否则返回null
-   */
-  async checkRoomTimeConflict(
-    assignment: CourseAssignment,
-    existingAssignments: Map<string, CourseAssignment>
-  ): Promise<ConflictInfo | null> {
-    try {
-      // 如果规则允许教室共享，则跳过检测
-      if (this.rules.roomConstraints.allowRoomSharing) {
-        return null;
-      }
 
-      // 检查是否为行政班使用固定教室
-      const classInfo = await mongoose.model('Class').findById(assignment.classId);
-      if (classInfo?.homeroom && classInfo.homeroom.equals(assignment.roomId)) {
-        // 行政班使用固定教室，只需要检查班级时间冲突
-        // 教室时间冲突检测可以跳过，因为班级冲突检测已经覆盖了这种情况
-        console.log(`✅ 行政班 ${classInfo.name} 使用固定教室，跳过教室冲突检测`);
-        return null;
-      }
-
-      // 检查其他教室的时间冲突
-      const conflictingVariables: string[] = [];
-
-      for (const [variableId, existing] of Array.from(existingAssignments.entries())) {
-        if (existing.roomId.equals(assignment.roomId) &&
-            this.isTimeSlotOverlap(assignment.timeSlot, existing.timeSlot)) {
-          conflictingVariables.push(variableId);
-        }
-      }
-
-      if (conflictingVariables.length > 0) {
-        return {
-          type: 'room',
-          resourceId: assignment.roomId,
-          timeSlot: assignment.timeSlot,
-          conflictingVariables,
-          severity: 'critical',
-          message: `教室在 ${this.formatTimeSlot(assignment.timeSlot)} 时间段有冲突安排`
-        };
-      }
-
-      return null;
-    } catch (error) {
-      console.error('教室冲突检测失败:', error);
-      // 如果检测失败，返回null以避免阻塞排课流程
-      return null;
-    }
-  }
 
   /**
    * 检测禁用时间段约束
@@ -417,9 +361,7 @@ export class ConstraintDetector {
     const classConflict = this.checkClassTimeConflict(assignment, existingAssignments);
     if (classConflict) conflicts.push(classConflict);
 
-    // 检测教室冲突（异步）
-    const roomConflict = await this.checkRoomTimeConflict(assignment, existingAssignments);
-    if (roomConflict) conflicts.push(roomConflict);
+    // 教室冲突检测已移除 - 每个班级都有固定教室，不存在冲突
 
     return conflicts;
   }
@@ -503,13 +445,8 @@ export class ConstraintDetector {
       }
     }
 
-    // 检查每日最大出现次数约束
-    const dailyOccurrenceViolation = this.checkDailyOccurrenceConstraint(
-      assignment, existingAssignments, subjectRule
-    );
-    if (dailyOccurrenceViolation) {
-      violations.push(dailyOccurrenceViolation);
-    }
+    // 每日最大出现次数约束已由统一的非核心课程每日限制检查处理
+    // 无需重复检查，提高性能
 
     // 检查特殊约束（如体育课需要休息）
     if (subjectRule.specialConstraints?.requiresRest) {
@@ -727,35 +664,32 @@ export class ConstraintDetector {
   ): ConstraintViolation[] {
     const violations: ConstraintViolation[] = [];
 
-    // 1. 检查是否与核心课程冲突（体育课不应占用核心课程黄金时段）
+    // 1. 检查是否与核心课程冲突（体育课不建议占用核心课程黄金时段）
     if (this.isGoldenTimeForCoreSubjects(assignment.timeSlot)) {
       violations.push({
         constraintType: ConstraintType.SOFT_SUBJECT_CONSTRAINT,
         isHard: false,
-        penalty: 80,
+        penalty: 60, // 降低惩罚值，提高灵活性
         variables: [assignment.variableId],
-        message: '体育课不应占用核心课程黄金时段',
-        suggestion: '建议将体育课调整到非黄金时段'
+        message: '体育课不建议占用核心课程黄金时段',
+        suggestion: '建议将体育课调整到非黄金时段，但允许特殊情况'
       });
     }
 
-    // 2. 检查连排体育课约束（硬约束：体育课不能连排）
+    // 2. 检查连排体育课约束（软约束：体育课不建议连排）
     if (this.isContinuousPhysicalEducation(assignment, existingAssignments)) {
       violations.push({
-        constraintType: ConstraintType.HARD_SUBJECT_CONSTRAINT,
-        isHard: true,
-        penalty: 1000, // 高惩罚分数，确保不会被违反
+        constraintType: ConstraintType.SOFT_SUBJECT_CONSTRAINT,
+        isHard: false,
+        penalty: 150, // 降低惩罚分数，改为软约束
         variables: [assignment.variableId],
-        message: '体育课不能进行连排',
-        suggestion: '必须将体育课安排在不同时间段'
+        message: '体育课不建议连排',
+        suggestion: '建议将体育课安排在不同时间段，但允许特殊情况'
       });
     }
 
-    // 3. 检查同一天体育课数量约束（硬约束：不能同一天两节体育课）
-    const dailyPEViolation = this.checkDailyPhysicalEducationLimit(assignment, existingAssignments);
-    if (dailyPEViolation) {
-      violations.push(dailyPEViolation);
-    }
+    // 3. 同一天体育课数量约束已由统一的非核心课程每日限制检查处理
+    // 无需重复检查，提高性能
 
     // 4. 检查体育课与理论课的间隔
     const theoryIntervalViolation = this.checkPETheoryInterval(assignment, existingAssignments);
@@ -1264,12 +1198,12 @@ export class ConstraintDetector {
       }
     }
 
-    // 非核心课程每日最多1节
+    // 非核心课程每日最多1节（硬约束）
     if (dailyCount > 1) {
       return {
         constraintType: ConstraintType.HARD_SUBJECT_CONSTRAINT,
         isHard: true,
-        penalty: 1500, // 高惩罚分数，确保不会被违反
+        penalty: 1000, // 恢复硬约束的惩罚分数
         variables: [assignment.variableId],
         message: `非核心课程 ${subjectName} 在同一天安排了 ${dailyCount} 节课，超过每日限制`,
         suggestion: `必须将 ${subjectName} 安排到其他天，每日最多1节`
@@ -1481,39 +1415,236 @@ export class ConstraintDetector {
 
 
   /**
-   * 检测同一天体育课数量约束（硬约束）
+   * 检测同一天体育课数量约束（已废弃）
    * 
-   * @deprecated 已废弃，请使用 checkNonCoreSubjectDailyLimit 方法
+   * @deprecated 已废弃，统一使用 checkNonCoreSubjectDailyLimit 方法
+   * 该方法已被移除，避免重复检查
    */
-  private checkDailyPhysicalEducationLimit(
-    assignment: CourseAssignment,
-    existingAssignments: Map<string, CourseAssignment>
-  ): ConstraintViolation | null {
-    const subjectName = this.getSubjectNameSync(assignment.courseId);
-    if (!subjectName || subjectName !== '体育') {
-      return null; // 只对体育课进行同一天两节限制
-    }
+}
+// ... existing code ...
 
-    let dailyCount = 0;
-    for (const [_, existing] of Array.from(existingAssignments.entries())) {
-      if (existing.classId.equals(assignment.classId) && 
-          this.getSubjectNameSync(existing.courseId) === '体育' &&
-          existing.timeSlot.dayOfWeek === assignment.timeSlot.dayOfWeek) {
-        dailyCount++;
+/**
+ * 约束权重配置
+ */
+export interface ConstraintWeights {
+  teacherWorkloadBalance: number;      // 教师工作量平衡权重
+  coreSubjectDistribution: number;     // 核心课程分布权重
+  subjectSpecificConstraints: number;  // 科目特定约束权重
+  timePreference: number;              // 时间偏好权重
+  continuousCourse: number;            // 连堂课权重
+}
+
+/**
+ * 排课质量评估结果
+ */
+export interface ScheduleQualityResult {
+  totalScore: number;                  // 总分
+  hardConstraintScore: number;         // 硬约束得分
+  softConstraintScore: number;         // 软约束得分
+  constraintViolations: ConstraintViolation[]; // 约束违反列表
+  suggestions: string[];               // 改进建议
+}
+
+/**
+ * 扩展约束检测器
+ */
+export class EnhancedConstraintDetector extends ConstraintDetector {
+  private constraintWeights: ConstraintWeights;
+
+  constructor(rules: ISchedulingRules, weights?: Partial<ConstraintWeights>) {
+    super(rules);
+    
+    // 默认权重配置
+    this.constraintWeights = {
+      teacherWorkloadBalance: 10,
+      coreSubjectDistribution: 15,
+      subjectSpecificConstraints: 8,
+      timePreference: 5,
+      continuousCourse: 7,
+      ...weights
+    };
+  }
+
+  /**
+   * 评估排课质量
+   */
+  evaluateScheduleQuality(
+    assignments: Map<string, CourseAssignment>
+  ): ScheduleQualityResult {
+    // 1. 检测硬约束违反
+    const hardViolations = this.checkHardConstraints(assignments);
+    
+    // 2. 检测软约束违反
+    const softViolations = this.checkSoftConstraints(assignments);
+    
+    // 3. 计算得分
+    const hardConstraintScore = this.calculateHardConstraintScore(hardViolations);
+    const softConstraintScore = this.calculateSoftConstraintScore(softViolations);
+    const totalScore = (hardConstraintScore + softConstraintScore) / 2;
+    
+    // 4. 生成改进建议
+    const suggestions = this.generateImprovementSuggestions(hardViolations, softViolations);
+    
+    return {
+      totalScore,
+      hardConstraintScore,
+      softConstraintScore,
+      constraintViolations: [...hardViolations, ...softViolations],
+      suggestions
+    };
+  }
+
+  /**
+   * 检测硬约束
+   */
+  private checkHardConstraints(assignments: Map<string, CourseAssignment>): ConstraintViolation[] {
+    const violations: ConstraintViolation[] = [];
+    
+    // 检查每个分配的硬约束
+    for (const assignment of assignments.values()) {
+      // 使用现有的硬约束检测方法
+      const teacherConflict = this.checkTeacherTimeConflict(assignment, assignments);
+      const classConflict = this.checkClassTimeConflict(assignment, assignments);
+      const forbiddenTime = this.checkForbiddenTimeSlot(assignment);
+      
+      if (teacherConflict) {
+        violations.push({
+          constraintType: ConstraintType.HARD_TEACHER_CONFLICT,
+          isHard: true,
+          penalty: 1000,
+          variables: [assignment.variableId],
+          message: teacherConflict.message,
+ //         suggestion: '必须解决教师时间冲突'
+        });
+      }
+      
+      if (classConflict) {
+        violations.push({
+          constraintType: ConstraintType.HARD_CLASS_CONFLICT,
+          isHard: true,
+          penalty: 1000,
+          variables: [assignment.variableId],
+          message: classConflict.message,
+ //         suggestion: '必须解决班级时间冲突'
+        });
+      }
+      
+      if (forbiddenTime) {
+        violations.push(forbiddenTime);
       }
     }
+    
+    return violations;
+  }
 
-    if (dailyCount >= 2) {
-      return {
-        constraintType: ConstraintType.HARD_SUBJECT_CONSTRAINT,
-        isHard: true,
-        penalty: 1000, // 高惩罚分数，确保不会被违反
-        variables: [assignment.variableId],
-        message: '体育课不能在同一天安排两节',
-        suggestion: '必须将体育课安排在不同时间段'
-      };
+  /**
+   * 检测软约束
+   */
+  private checkSoftConstraints(assignments: Map<string, CourseAssignment>): ConstraintViolation[] {
+    const violations: ConstraintViolation[] = [];
+    
+    // 按教师分组检查工作量约束
+    const teacherAssignments = new Map<string, CourseAssignment[]>();
+    for (const assignment of assignments.values()) {
+      const teacherId = assignment.teacherId.toString();
+      if (!teacherAssignments.has(teacherId)) {
+        teacherAssignments.set(teacherId, []);
+      }
+      teacherAssignments.get(teacherId)!.push(assignment);
     }
+    
+    for (const [teacherId, teacherAssigns] of teacherAssignments.entries()) {
+      const workloadViolations = this.checkTeacherWorkloadConstraints(
+        new mongoose.Types.ObjectId(teacherId), 
+        teacherAssigns
+      );
+      violations.push(...workloadViolations);
+    }
+    
+    // 检查核心课程分布约束
+    for (const assignment of assignments.values()) {
+      const coreViolations = this.checkCoreSubjectDistributionConstraints(assignment, assignments);
+      violations.push(...coreViolations);
+    }
+    
+    return violations;
+  }
 
-    return null;
+  /**
+   * 计算硬约束得分
+   */
+  private calculateHardConstraintScore(violations: ConstraintViolation[]): number {
+    const hardViolations = violations.filter(v => v.isHard);
+    if (hardViolations.length === 0) return 100;
+    
+    // 硬约束违反直接扣分
+    const totalPenalty = hardViolations.reduce((sum, v) => sum + v.penalty, 0);
+    return Math.max(0, 100 - totalPenalty / 10);
+  }
+
+  /**
+   * 计算软约束得分
+   */
+  private calculateSoftConstraintScore(violations: ConstraintViolation[]): number {
+    const softViolations = violations.filter(v => !v.isHard);
+    if (softViolations.length === 0) return 100;
+    
+    // 软约束按权重扣分
+    let totalWeightedPenalty = 0;
+    for (const violation of softViolations) {
+      const weight = this.getConstraintWeight(violation.constraintType);
+      totalWeightedPenalty += violation.penalty * weight;
+    }
+    
+    return Math.max(0, 100 - totalWeightedPenalty / 100);
+  }
+
+  /**
+   * 获取约束权重
+   */
+  private getConstraintWeight(constraintType: ConstraintType): number {
+    switch (constraintType) {
+      case ConstraintType.SOFT_WORKLOAD_BALANCE:
+        return this.constraintWeights.teacherWorkloadBalance;
+      case ConstraintType.SOFT_CORE_SUBJECT_DISTRIBUTION:
+        return this.constraintWeights.coreSubjectDistribution;
+      case ConstraintType.SOFT_SUBJECT_CONSTRAINT:
+        return this.constraintWeights.subjectSpecificConstraints;
+      case ConstraintType.SOFT_TIME_PREFERENCE:
+        return this.constraintWeights.timePreference;
+      default:
+        return 5; // 默认权重
+    }
+  }
+
+  /**
+   * 生成改进建议
+   */
+  private generateImprovementSuggestions(
+    hardViolations: ConstraintViolation[],
+    softViolations: ConstraintViolation[]
+  ): string[] {
+    const suggestions: string[] = [];
+    
+    if (hardViolations.length > 0) {
+      suggestions.push(`发现 ${hardViolations.length} 个硬约束违反，必须优先解决`);
+    }
+    
+    if (softViolations.length > 0) {
+      suggestions.push(`发现 ${softViolations.length} 个软约束违反，建议优化排课质量`);
+    }
+    
+    // 基于具体违反情况生成建议
+    for (const violation of [...hardViolations, ...softViolations]) {
+      if (violation.suggestion) {
+        suggestions.push(violation.suggestion);
+      }
+    }
+    
+    if (suggestions.length === 0) {
+      suggestions.push('排课质量良好，无需特别改进');
+    }
+    
+    return suggestions;
   }
 }

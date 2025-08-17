@@ -10,7 +10,8 @@ import {
   AlgorithmConfig, 
   TimeSlot,
   CourseAssignment,
-  ConstraintType 
+  ConstraintType,
+  DebugLevel
 } from './types';
 import mongoose from 'mongoose';
 
@@ -98,7 +99,8 @@ function generateTestData(): {
     backtrackLimit: 100,
     enableLocalOptimization: true,
     localOptimizationIterations: 10,
-    verbose: true
+    verbose: true,
+    debugLevel: DebugLevel.DETAILED // 演示时使用详细调试级别
   };
 
   return { variables, rules, config };

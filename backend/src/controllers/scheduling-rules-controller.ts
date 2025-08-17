@@ -1235,7 +1235,7 @@ function transformSchedulingRulesToResponse(rules: any): SchedulingRulesResponse
     };
   } else {
     // 异常情况：缺少创建人信息，使用默认值
-    console.warn(`排课规则 ${rules._id} 缺少创建人信息，使用默认值`);
+ //   console.warn(`排课规则 ${rules._id} 缺少创建人信息，使用默认值`);
     createdByInfo = {
       _id: '000000000000000000000000', // 默认ID
       username: '系统管理员',

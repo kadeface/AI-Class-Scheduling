@@ -63,7 +63,8 @@ export class SchedulingController {
         classIds,            // 指定班级ID数组 (可选)
         rulesId,             // 排课规则ID (可选)
         algorithmConfig,     // 算法配置参数 (可选)
-        preserveExisting = false  // 是否保留现有排课 (默认false)
+        preserveExisting = false,  // 是否保留现有排课 (默认false)
+        useK12 = false      // 是否使用K12排课引擎 (新增，默认false)
       } = req.body;
 
       console.log('🔍 排课规则参数检查:');
@@ -71,6 +72,8 @@ export class SchedulingController {
       console.log('   rulesId类型:', typeof rulesId);
       console.log('   rulesId是否为空:', !rulesId);
       console.log('   rulesId是否为有效ObjectId:', rulesId ? mongoose.Types.ObjectId.isValid(rulesId) : 'N/A');
+      console.log('   useK12选项:', useK12);
+      console.log('   排课引擎:', useK12 ? 'K12排课引擎' : '传统排课引擎');
 
       // 验证必需参数
       if (!academicYear || !semester) {
@@ -98,21 +101,22 @@ export class SchedulingController {
       const taskId = new mongoose.Types.ObjectId().toString();
       console.log('✅ 生成任务ID:', taskId);
 
-      // 构建排课请求
-      const request: SchedulingRequest = {
+      // 创建排课请求
+      const schedulingRequest: SchedulingRequest = {
         academicYear,
         semester,
-        classIds: classIds ? classIds.map((id: string) => new mongoose.Types.ObjectId(id)) : undefined,
-        rulesId: rulesId ? new mongoose.Types.ObjectId(rulesId) : undefined,
+        classIds,
+        rulesId,
         algorithmConfig,
-        preserveExisting
+        preserveExisting,
+        useK12
       };
 
       console.log('🔍 构建的排课请求:');
-      console.log('   rulesId转换后:', request.rulesId);
-      console.log('   rulesId类型:', typeof request.rulesId);
-      console.log('   rulesId是否为ObjectId:', request.rulesId instanceof mongoose.Types.ObjectId);
-      console.log('   完整请求对象:', JSON.stringify(request, null, 2));
+      console.log('   rulesId转换后:', schedulingRequest.rulesId);
+      console.log('   rulesId类型:', typeof schedulingRequest.rulesId);
+      console.log('   rulesId是否为ObjectId:', schedulingRequest.rulesId instanceof mongoose.Types.ObjectId);
+      console.log('   完整请求对象:', JSON.stringify(schedulingRequest, null, 2));
 
       // 创建任务状态
       const task: SchedulingTask = {
@@ -134,16 +138,18 @@ export class SchedulingController {
       // 创建进度回调
       const progressCallback: ProgressCallback = (progress) => {
         task.progress = progress;
-        console.log(`📊 排课进度更新: ${progress.stage} - ${progress.percentage}% - ${progress.message}`);
+        // 只在关键阶段输出进度信息
+        if (progress.percentage % 20 === 0 || progress.percentage === 100) {
+          console.log(`📊 排课进度: ${progress.stage} - ${progress.percentage}%`);
+        }
       };
 
       console.log('🚀 开始异步执行排课任务...');
       
       // 异步执行排课
-      SchedulingController.schedulingService.executeScheduling(request, progressCallback)
+      SchedulingController.schedulingService.executeScheduling(schedulingRequest, progressCallback)
         .then(result => {
           console.log('✅ 排课任务执行成功');
-          console.log('   结果:', JSON.stringify(result, null, 2));
           task.status = 'completed';
           task.result = result;
           task.endTime = new Date();

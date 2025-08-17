@@ -60,6 +60,8 @@ interface SchedulingTask {
     percentage: number;
     stage: string;
     message: string;
+    assignedCount?: number;
+    totalCount?: number;
   };
   startTime: string;
   endTime?: string;
@@ -414,7 +416,6 @@ export default function IntegratedSchedulePage() {
       }
 
       const data: ApiResponse<{ taskId: string }> = await response.json();
-      console.log('   📥 后端响应:', data);
 
       if (data.success && data.data) {
         // 开始监控任务
@@ -738,6 +739,12 @@ export default function IntegratedSchedulePage() {
 
               <div className="text-sm text-muted-foreground">
                 {currentTask.progress.message}
+                {/* 显示课程数量信息 */}
+                {currentTask.progress.assignedCount !== undefined && currentTask.progress.totalCount !== undefined && (
+                  <div className="mt-1 text-xs text-blue-600">
+                    已分配 {currentTask.progress.assignedCount}/{currentTask.progress.totalCount} 个课程
+                  </div>
+                )}
               </div>
 
               {/* 排课结果统计 */}

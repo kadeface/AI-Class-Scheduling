@@ -24,7 +24,8 @@ export const DEFAULT_ALGORITHM_CONFIG = {
   backtrackLimit: 1000,
   enableLocalOptimization: true,
   localOptimizationIterations: 100,
-  verbose: false
+  verbose: false,
+  debugLevel: 'minimal' // 默认使用最小调试级别
 };
 
 // 工具函数
