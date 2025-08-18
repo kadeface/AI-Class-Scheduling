@@ -591,7 +591,8 @@ export class K12SchedulingEngine {
       teacherId: teacher._id,
       requiredHours: assignment.weeklyHours || 1,
       priority: 5,
-      domain: []
+      domain: [],
+      subject: course.subject || course.name || '未知科目' // 🔧 修复：添加科目字段
     };
   }
 
@@ -1095,7 +1096,7 @@ private propagateConstraints(state: ScheduleState, variables: ScheduleVariable[]
   for (const variable of variables) {
     if (state.assignments.has(variable.id)) continue;
     
-    console.log(`         🔍 [约束传播] 处理变量 ${variable.id}...`);
+    //console.log(`         🔍 [约束传播] 处理变量 ${variable.id}...`);
     
     // 🔧 修复：只选择该班级对应的时间段，并应用预检查机制
     const feasibleClassTimeSlots = allClassTimeSlots.filter(classTimeSlot => 
@@ -1117,7 +1118,7 @@ private propagateConstraints(state: ScheduleState, variables: ScheduleVariable[]
     
     // 将可行时间槽设置到变量的domain属性中
     variable.domain = feasibleClassTimeSlots.map(cts => cts.baseTimeSlot);
-    console.log(`         ✅ 变量 ${variable.id}: ${feasibleClassTimeSlots.length} 个可行时间槽（课室约束已传播）`);
+    //console.log(`         ✅ 变量 ${variable.id}: ${feasibleClassTimeSlots.length} 个可行时间槽（课室约束已传播）`);
   }
   
   console.log(`      ✅ [约束传播] 完成，所有变量都有可行时间槽（课室约束已传播）`);
@@ -1406,10 +1407,204 @@ private isAssignmentFeasible(variable: ScheduleVariable, timeSlot: BaseTimeSlot)
   //  console.log(`            ❌ [预检查] 班级冲突: 班级 ${variable.classId} 在时间槽 ${timeSlot.dayOfWeek}-${timeSlot.period} 已有课程`);
     return false;
   }
-  
+  // 3. 检查副科一天一次约束
+  if (!this.isCoreSubject(variable) && 
+      this.hasMinorSubjectConflict(variable, timeSlot.dayOfWeek)) {
+    return false;
+  }
+  // 4. 检查核心课程分散度约束
+  if (this.isCoreSubject(variable) && 
+    this.hasCoreSubjectDistributionConflict(variable, timeSlot.dayOfWeek)) {
+    return false;
+  }  
+  /*
+  // 5. 检查核心课程至少四天有课约束
+  if (this.isCoreSubject(variable) && 
+    this.hasCoreSubjectMinimumDaysConflict(variable, timeSlot.dayOfWeek)) {
+    return false;
+  }
+    */
+
+  // 5. 检查同一天同一核心科目数量约束（最多2节）
+  if (this.isCoreSubject(variable) && 
+    this.hasSameDayCoreSubjectCountConflict(variable, timeSlot.dayOfWeek)) {
+    return false;
+  }
  // console.log(`            ✅ [预检查] 时间可行性检查通过`);
   return true;
 }
+
+/**
+ * 检查核心课程是否满足至少四天有课的约束
+ * 
+ * @param variable 排课变量
+ * @param dayOfWeek 星期几
+ * @returns 是否违反约束
+ */
+private hasCoreSubjectMinimumDaysConflict(variable: ScheduleVariable, dayOfWeek: number): boolean {
+  if (!variable.subject) return false;
+  
+  // 统计该科目已经安排的天数
+  const assignedDays = new Set<number>();
+  
+  for (const assignment of this.currentAssignments.values()) {
+    if (assignment.classId.toString() === variable.classId.toString()) {
+      const courseInfo = this.findCourseInTeachingPlans(assignment.courseId);
+      if (courseInfo && courseInfo.subject === variable.subject) {
+        assignedDays.add(assignment.timeSlot.dayOfWeek);
+      }
+    }
+  }
+  
+  // 如果当前时间槽不在已安排的天数中，则添加
+  if (!assignedDays.has(dayOfWeek)) {
+    assignedDays.add(dayOfWeek);
+  }
+  
+  // 检查该科目的总课时和已安排课时
+  const totalRequiredHours = this.getSubjectTotalHours(variable.classId, variable.subject);
+  const assignedHours = this.getSubjectAssignedHours(variable.classId, variable.subject);
+  
+  // 如果这是最后一节课，检查是否满足至少四天有课的约束
+  if (assignedHours + 1 === totalRequiredHours) {
+    // 核心课程至少四天有课
+    if (assignedDays.size < 4) {
+      return true; // 违反至少四天有课约束
+    }
+  }
+  
+  return false;
+}
+/**
+ * 检查副科一天一次冲突
+ * 
+ * @param variable 排课变量
+ * @param dayOfWeek 星期几
+ * @returns 是否存在冲突
+ */
+private hasMinorSubjectConflict(variable: ScheduleVariable, dayOfWeek: number): boolean {
+  // 统计当天该班级同科目的课程数量
+  let dailyCount = 0;
+  
+  for (const assignment of this.currentAssignments.values()) {
+    if (assignment.classId.toString() === variable.classId.toString() &&
+        assignment.timeSlot.dayOfWeek === dayOfWeek) {
+      
+      // 获取课程信息以判断科目
+      const courseInfo = this.findCourseInTeachingPlans(assignment.courseId);
+      if (courseInfo && courseInfo.subject === variable.subject) {
+        dailyCount++;
+      }
+    }
+  }
+  
+  // 副科每天最多1节
+  return dailyCount > 0;
+}
+
+/**
+ * 检查同一天同一核心科目是否超过2节限制
+ * 
+ * @param variable 排课变量
+ * @param dayOfWeek 星期几
+ * @returns 是否违反约束
+ */
+private hasSameDayCoreSubjectCountConflict(variable: ScheduleVariable, dayOfWeek: number): boolean {
+  if (!variable.subject) return false;
+  
+  let sameSubjectCount = 0;
+  
+  // 统计当天该班级同科目的课程数量
+  for (const assignment of this.currentAssignments.values()) {
+    if (assignment.classId.toString() === variable.classId.toString() &&
+        assignment.timeSlot.dayOfWeek === dayOfWeek) {
+      
+      // 获取课程信息以判断科目
+      const courseInfo = this.findCourseInTeachingPlans(assignment.courseId);
+      if (courseInfo && courseInfo.subject === variable.subject) {
+        sameSubjectCount++;
+      }
+    }
+  }
+  
+  // 同一天同一核心科目最多2节
+  // 如果当前科目当天已有2节，则不能再安排
+  if (sameSubjectCount >= 2) {
+    return true; // 违反最多2节约束
+  }
+  
+  return false;
+}
+/**
+ * 获取指定班级指定科目的总课时数
+ */
+private getSubjectTotalHours(classId: mongoose.Types.ObjectId, subject: string): number {
+  for (const plan of this.teachingPlans) {
+    if (plan.class._id.toString() === classId.toString()) {
+      for (const assignment of plan.courseAssignments || []) {
+        const course = assignment.course;
+        if (course && course.subject === subject) {
+          return assignment.weeklyHours || 0;
+        }
+      }
+    }
+  }
+  return 0;
+}
+
+/**
+ * 获取指定班级指定科目已安排的课时数
+ */
+private getSubjectAssignedHours(classId: mongoose.Types.ObjectId, subject: string): number {
+  let assignedCount = 0;
+  
+  for (const assignment of this.currentAssignments.values()) {
+    if (assignment.classId.toString() === classId.toString()) {
+      const courseInfo = this.findCourseInTeachingPlans(assignment.courseId);
+      if (courseInfo && courseInfo.subject === subject) {
+        assignedCount++;
+      }
+    }
+  }
+  
+  return assignedCount;
+}
+
+
+private hasCoreSubjectDistributionConflict(variable: ScheduleVariable, dayOfWeek: number): boolean {
+  // 检查该科目在过去几天是否过于集中
+  const recentDays = [dayOfWeek - 1, dayOfWeek - 2, dayOfWeek - 3].filter(d => d > 0);
+  let consecutiveCount = 0;
+  
+  for (const day of recentDays) {
+    // 检查该天是否已有同科目课程
+    if (this.hasSubjectOnDay(variable.classId, variable.subject || '', day)) {
+      consecutiveCount++;
+    }
+  }
+  
+  // 核心课程不应连续3天以上在同一时间段
+  return consecutiveCount >= 3;
+}
+
+/**
+ * 检查指定班级在指定日期是否已有指定科目课程
+ */
+private hasSubjectOnDay(classId: mongoose.Types.ObjectId, subject: string, dayOfWeek: number): boolean {
+  for (const assignment of this.currentAssignments.values()) {
+    if (assignment.classId.toString() === classId.toString() &&
+        assignment.timeSlot.dayOfWeek === dayOfWeek) {
+      
+      // 获取课程信息以判断科目
+      const courseInfo = this.findCourseInTeachingPlans(assignment.courseId);
+      if (courseInfo && courseInfo.subject === subject) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 
 /**
  * 检查教师冲突
@@ -1607,12 +1802,12 @@ private async canAssign(variable: ScheduleVariable, timeSlot: BaseTimeSlot, stat
     return false;
   }
 
-  console.log(`         ✅ [canAssign] 变量 ${variable.id} 可以分配: 时间 ${timeSlot.dayOfWeek}-${timeSlot.period}, 课室 ${room.name}`);
+ //console.log(`         ✅ [canAssign] 变量 ${variable.id} 可以分配: 时间 ${timeSlot.dayOfWeek}-${timeSlot.period}, 课室 ${room.name}`);
   return true;
 }
 
 private async makeAssignment(variable: ScheduleVariable, timeSlot: BaseTimeSlot, state: ScheduleState): Promise<CourseAssignment> {
-  console.log(`         🔄 [makeAssignment] 开始为变量 ${variable.id} 创建分配...`);
+  //console.log(`         🔄 [makeAssignment] 开始为变量 ${variable.id} 创建分配...`);
   
   try {
     // 使用同步分配方法
@@ -1633,7 +1828,7 @@ private async makeAssignment(variable: ScheduleVariable, timeSlot: BaseTimeSlot,
       state.unassigned.splice(index, 1);
     }
     
-    console.log(`         ✅ [makeAssignment] 成功创建分配: 变量 ${variable.id}`);
+    //console.log(`         ✅ [makeAssignment] 成功创建分配: 变量 ${variable.id}`);
     return assignment;
     
   } catch (error) {
@@ -1811,7 +2006,10 @@ private getK12TimeSlotPreference(variable: ScheduleVariable, timeSlot: BaseTimeS
   score += this.getK12SubjectTypeTimePreference(variable, timeSlot) * 0.25;
   
   // 4. 连排课程偏好 (20%)
-  score += this.getContinuousCoursePreference(variable, timeSlot) * 0.20;
+  //score += this.getContinuousCoursePreference(variable, timeSlot) * 0.20;
+  
+  // 5.科目分散度评分
+  score += this.getSubjectDistributionScore(variable, timeSlot) * 0.15;
 
   return score;
 }
@@ -1892,6 +2090,30 @@ private getContinuousCoursePreference(variable: ScheduleVariable, timeSlot: Base
   
   return score;
 }
+
+/**
+ * 计算科目分散度评分
+ */
+private getSubjectDistributionScore(variable: ScheduleVariable, timeSlot: BaseTimeSlot): number {
+  if (!variable.subject) return 0;
+  
+  // 检查该科目在过去几天的分布情况
+  const recentDays = [timeSlot.dayOfWeek - 1, timeSlot.dayOfWeek - 2, timeSlot.dayOfWeek - 3].filter(d => d > 0);
+  let consecutiveCount = 0;
+  
+  for (const day of recentDays) {
+    if (this.hasSubjectOnDay(variable.classId, variable.subject, day)) {
+      consecutiveCount++;
+    }
+  }
+  
+  // 连续天数越少，分数越高
+  if (consecutiveCount === 0) return 15;
+  if (consecutiveCount === 1) return 10;
+  if (consecutiveCount === 2) return 5;
+  return 0;
+}
+
 
 private getCourseNameSync(courseId: mongoose.Types.ObjectId): string {
   // 从教学计划中查找课程名称

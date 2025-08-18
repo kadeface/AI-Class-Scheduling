@@ -82,6 +82,12 @@ export class K12ConstraintChecker {
       return false;
     }
 
+    // 5. 副科一天一节检测：副科每天最多1节
+    if (!this.checkElectiveSubjectDailyLimit(variable, timeSlot, currentAssignments)) {
+      console.log(`               ❌ 硬约束违反: 副科一天一节限制`);
+      return false;
+    }
+
     console.log(`               ✅ 硬约束检查通过`);
     return true;
   }
@@ -367,6 +373,71 @@ export class K12ConstraintChecker {
     // 暂时返回0，后续完善
     
     return violations;
+  }
+
+  /**
+   * 检查副科一天一节约束（硬约束）
+   * 
+   * @param variable 排课变量
+   * @param timeSlot 时间槽
+   * @param currentAssignments 当前所有分配
+   * @returns 是否满足副科一天一节约束
+   */
+  private checkElectiveSubjectDailyLimit(
+    variable: any, 
+    timeSlot: any, 
+    currentAssignments: Map<string, any>
+  ): boolean {
+    console.log(`            🔍 [副科约束] 检查变量 ${variable.id} 的副科一天一节约束...`);
+    console.log(`               - 科目: ${variable.subject}`);
+    console.log(`               - 班级: ${variable.classId}`);
+    console.log(`               - 时间: 周${timeSlot.dayOfWeek}第${timeSlot.period}节`);
+    
+    // 跳过核心课程检查
+    if (this.isCoreSubject(variable.subject)) {
+      console.log(`               ✅ 核心课程 ${variable.subject}，跳过检查`);
+      return true;
+    }
+
+    console.log(`               🔍 副科 ${variable.subject}，开始检查一天一节约束...`);
+
+    const classId = variable.classId;
+    const dayOfWeek = timeSlot.dayOfWeek;
+    let dailyCount = 1; // 当前要安排的课程
+
+    // 统计当天该科目的课程数量
+    for (const assignment of Array.from(currentAssignments.values())) {
+      console.log(`               🔍 检查分配: 班级=${assignment.classId}, 时间=${assignment.timeSlot.dayOfWeek}-${assignment.timeSlot.period}, 科目=${assignment.subject}`);
+      
+      if (assignment.classId.toString() === classId.toString() && 
+          assignment.timeSlot.dayOfWeek === dayOfWeek &&
+          assignment.subject === variable.subject) {
+        dailyCount++;
+        console.log(`               ⚠️ 发现同一天同科目课程: ${assignment.subject} (${assignment.timeSlot.dayOfWeek}-${assignment.timeSlot.period})`);
+      }
+    }
+
+    console.log(`               📊 当天 ${variable.subject} 课程数量: ${dailyCount}`);
+
+    // 副科每日最多1节（硬约束）
+    if (dailyCount > 1) {
+      console.log(`                  ❌ 副科 ${variable.subject} 当天已有课程，违反一天一节约束`);
+      return false;
+    }
+
+    console.log(`               ✅ 副科 ${variable.subject} 一天一节约束检查通过`);
+    return true;
+  }
+
+  /**
+   * 判断是否为核心课程
+   * 
+   * @param subjectName 科目名称
+   * @returns 是否为核心课程
+   */
+  private isCoreSubject(subjectName: string): boolean {
+    const coreSubjects = ['语文', '数学', '英语', '物理', '化学', '生物'];
+    return coreSubjects.includes(subjectName);
   }
 
   /**

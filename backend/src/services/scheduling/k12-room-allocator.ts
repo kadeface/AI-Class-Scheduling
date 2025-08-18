@@ -26,13 +26,13 @@ export class K12RoomAllocator {
     classes?: any[]
   ): any | null {
     
-    console.log(`🚀 [课室分配] 课程: ${course.subject}, 班级: ${classId}, 可用课室: ${rooms?.length || 0} 个`);
+//    console.log(`🚀 [课室分配] 课程: ${course.subject}, 班级: ${classId}, 可用课室: ${rooms?.length || 0} 个`);
     
     // 情况1：必须使用功能教室的课程
     if (this.mustUseSpecialRoom(course.subject)) {
       const specialRoom = this.findSpecialRoomForCourse(course, rooms);
       if (specialRoom) {
-        console.log(`   ✅ 功能教室分配成功: ${specialRoom.name}`);
+ //       console.log(`   ✅ 功能教室分配成功: ${specialRoom.name}`);
         return specialRoom;
       }
       
@@ -43,7 +43,7 @@ export class K12RoomAllocator {
     // 情况2：其他所有课程使用固定教室
     const fixedRoom = this.getFixedRoomForClass(classId, rooms, classes);
     if (fixedRoom) {
-      console.log(`   ✅ 固定教室分配成功: ${fixedRoom.name}`);
+ //     console.log(`   ✅ 固定教室分配成功: ${fixedRoom.name}`);
       return fixedRoom;
     }
     
@@ -70,7 +70,7 @@ export class K12RoomAllocator {
    * 查找课程的功能教室
    */
   private findSpecialRoomForCourse(course: any, rooms: any[]): any | null {
-    console.log(`🔍 [功能教室查找] 课程: ${course.subject}, 可用课室: ${rooms?.length || 0} 个`);
+ //   console.log(`🔍 [功能教室查找] 课程: ${course.subject}, 可用课室: ${rooms?.length || 0} 个`);
     
     const roomMapping: { [key: string]: string[] } = {
       '物理': ['实验室', '物理实验室'],
@@ -85,7 +85,7 @@ export class K12RoomAllocator {
       return null;
     }
     
-    console.log(`   🎯 期望类型: ${roomTypes.join(', ')}`);
+ //   console.log(`   🎯 期望类型: ${roomTypes.join(', ')}`);
     
     if (!rooms || rooms.length === 0) {
       console.log(`   ❌ 没有可用课室`);
@@ -105,7 +105,7 @@ export class K12RoomAllocator {
     });
     
     if (matchedRoom) {
-      console.log(`   ✅ 找到功能教室: ${matchedRoom.name} (${matchedRoom.type})`);
+      //console.log(`   ✅ 找到功能教室: ${matchedRoom.name} (${matchedRoom.type})`);
     } else {
       console.log(`   ❌ 未找到匹配的功能教室`);
       console.log(`   💡 原因: 课室类型不匹配或已被固定分配`);
