@@ -10,6 +10,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ScheduleHeader } from './components/ScheduleHeader';
 import { ScheduleGrid, ScheduleGridSkeleton } from './components/ScheduleGrid';
+import { ExportDialog } from './components/ExportDialog';
+import { SettingsDialog } from './components/SettingsDialog';
 import { 
   ViewMode, 
   ScheduleOption, 
@@ -160,9 +162,8 @@ export default function ScheduleViewPage() {
   const handleExport = useCallback(() => {
     if (!scheduleData) return;
     
-    // 这里可以实现PDF导出或Excel导出功能
+    // 导出功能已集成到ExportDialog组件中
     console.log('导出课表:', scheduleData);
-    alert('导出功能开发中...');
   }, [scheduleData]);
 
   /**
@@ -215,6 +216,17 @@ export default function ScheduleViewPage() {
         onRefresh={handleRefresh}
         onExport={handleExport}
         onSettings={handleSettings}
+        exportDialog={
+          scheduleData ? (
+            <ExportDialog
+              scheduleData={scheduleData}
+              viewMode={viewMode}
+            />
+          ) : undefined
+        }
+        settingsDialog={
+          <SettingsDialog />
+        }
       />
 
       {/* 错误提示 */}

@@ -48,6 +48,12 @@ interface ScheduleHeaderProps {
   onRefresh?: () => void;
   onExport?: () => void;
   onSettings?: () => void;
+  
+  // 导出对话框组件
+  exportDialog?: React.ReactNode;
+  
+  // 设置对话框组件
+  settingsDialog?: React.ReactNode;
 }
 
 /**
@@ -68,7 +74,9 @@ export function ScheduleHeader({
   lastUpdated,
   onRefresh,
   onExport,
-  onSettings
+  onSettings,
+  exportDialog,
+  settingsDialog
 }: ScheduleHeaderProps) {
   
   // 本地状态管理
@@ -213,27 +221,31 @@ export function ScheduleHeader({
             刷新
           </Button>
 
-          {/* 导出按钮 */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onExport}
-            className="gap-2"
-          >
-            <Download className="h-4 w-4" />
-            导出
-          </Button>
+          {/* 导出对话框 */}
+          {exportDialog || (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onExport}
+              className="gap-2"
+            >
+              <Download className="h-4 w-4" />
+              导出
+            </Button>
+          )}
 
-          {/* 设置按钮 */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onSettings}
-            className="gap-2"
-          >
-            <Settings className="h-4 w-4" />
-            设置
-          </Button>
+          {/* 设置对话框 */}
+          {settingsDialog || (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onSettings}
+              className="gap-2"
+            >
+              <Settings className="h-4 w-4" />
+              设置
+            </Button>
+          )}
         </div>
       </div>
 

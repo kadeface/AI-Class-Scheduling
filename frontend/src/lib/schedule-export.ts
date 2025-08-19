@@ -1,560 +1,1499 @@
 /**
  * 课表导出工具库
  * 
- * 提供课表数据的Excel导出和打印功能
+ * 提供课表数据的多种导出格式和打印功能
  */
 
-import * as XLSX from 'xlsx';
-import { saveAs } from 'file-saver';
-import { WeekSchedule, CourseSlot, ScheduleViewData, TIME_CONFIG } from '@/app/management/schedules/schedule-view/types';
+import { ScheduleViewData, CourseSlot, ViewMode } from '@/app/management/schedules/schedule-view/types';
 
 /**
  * 导出选项接口
  */
 export interface ExportOptions {
-  includeEmpty?: boolean;      // 是否包含空课时
-  includeMetadata?: boolean;   // 是否包含元数据
-  format?: 'xlsx' | 'csv';    // 导出格式
-  filename?: string;          // 文件名
+  format: 'pdf' | 'excel' | 'csv' | 'print';
+  includeDetails?: boolean;
+  customStyles?: ExportStyles;
+  pageSize?: 'A4' | 'Letter';
+  orientation?: 'portrait' | 'landscape';
+  fileName?: string;
+  // 批量打印选项
+  batchPrint?: {
+    enabled: boolean;
+    targets: Array<{
+      id: string;
+      name: string;
+      type: 'class' | 'teacher' | 'room';
+    }>;
+    printAll?: boolean;
+  };
 }
 
 /**
- * 打印选项接口
+ * 导出样式接口
  */
-export interface PrintOptions {
-  title?: string;             // 打印标题
-  includeMetadata?: boolean;  // 是否包含元数据
-  paperSize?: 'A4' | 'A3';   // 纸张大小
-  orientation?: 'portrait' | 'landscape'; // 页面方向
+export interface ExportStyles {
+  fontSize?: number;
+  fontFamily?: string;
+  primaryColor?: string;
+  secondaryColor?: string;
+  showGrid?: boolean;
+  showBorders?: boolean;
 }
 
 /**
- * 将课表数据导出为Excel文件
+ * 课表导出主函数
  * 
  * @param scheduleData 课表数据
+ * @param viewMode 视图模式
  * @param options 导出选项
  */
-export function exportScheduleToExcel(
+export async function exportSchedule(
   scheduleData: ScheduleViewData,
-  options: ExportOptions = {}
-): void {
-  const {
-    includeEmpty = true,
-    includeMetadata = true,
-    format = 'xlsx',
-    filename
-  } = options;
-
-  // 创建工作簿
-  const workbook = XLSX.utils.book_new();
-
-  // 创建课表工作表
-  const scheduleSheet = createScheduleSheet(scheduleData.weekSchedule, includeEmpty);
-  XLSX.utils.book_append_sheet(workbook, scheduleSheet, '课表');
-
-  // 如果包含元数据，创建信息工作表
-  if (includeMetadata) {
-    const infoSheet = createInfoSheet(scheduleData);
-    XLSX.utils.book_append_sheet(workbook, infoSheet, '课表信息');
-  }
-
-  // 生成文件名
-  const defaultFilename = generateFilename(scheduleData, format);
-  const finalFilename = filename || defaultFilename;
-
-  // 导出文件
-  if (format === 'xlsx') {
-    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-    const blob = new Blob([excelBuffer], { 
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
-    });
-    saveAs(blob, finalFilename);
-  } else if (format === 'csv') {
-    const csvContent = XLSX.utils.sheet_to_csv(scheduleSheet);
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    saveAs(blob, finalFilename);
+  viewMode: ViewMode,
+  options: ExportOptions
+): Promise<void> {
+  try {
+    // 检查是否为批量导出
+    if (options.batchPrint?.enabled) {
+      await batchPrintSchedules(options.batchPrint, options.format);
+      return;
+    }
+    
+    switch (options.format) {
+      case 'pdf':
+        await exportToPDF(scheduleData, viewMode, options);
+        break;
+      case 'excel':
+        await exportToExcel(scheduleData, viewMode, options);
+        break;
+      case 'csv':
+        await exportToCSV(scheduleData, viewMode, options);
+        break;
+      case 'print':
+        printSchedule(scheduleData, viewMode, options);
+        break;
+      default:
+        throw new Error(`不支持的导出格式: ${options.format}`);
+    }
+  } catch (error) {
+    console.error('导出失败:', error);
+    throw error;
   }
 }
 
 /**
- * 创建课表工作表
+ * 导出为PDF格式
  * 
- * @param weekSchedule 周课表数据
- * @param includeEmpty 是否包含空课时
- * @returns Excel工作表
+ * @param scheduleData 课表数据
+ * @param viewMode 视图模式
+ * @param options 导出选项
  */
-function createScheduleSheet(
-  weekSchedule: WeekSchedule,
-  includeEmpty: boolean
-): XLSX.WorkSheet {
-  // 创建表头
-  const headers = ['时间', ...TIME_CONFIG.DAYS.map(day => day.label)];
+async function exportToPDF(
+  scheduleData: ScheduleViewData,
+  viewMode: ViewMode,
+  options: ExportOptions
+): Promise<void> {
+  // 简化PDF导出：直接使用打印功能，让用户选择"另存为PDF"
+  const printHtml = generatePrintHtml(scheduleData, viewMode, options);
   
-  // 创建数据行
-  const rows: string[][] = [headers];
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    throw new Error('无法打开打印窗口，请检查浏览器设置');
+  }
   
-  TIME_CONFIG.PERIODS.forEach(period => {
-    const row = [period.label];
-    
-    TIME_CONFIG.DAYS.forEach(day => {
-      const courseSlot = weekSchedule[day.value]?.[period.value];
-      
-      if (courseSlot) {
-        // 格式化课程信息
-        const courseInfo = formatCourseInfo(courseSlot);
-        row.push(courseInfo);
-      } else {
-        // 空课时处理
-        row.push(includeEmpty ? '（空）' : '');
-      }
-    });
-    
-    rows.push(row);
-  });
+  printWindow.document.write(printHtml);
+  printWindow.document.close();
+  printWindow.focus();
+  
+  // 延迟执行，确保内容渲染完成
+  setTimeout(() => {
+    printWindow.print();
+  }, 500);
+}
 
-  // 转换为工作表
-  const worksheet = XLSX.utils.aoa_to_sheet(rows);
-
+/**
+ * 导出为Excel格式
+ * 
+ * @param scheduleData 课表数据
+ * @param viewMode 视图模式
+ * @param options 导出选项
+ */
+async function exportToExcel(
+  scheduleData: ScheduleViewData,
+  viewMode: ViewMode,
+  options: ExportOptions
+): Promise<void> {
+  // 动态导入ExcelJS库
+  const ExcelJS = await import('exceljs');
+  const workbook = new ExcelJS.Workbook();
+  
+  // 创建工作表
+  const worksheet = workbook.addWorksheet('课表');
+  
   // 设置列宽
-  const colWidths = [
-    { wch: 12 }, // 时间列
-    ...TIME_CONFIG.DAYS.map(() => ({ wch: 20 })) // 星期列
+  worksheet.columns = [
+    { header: '时间', key: 'time', width: 15 },
+    { header: '周一', key: 'monday', width: 20 },
+    { header: '周二', key: 'tuesday', width: 20 },
+    { header: '周三', key: 'wednesday', width: 20 },
+    { header: '周四', key: 'thursday', width: 20 },
+    { header: '周五', key: 'friday', width: 20 }
   ];
-  worksheet['!cols'] = colWidths;
-
-  // 设置行高
-  const rowHeights = rows.map(() => ({ hpt: 60 }));
-  worksheet['!rows'] = rowHeights;
-
-  return worksheet;
-}
-
-/**
- * 创建信息工作表
- * 
- * @param scheduleData 课表数据
- * @returns Excel工作表
- */
-function createInfoSheet(scheduleData: ScheduleViewData): XLSX.WorkSheet {
-  const info = [
-    ['课表信息'],
-    [],
-    ['查看对象', scheduleData.targetName],
-    ['查看类型', getViewTypeLabel(scheduleData.type)],
-    ['学年学期', `${scheduleData.academicYear}学年第${scheduleData.semester}学期`],
-    ['总课程数', scheduleData.metadata.totalCourses.toString()],
-    ['总课时数', scheduleData.metadata.totalHours.toString()],
-    ['冲突数量', scheduleData.metadata.conflicts.toString()],
-    ['生成时间', new Date().toLocaleString('zh-CN')],
-    [],
-    ['课程统计'],
-    []
-  ];
-
-  // 统计各科目课时
-  const subjectStats = getSubjectStatistics(scheduleData.weekSchedule);
-  Object.entries(subjectStats).forEach(([subject, hours]) => {
-    info.push([subject, `${hours}课时`]);
-  });
-
-  return XLSX.utils.aoa_to_sheet(info);
-}
-
-/**
- * 格式化课程信息
- * 
- * @param courseSlot 课程时段
- * @returns 格式化后的课程信息
- */
-function formatCourseInfo(courseSlot: CourseSlot): string {
-  const parts = [
-    courseSlot.courseName,
-    courseSlot.teacherName,
-    courseSlot.roomName
-  ].filter(Boolean);
-
-  return parts.join('\n');
-}
-
-/**
- * 获取视图类型标签
- * 
- * @param type 视图类型
- * @returns 中文标签
- */
-function getViewTypeLabel(type: string): string {
-  const labels: Record<string, string> = {
-    'class': '班级课表',
-    'teacher': '教师课表',
-    'room': '教室课表'
-  };
-  return labels[type] || type;
-}
-
-/**
- * 获取学科统计信息
- * 
- * @param weekSchedule 周课表数据
- * @returns 学科统计
- */
-function getSubjectStatistics(weekSchedule: WeekSchedule): Record<string, number> {
-  const stats: Record<string, number> = {};
-
-  Object.values(weekSchedule).forEach(daySchedule => {
-    Object.values(daySchedule).forEach(courseSlot => {
-      const slot = courseSlot as CourseSlot | null;
-      if (slot && slot.subject) {
-        const subject = slot.subject;
-        stats[subject] = (stats[subject] || 0) + 1;
-      }
-    });
-  });
-
-  return stats;
-}
-
-/**
- * 生成默认文件名
- * 
- * @param scheduleData 课表数据
- * @param format 文件格式
- * @returns 文件名
- */
-function generateFilename(scheduleData: ScheduleViewData, format: string): string {
-  const timestamp = new Date().toISOString().slice(0, 10);
-  const typeLabel = getViewTypeLabel(scheduleData.type);
   
-  return `${typeLabel}-${scheduleData.targetName}-${scheduleData.academicYear}-${scheduleData.semester}-${timestamp}.${format}`;
+  // 添加标题行
+  worksheet.addRow({
+    time: `${scheduleData.targetName} 课表`,
+    monday: `${scheduleData.academicYear} 学年第${scheduleData.semester}学期`,
+    tuesday: '',
+    wednesday: '',
+    thursday: '',
+    friday: ''
+  });
+  
+  // 添加时间行
+  const timeSlots = [
+    '第1节 (08:00-08:45)',
+    '第2节 (08:55-09:40)',
+    '第3节 (10:00-10:45)',
+    '第4节 (10:55-11:40)',
+    '第5节 (14:00-14:45)',
+    '第6节 (14:55-15:40)',
+    '第7节 (16:00-16:45)',
+    '第8节 (16:55-17:40)'
+  ];
+  
+  // 填充课表数据
+  for (let period = 1; period <= 8; period++) {
+    const rowData: any = { time: timeSlots[period - 1] };
+    
+    for (let day = 1; day <= 5; day++) {
+      const courseSlot = scheduleData.weekSchedule[day]?.[period];
+      if (courseSlot) {
+        rowData[getDayKey(day)] = formatCourseInfo(courseSlot, viewMode);
+      } else {
+        rowData[getDayKey(day)] = '';
+      }
+    }
+    
+    worksheet.addRow(rowData);
+  }
+  
+  // 移除统计信息行
+  
+  // 设置样式
+  worksheet.getRow(1).font = { bold: true, size: 14 };
+  worksheet.getRow(2).font = { bold: true, size: 12 };
+  
+  // 生成文件名
+  const fileName = options.fileName || generateFileName(scheduleData, viewMode, 'xlsx');
+  
+  // 导出文件
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  downloadFile(blob, fileName);
+}
+
+/**
+ * 导出为CSV格式
+ * 
+ * @param scheduleData 课表数据
+ * @param viewMode 视图模式
+ * @param options 导出选项
+ */
+async function exportToCSV(
+  scheduleData: ScheduleViewData,
+  viewMode: ViewMode,
+  options: ExportOptions
+): Promise<void> {
+  const csvData = [];
+  
+  // 添加标题行
+  csvData.push(['时间', '周一', '周二', '周三', '周四', '周五']);
+  csvData.push([`${scheduleData.targetName} 课表`, `${scheduleData.academicYear} 学年第${scheduleData.semester}学期`, '', '', '', '']);
+  
+  // 添加时间行
+  const timeSlots = [
+    '第1节 (08:00-08:45)',
+    '第2节 (08:55-09:40)',
+    '第3节 (10:00-10:45)',
+    '第4节 (10:55-11:40)',
+    '第5节 (14:00-14:45)',
+    '第6节 (14:55-15:40)',
+    '第7节 (16:00-16:45)',
+    '第8节 (16:55-17:40)'
+  ];
+  
+  // 填充课表数据
+  for (let period = 1; period <= 8; period++) {
+    const rowData = [timeSlots[period - 1]];
+    
+    for (let day = 1; day <= 5; day++) {
+      const courseSlot = scheduleData.weekSchedule[day]?.[period];
+      if (courseSlot) {
+        rowData.push(formatCourseInfo(courseSlot, viewMode));
+      } else {
+        rowData.push('');
+      }
+    }
+    
+    csvData.push(rowData);
+  }
+  
+  // 移除统计信息行
+  
+  // 转换为CSV字符串
+  const csvContent = csvData.map(row => 
+    row.map(cell => `"${cell}"`).join(',')
+  ).join('\n');
+  
+  // 生成文件名
+  const fileName = options.fileName || generateFileName(scheduleData, viewMode, 'csv');
+  
+  // 导出文件
+  const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  downloadFile(blob, fileName);
 }
 
 /**
  * 打印课表
  * 
  * @param scheduleData 课表数据
- * @param options 打印选项
+ * @param viewMode 视图模式
+ * @param options 导出选项
  */
-export function printSchedule(
+function printSchedule(
   scheduleData: ScheduleViewData,
-  options: PrintOptions = {}
+  viewMode: ViewMode,
+  options: ExportOptions
 ): void {
-  const {
-    title,
-    includeMetadata = true,
-    paperSize = 'A4',
-    orientation = 'landscape'
-  } = options;
-
-  // 创建打印窗口
+  const printHtml = generatePrintHtml(scheduleData, viewMode, options);
+  
   const printWindow = window.open('', '_blank');
   if (!printWindow) {
-    alert('无法打开打印窗口，请检查浏览器设置');
-    return;
+    throw new Error('无法打开打印窗口，请检查浏览器设置');
   }
-
-  // 生成打印HTML
-  const printHtml = generatePrintHtml(scheduleData, {
-    title,
-    includeMetadata,
-    paperSize,
-    orientation
-  });
-
-  // 写入HTML并打印
+  
   printWindow.document.write(printHtml);
   printWindow.document.close();
-
   printWindow.focus();
+  
+  // 延迟打印，确保内容渲染完成
   setTimeout(() => {
     printWindow.print();
     printWindow.close();
-  }, 300); // 延迟确保内容渲染
+  }, 300);
 }
 
 /**
  * 生成打印HTML
  * 
  * @param scheduleData 课表数据
- * @param options 打印选项
+ * @param viewMode 视图模式
+ * @param options 导出选项
  * @returns HTML字符串
  */
 function generatePrintHtml(
   scheduleData: ScheduleViewData,
-  options: PrintOptions
+  viewMode: ViewMode,
+  options: ExportOptions
 ): string {
-  const { title, includeMetadata, paperSize, orientation } = options;
+  const pageSize = options.pageSize || 'A4';
+  const orientation = options.orientation || 'portrait';
   
-  const defaultTitle = `${getViewTypeLabel(scheduleData.type)} - ${scheduleData.targetName}`;
-  const finalTitle = title || defaultTitle;
-
   return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>${finalTitle}</title>
-  <style>
-    ${generatePrintCSS(paperSize, orientation)}
-  </style>
-</head>
-<body>
-  <div class="print-container">
-    ${generatePrintHeader(scheduleData, finalTitle, includeMetadata)}
-    ${generatePrintTable(scheduleData.weekSchedule)}
-    ${includeMetadata ? generatePrintFooter(scheduleData) : ''}
-  </div>
-</body>
-</html>`;
-}
-
-/**
- * 生成打印CSS样式
- * 
- * @param paperSize 纸张大小
- * @param orientation 页面方向
- * @returns CSS字符串
- */
-function generatePrintCSS(paperSize?: string, orientation?: string): string {
-  return `
-    @page {
-      size: ${paperSize} ${orientation};
-      margin: 20mm;
-    }
-    
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    
-    body {
-      font-family: 'Microsoft YaHei', Arial, sans-serif;
-      font-size: 12px;
-      color: #333;
-      line-height: 1.4;
-    }
-    
-    .print-container {
-      width: 100%;
-      max-width: 100%;
-    }
-    
-    .print-header {
-      text-align: center;
-      margin-bottom: 20px;
-      padding-bottom: 15px;
-      border-bottom: 2px solid #333;
-    }
-    
-    .print-title {
-      font-size: 20px;
-      font-weight: bold;
-      margin-bottom: 10px;
-    }
-    
-    .print-info {
-      font-size: 14px;
-      color: #666;
-    }
-    
-    .schedule-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 20px;
-    }
-    
-    .schedule-table th,
-    .schedule-table td {
-      border: 1px solid #333;
-      padding: 8px 4px;
-      text-align: center;
-      vertical-align: middle;
-      word-wrap: break-word;
-    }
-    
-    .schedule-table th {
-      background-color: #f5f5f5;
-      font-weight: bold;
-      font-size: 13px;
-    }
-    
-    .schedule-table .time-column {
-      width: 80px;
-      background-color: #f9f9f9;
-      font-weight: bold;
-    }
-    
-    .schedule-table .course-cell {
-      height: 60px;
-      font-size: 10px;
-      line-height: 1.2;
-    }
-    
-    .course-name {
-      font-weight: bold;
-      margin-bottom: 2px;
-    }
-    
-    .course-teacher {
-      color: #666;
-      margin-bottom: 1px;
-    }
-    
-    .course-room {
-      color: #888;
-      font-size: 9px;
-    }
-    
-    .empty-cell {
-      color: #ccc;
-      font-style: italic;
-    }
-    
-    .print-footer {
-      margin-top: 20px;
-      padding-top: 15px;
-      border-top: 1px solid #ddd;
-      font-size: 11px;
-      color: #666;
-    }
-    
-    .statistics {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 15px;
-      margin-bottom: 10px;
-    }
-    
-    .stat-item {
-      flex: 1;
-      min-width: 120px;
-    }
-    
-    .stat-label {
-      font-weight: bold;
-    }
-    
-    @media print {
-      body {
-        font-size: 10px;
-      }
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>${scheduleData.targetName} 课表</title>
+      <style>
+        @page {
+          size: ${pageSize} ${orientation};
+          margin: 1cm;
+        }
+        body {
+          font-family: 'Microsoft YaHei', Arial, sans-serif;
+          margin: 0;
+          padding: 20px;
+          background: white;
+        }
+        .header {
+          text-align: center;
+          margin-bottom: 30px;
+          border-bottom: 2px solid #333;
+          padding-bottom: 20px;
+        }
+        .title {
+          font-size: 24px;
+          font-weight: bold;
+          margin-bottom: 10px;
+        }
+        .subtitle {
+          font-size: 16px;
+          color: #666;
+        }
+        .schedule-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-top: 20px;
+        }
+        .schedule-table th,
+        .schedule-table td {
+          border: 1px solid #ddd;
+          padding: 8px;
+          text-align: center;
+          vertical-align: top;
+          min-height: 60px;
+        }
+        .schedule-table th {
+          background-color: #f5f5f5;
+          font-weight: bold;
+        }
+        .time-column {
+          width: 120px;
+          background-color: #f9f9f9;
+        }
+        .course-cell {
+          min-height: 60px;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+        }
+        .course-name {
+          font-weight: bold;
+          margin-bottom: 4px;
+        }
+        .course-details {
+          font-size: 12px;
+          color: #666;
+        }
+        .footer {
+          margin-top: 30px;
+          text-align: center;
+          font-size: 12px;
+          color: #999;
+          border-top: 1px solid #eee;
+          padding-top: 20px;
+        }
+        @media print {
+          body { margin: 0; }
+          .no-print { display: none; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <div class="title">${scheduleData.targetName} 课表</div>
+        <div class="subtitle">${scheduleData.academicYear} 学年第${scheduleData.semester}学期</div>
+      </div>
       
-      .print-container {
-        width: 100%;
-      }
+      <table class="schedule-table">
+        <thead>
+          <tr>
+            <th class="time-column">时间</th>
+            <th>周一</th>
+            <th>周二</th>
+            <th>周三</th>
+            <th>周四</th>
+            <th>周五</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${generateTableRows(scheduleData, viewMode)}
+        </tbody>
+      </table>
       
-      .schedule-table th,
-      .schedule-table td {
-        padding: 6px 3px;
-      }
+      <div class="footer">
+        <p>生成时间: ${new Date().toLocaleString()}</p>
+      </div>
       
-      .schedule-table .course-cell {
-        height: 50px;
-        font-size: 9px;
-      }
-    }
+      <div class="no-print" style="text-align: center; margin-top: 20px;">
+        <button onclick="window.print()">打印课表</button>
+        <button onclick="window.close()">关闭窗口</button>
+      </div>
+    </body>
+    </html>
   `;
 }
 
 /**
- * 生成打印头部
+ * 生成表格行HTML
  * 
  * @param scheduleData 课表数据
- * @param title 标题
- * @param includeMetadata 是否包含元数据
+ * @param viewMode 视图模式
  * @returns HTML字符串
  */
-function generatePrintHeader(
-  scheduleData: ScheduleViewData,
-  title: string,
-  includeMetadata?: boolean
-): string {
-  const metadataHtml = includeMetadata ? `
-    <div class="print-info">
-      ${scheduleData.academicYear}学年第${scheduleData.semester}学期 | 
-      总课程：${scheduleData.metadata.totalCourses}门 | 
-      总课时：${scheduleData.metadata.totalHours}节 |
-      生成时间：${new Date().toLocaleString('zh-CN')}
-    </div>
-  ` : '';
-
-  return `
-    <div class="print-header">
-      <div class="print-title">${title}</div>
-      ${metadataHtml}
-    </div>
-  `;
-}
-
-/**
- * 生成打印表格
- * 
- * @param weekSchedule 周课表数据
- * @returns HTML字符串
- */
-function generatePrintTable(weekSchedule: WeekSchedule): string {
-  const headerRow = `
-    <tr>
-      <th class="time-column">时间</th>
-      ${TIME_CONFIG.DAYS.map(day => `<th>${day.label}</th>`).join('')}
-    </tr>
-  `;
-
-  const bodyRows = TIME_CONFIG.PERIODS.map(period => {
-    const cells = TIME_CONFIG.DAYS.map(day => {
-      const courseSlot = weekSchedule[day.value]?.[period.value];
-      
+function generateTableRows(scheduleData: ScheduleViewData, viewMode: ViewMode): string {
+  const timeSlots = [
+    '第1节<br>08:00-08:45',
+    '第2节<br>08:55-09:40',
+    '第3节<br>10:00-10:45',
+    '第4节<br>10:55-11:40',
+    '第5节<br>14:00-14:45',
+    '第6节<br>14:55-15:40',
+    '第7节<br>16:00-16:45',
+    '第8节<br>16:55-17:40'
+  ];
+  
+  let rows = '';
+  
+  for (let period = 1; period <= 8; period++) {
+    rows += '<tr>';
+    rows += `<td class="time-column">${timeSlots[period - 1]}</td>`;
+    
+    for (let day = 1; day <= 5; day++) {
+      const courseSlot = scheduleData.weekSchedule[day]?.[period];
       if (courseSlot) {
-        return `
-          <td class="course-cell">
-            <div class="course-name">${courseSlot.courseName}</div>
-            <div class="course-teacher">${courseSlot.teacherName}</div>
-            <div class="course-room">${courseSlot.roomName}</div>
-          </td>
-        `;
+        rows += `<td><div class="course-cell">${formatCourseHtml(courseSlot, viewMode)}</div></td>`;
       } else {
-        return `<td class="course-cell empty-cell">-</td>`;
+        rows += '<td></td>';
       }
-    }).join('');
+    }
+    
+    rows += '</tr>';
+  }
+  
+  return rows;
+}
 
-    return `
-      <tr>
-        <td class="time-column">${period.label}<br><small>${period.time}</small></td>
-        ${cells}
-      </tr>
-    `;
-  }).join('');
-
+/**
+ * 格式化课程HTML
+ * 
+ * @param courseSlot 课程时段
+ * @param viewMode 视图模式
+ * @returns HTML字符串
+ */
+function formatCourseHtml(courseSlot: CourseSlot, viewMode: ViewMode): string {
+  let details = '';
+  
+  if (viewMode === 'class') {
+    details = `👨‍🏫 ${courseSlot.teacherName}<br>🏢 ${courseSlot.roomName}`;
+  } else if (viewMode === 'teacher') {
+    details = `👥 ${courseSlot.className}<br>🏢 ${courseSlot.roomName}`;
+  } else if (viewMode === 'room') {
+    details = `👥 ${courseSlot.className}<br>👨‍🏫 ${courseSlot.teacherName}`;
+  }
+  
   return `
-    <table class="schedule-table">
-      <thead>${headerRow}</thead>
-      <tbody>${bodyRows}</tbody>
-    </table>
+    <div class="course-name">${removeGradeFromCourseName(courseSlot.courseName)}</div>
+    <div class="course-details">${details}</div>
   `;
 }
 
 /**
- * 生成打印页脚
+ * 格式化课程信息（用于Excel/CSV）
+ * 
+ * @param courseSlot 课程时段
+ * @param viewMode 视图模式
+ * @returns 格式化字符串
+ */
+function formatCourseInfo(courseSlot: CourseSlot, viewMode: ViewMode): string {
+  let details = '';
+  
+  if (viewMode === 'class') {
+    details = `${courseSlot.teacherName} | ${courseSlot.roomName}`;
+  } else if (viewMode === 'teacher') {
+    details = `${courseSlot.className} | ${courseSlot.roomName}`;
+  } else if (viewMode === 'room') {
+    details = `${courseSlot.className} | ${courseSlot.teacherName}`;
+  }
+  
+  return `${removeGradeFromCourseName(courseSlot.courseName)}\n${details}`;
+}
+
+/**
+ * 移除课程名称中的年级信息
+ * 
+ * @param courseName 原始课程名称
+ * @returns 移除年级信息后的课程名称
+ */
+function removeGradeFromCourseName(courseName: string): string {
+  // 移除常见的年级前缀模式
+  const gradePatterns = [
+    /^一年级\s*/,
+    /^二年级\s*/,
+    /^三年级\s*/,
+    /^四年级\s*/,
+    /^五年级\s*/,
+    /^六年级\s*/,
+    /^初一\s*/,
+    /^初二\s*/,
+    /^初三\s*/,
+    /^高一\s*/,
+    /^高二\s*/,
+    /^高三\s*/
+  ];
+  
+  let cleanName = courseName;
+  for (const pattern of gradePatterns) {
+    if (pattern.test(cleanName)) {
+      cleanName = cleanName.replace(pattern, '');
+      break;
+    }
+  }
+  
+  return cleanName.trim();
+}
+
+/**
+ * 获取星期几的键名
+ * 
+ * @param day 星期几 (1-5)
+ * @returns 键名
+ */
+function getDayKey(day: number): string {
+  const dayKeys = ['', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+  return dayKeys[day] || '';
+}
+
+/**
+ * 生成文件名
  * 
  * @param scheduleData 课表数据
+ * @param viewMode 视图模式
+ * @param extension 文件扩展名
+ * @returns 文件名
+ */
+function generateFileName(scheduleData: ScheduleViewData, viewMode: ViewMode, extension: string): string {
+  const viewModeText = {
+    class: '班级',
+    teacher: '教师',
+    room: '教室'
+  }[viewMode];
+  
+  const timestamp = new Date().toISOString().slice(0, 10);
+  return `${scheduleData.targetName}_${viewModeText}课表_${scheduleData.academicYear}学年第${scheduleData.semester}学期_${timestamp}.${extension}`;
+}
+
+/**
+ * 批量导出课表
+ * 
+ * @param batchOptions 批量导出选项
+ * @param exportFormat 导出格式
+ */
+async function batchPrintSchedules(batchOptions: ExportOptions['batchPrint'], exportFormat: 'pdf' | 'excel' | 'csv' | 'print'): Promise<void> {
+  if (!batchOptions?.targets || batchOptions.targets.length === 0) {
+    throw new Error('批量导出需要指定目标列表');
+  }
+
+  console.log(`批量${exportFormat === 'print' ? '打印' : '导出'}开始，目标列表:`, batchOptions.targets);
+
+  try {
+    if (exportFormat === 'print') {
+      // 批量打印：生成合并的HTML
+      await batchPrintToHtml(batchOptions);
+    } else {
+      // 批量导出：为每个目标生成单独的文件
+      await batchExportToFiles(batchOptions, exportFormat);
+    }
+  } catch (error) {
+    console.error(`批量${exportFormat === 'print' ? '打印' : '导出'}失败:`, error);
+    throw error;
+  }
+}
+
+/**
+ * 批量打印到HTML（合并显示）
+ */
+async function batchPrintToHtml(batchOptions: ExportOptions['batchPrint']): Promise<void> {
+  // 为每个目标单独生成打印HTML，然后合并
+  let allSchedulesHtml = '';
+  
+  for (const target of batchOptions.targets) {
+    console.log(`正在处理目标: ${target.name}`);
+    
+    try {
+      // 直接获取单个目标的课表数据
+      const apiUrl = `/api/schedule-view/${target.type}/${target.id}`;
+      const response = await fetch(apiUrl);
+      
+      if (response.ok) {
+        const data = await response.json();
+        const scheduleData = data.data;
+        
+        if (scheduleData) {
+          // 使用现有的单独打印HTML生成函数
+          const singleScheduleHtml = generatePrintHtml(scheduleData, target.type as ViewMode, {
+            format: 'print',
+            pageSize: 'A4',
+            orientation: 'portrait'
+          });
+          
+          // 提取表格部分，添加标题和分页
+          const scheduleSection = `
+            <div class="schedule-section" style="page-break-after: always;">
+              <div class="header">
+                <div class="title">${target.name} 课表</div>
+                <div class="subtitle">批量打印 - ${target.type === 'class' ? '班级' : target.type === 'teacher' ? '教师' : '教室'}</div>
+              </div>
+              ${singleScheduleHtml.split('<table class="schedule-table">')[1].split('</table>')[0]}
+              <div class="footer">
+                <p>生成时间: ${new Date().toLocaleString()}</p>
+              </div>
+            </div>
+          `;
+          
+          allSchedulesHtml += scheduleSection;
+          console.log(`成功生成 ${target.name} 的课表HTML`);
+        } else {
+          console.warn(`目标 ${target.name} 没有课表数据`);
+        }
+      } else {
+        console.warn(`获取 ${target.name} 课表失败:`, response.status);
+      }
+    } catch (error) {
+      console.error(`处理目标 ${target.name} 时出错:`, error);
+    }
+  }
+  
+  if (!allSchedulesHtml) {
+    throw new Error('没有成功生成任何课表HTML');
+  }
+  
+  // 创建完整的批量打印HTML
+  const batchHtml = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>批量打印课表</title>
+      <style>
+        @page {
+          size: A4 portrait;
+          margin: 1cm;
+        }
+        body {
+          font-family: 'Microsoft YaHei', Arial, sans-serif;
+          margin: 0;
+          padding: 20px;
+          background: white;
+        }
+        .schedule-section {
+          margin-bottom: 30px;
+        }
+        .header {
+          text-align: center;
+          margin-bottom: 30px;
+          border-bottom: 2px solid #333;
+          padding-bottom: 20px;
+        }
+        .title {
+          font-size: 24px;
+          font-weight: bold;
+          margin-bottom: 10px;
+        }
+        .subtitle {
+          font-size: 16px;
+          color: #666;
+        }
+        .schedule-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-top: 20px;
+        }
+        .schedule-table th,
+        .schedule-table td {
+          border: 1px solid #ddd;
+          padding: 8px;
+          text-align: center;
+          vertical-align: top;
+          min-height: 60px;
+        }
+        .schedule-table th {
+          background-color: #f5f5f5;
+          font-weight: bold;
+        }
+        .time-column {
+          width: 120px;
+          background-color: #f9f9f9;
+        }
+        .course-cell {
+          min-height: 60px;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+        }
+        .course-name {
+          font-weight: bold;
+          margin-bottom: 4px;
+        }
+        .course-details {
+          font-size: 12px;
+          color: #666;
+        }
+        .footer {
+          margin-top: 30px;
+          text-align: center;
+          font-size: 12px;
+          color: #999;
+          border-top: 1px solid #eee;
+          padding-top: 20px;
+        }
+        @media print {
+          body { margin: 0; }
+          .no-print { display: none; }
+          .schedule-section { page-break-after: always; }
+        }
+      </style>
+    </head>
+    <body>
+      ${allSchedulesHtml}
+      
+      <div class="no-print" style="text-align: center; margin-top: 20px;">
+        <button onclick="window.print()">批量打印课表</button>
+        <button onclick="window.close()">关闭窗口</button>
+      </div>
+    </body>
+    </html>
+  `;
+  
+  console.log('批量打印HTML生成完成，准备打开打印窗口');
+  
+  // 打开打印窗口
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    throw new Error('无法打开打印窗口，请检查浏览器设置');
+  }
+  
+  printWindow.document.write(batchHtml);
+  printWindow.document.close();
+  printWindow.focus();
+  
+  // 延迟打印
+  setTimeout(() => {
+    try {
+      printWindow.print();
+      setTimeout(() => {
+        printWindow.close();
+      }, 1000);
+    } catch (e) {
+      console.warn('自动打印失败，用户可能需要手动打印:', e);
+    }
+  }, 500);
+}
+
+
+
+/**
+ * 批量导出到文件（每个目标一个文件）
+ */
+async function batchExportToFiles(batchOptions: ExportOptions['batchPrint'], exportFormat: 'pdf' | 'excel' | 'csv'): Promise<void> {
+  console.log(`开始批量导出到${exportFormat}文件...`);
+  
+  if (exportFormat === 'pdf') {
+    // PDF格式：生成合并的HTML，只打开一个打印窗口
+    await batchExportToMergedPDF(batchOptions);
+    return;
+  }
+  
+  // Excel和CSV格式：为每个目标生成单独的文件
+  for (const target of batchOptions.targets) {
+    console.log(`正在导出目标: ${target.name}`);
+    
+    try {
+      // 获取课表数据
+      const apiUrl = `/api/schedule-view/${target.type}/${target.id}`;
+      const response = await fetch(apiUrl);
+      
+      if (response.ok) {
+        const data = await response.json();
+        const scheduleData = data.data;
+        
+        if (scheduleData) {
+          // 根据格式调用相应的导出函数
+          switch (exportFormat) {
+            case 'excel':
+              await exportToExcel(scheduleData, target.type as ViewMode, {
+                format: 'excel',
+                fileName: `${target.name}_课表.xlsx`
+              });
+              break;
+            case 'csv':
+              await exportToCSV(scheduleData, target.type as ViewMode, {
+                format: 'csv',
+                fileName: `${target.name}_课表.csv`
+              });
+              break;
+          }
+          
+          console.log(`成功导出 ${target.name} 的课表到${exportFormat}文件`);
+        } else {
+          console.warn(`目标 ${target.name} 没有课表数据`);
+        }
+      } else {
+        console.warn(`获取 ${target.name} 课表失败:`, response.status);
+      }
+    } catch (error) {
+      console.error(`导出目标 ${target.name} 时出错:`, error);
+    }
+  }
+  
+  console.log('批量导出完成');
+}
+
+
+
+/**
+ * 批量导出到合并的PDF（一个文件包含所有课表）
+ */
+async function batchExportToMergedPDF(batchOptions: ExportOptions['batchPrint']): Promise<void> {
+  console.log('开始生成合并的PDF HTML...');
+  
+  // 收集所有课表数据
+  const allScheduleData = [];
+  
+  for (const target of batchOptions.targets) {
+    console.log(`正在获取 ${target.name} 的课表数据...`);
+    
+    try {
+      const apiUrl = `/api/schedule-view/${target.type}/${target.id}`;
+      const response = await fetch(apiUrl);
+      
+      if (response.ok) {
+        const data = await response.json();
+        const scheduleData = data.data;
+        
+        if (scheduleData) {
+          allScheduleData.push({
+            target,
+            scheduleData,
+            viewMode: target.type as ViewMode
+          });
+          console.log(`成功获取 ${target.name} 的课表数据`);
+        } else {
+          console.warn(`目标 ${target.name} 没有课表数据`);
+        }
+      } else {
+        console.warn(`获取 ${target.name} 课表失败:`, response.status);
+      }
+    } catch (error) {
+      console.error(`获取 ${target.name} 课表出错:`, error);
+    }
+  }
+  
+  if (allScheduleData.length === 0) {
+    throw new Error('没有成功获取任何课表数据');
+  }
+  
+  console.log(`成功获取 ${allScheduleData.length} 个课表数据，开始生成合并HTML...`);
+  
+  // 生成合并的HTML
+  const mergedHtml = generateMergedPDFHtml(allScheduleData);
+  
+  // 打开打印窗口
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    throw new Error('无法打开打印窗口，请检查浏览器设置');
+  }
+  
+  printWindow.document.write(mergedHtml);
+  printWindow.document.close();
+  printWindow.focus();
+  
+  // 延迟打印，确保内容渲染完成
+  setTimeout(() => {
+    try {
+      printWindow.print();
+      console.log('合并PDF打印窗口已打开，用户可以选择"另存为PDF"');
+    } catch (e) {
+      console.warn('自动打印失败，用户可能需要手动打印:', e);
+    }
+  }, 500);
+}
+
+
+
+/**
+ * 生成合并的PDF HTML（包含所有课表）
+ */
+function generateMergedPDFHtml(allScheduleData: Array<{
+  target: { id: string; name: string; type: 'class' | 'teacher' | 'room' };
+  scheduleData: any;
+  viewMode: ViewMode;
+}>): string {
+  let allSchedulesHtml = '';
+  
+  // 为每个课表生成HTML
+  for (let i = 0; i < allScheduleData.length; i++) {
+    const { target, scheduleData, viewMode } = allScheduleData[i];
+    
+    // 生成单个课表的表格HTML
+    const tableHtml = generateTableRows(scheduleData, viewMode);
+    
+    // 添加课表部分，包含标题和分页
+    const scheduleSection = `
+      <div class="schedule-section" style="page-break-after: always;">
+        <div class="header">
+          <div class="title">${target.name} 课表</div>
+          <div class="subtitle">${target.type === 'class' ? '班级' : target.type === 'teacher' ? '教师' : '教室'}课表</div>
+          <div class="academic-info">${scheduleData.academicYear} 学年第${scheduleData.semester}学期</div>
+        </div>
+        
+        <table class="schedule-table">
+          <thead>
+            <tr>
+              <th class="time-column">时间</th>
+              <th>周一</th>
+              <th>周二</th>
+              <th>周三</th>
+              <th>周四</th>
+              <th>周五</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableHtml}
+          </tbody>
+        </table>
+        
+        <div class="footer">
+          <p>生成时间: ${new Date().toLocaleString()}</p>
+        </div>
+      </div>
+    `;
+    
+    allSchedulesHtml += scheduleSection;
+  }
+  
+  // 创建完整的合并HTML文档
+  const mergedHtml = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>批量课表导出 - ${allScheduleData.length}个课表</title>
+      <style>
+        @page {
+          size: A4 portrait;
+          margin: 1cm;
+        }
+        body {
+          font-family: 'Microsoft YaHei', Arial, sans-serif;
+          margin: 0;
+          padding: 20px;
+          background: white;
+        }
+        .schedule-section {
+          margin-bottom: 30px;
+          page-break-inside: avoid;
+        }
+        .header {
+          text-align: center;
+          margin-bottom: 20px;
+          border-bottom: 2px solid #333;
+          padding-bottom: 15px;
+        }
+        .title {
+          font-size: 24px;
+          font-weight: bold;
+          margin-bottom: 10px;
+        }
+        .subtitle {
+          font-size: 16px;
+          color: #666;
+          margin-bottom: 8px;
+        }
+        .academic-info {
+          font-size: 14px;
+          color: #888;
+        }
+        .schedule-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-top: 20px;
+        }
+        .schedule-table th,
+        .schedule-table td {
+          border: 1px solid #ddd;
+          padding: 8px;
+          text-align: center;
+          vertical-align: top;
+          min-height: 60px;
+        }
+        .schedule-table th {
+          background-color: #f5f5f5;
+          font-weight: bold;
+        }
+        .time-column {
+          width: 120px;
+          background-color: #f9f9f9;
+        }
+        .course-cell {
+          min-height: 60px;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+        }
+        .course-name {
+          font-weight: bold;
+          margin-bottom: 4px;
+        }
+        .course-details {
+          font-size: 12px;
+          color: #666;
+        }
+        .footer {
+          margin-top: 30px;
+          text-align: center;
+          font-size: 12px;
+          color: #999;
+          border-top: 1px solid #eee;
+          padding-top: 20px;
+        }
+        @media print {
+          body { margin: 0; }
+          .no-print { display: none; }
+          .schedule-section { 
+            page-break-after: always; 
+            page-break-inside: avoid;
+          }
+        }
+      </style>
+    </head>
+    <body>
+      ${allSchedulesHtml}
+      
+      <div class="no-print" style="text-align: center; margin-top: 20px;">
+        <button onclick="window.print()">打印所有课表</button>
+        <button onclick="window.close()">关闭窗口</button>
+        <p style="margin-top: 10px; color: #666; font-size: 14px;">
+          提示：在打印对话框中选择"另存为PDF"可以保存为PDF文件
+        </p>
+      </div>
+    </body>
+    </html>
+  `;
+  
+  return mergedHtml;
+}
+
+
+/**
+ * 获取所有目标的课表数据
+ * 
+ * @param targets 批量打印目标列表
+ * @returns 所有目标的课表数据
+ */
+async function fetchAllScheduleData(targets: Array<{ id: string; name: string; type: 'class' | 'teacher' | 'room' }>) {
+  const allData = [];
+  
+  for (const target of targets) {
+    let apiUrl = '';
+    let viewMode: ViewMode = 'class';
+    
+    // 根据目标类型确定API地址和视图模式
+    if (target.type === 'class') {
+      apiUrl = `/api/schedule-view/class/${target.id}`;
+      viewMode = 'class';
+    } else if (target.type === 'teacher') {
+      apiUrl = `/api/schedule-view/teacher/${target.id}`;
+      viewMode = 'teacher';
+    } else if (target.type === 'room') {
+      apiUrl = `/api/schedule-view/room/${target.id}`;
+      viewMode = 'room';
+    }
+    
+    try {
+      
+      // 获取课表数据
+      const response = await fetch(apiUrl);
+      if (response.ok) {
+        const data = await response.json();
+        allData.push({
+          target,
+          viewMode,
+          scheduleData: data.data
+        });
+      } else {
+        console.warn(`获取${target.name}课表失败:`, response.status);
+        // 如果获取失败，添加空数据占位
+        allData.push({
+          target,
+          viewMode,
+          scheduleData: null
+        });
+      }
+    } catch (error) {
+      console.error(`获取${target.name}课表出错:`, error);
+      // 如果出错，添加空数据占位
+      allData.push({
+        target,
+        viewMode,
+        scheduleData: null
+      });
+    }
+  }
+  
+  return allData;
+}
+
+/**
+ * 生成包含实际数据的批量打印HTML
+ * 
+ * @param batchOptions 批量打印选项
+ * @param allScheduleData 所有目标的课表数据
  * @returns HTML字符串
  */
-function generatePrintFooter(scheduleData: ScheduleViewData): string {
-  const subjectStats = getSubjectStatistics(scheduleData.weekSchedule);
-  const statsHtml = Object.entries(subjectStats)
-    .map(([subject, hours]) => `
-      <div class="stat-item">
-        <span class="stat-label">${subject}:</span> ${hours}课时
+function generateBatchPrintHtmlWithData(
+  batchOptions: ExportOptions['batchPrint'],
+  allScheduleData: Array<{
+    target: { id: string; name: string; type: 'class' | 'teacher' | 'room' };
+    viewMode: ViewMode;
+    scheduleData: any;
+  }>
+): string {
+  const pageSize = 'A4';
+  const orientation = 'portrait';
+  
+  let schedulesHtml = '';
+  
+  // 为每个目标生成课表HTML
+  for (const item of allScheduleData) {
+    const { target, viewMode, scheduleData } = item;
+    
+    schedulesHtml += `
+      <div class="schedule-section" style="page-break-after: always;">
+        <div class="header">
+          <div class="title">${target.name} 课表</div>
+          <div class="subtitle">批量打印 - ${target.type === 'class' ? '班级' : target.type === 'teacher' ? '教师' : '教室'}</div>
+        </div>
+        
+        <table class="schedule-table">
+          <thead>
+            <tr>
+              <th class="time-column">时间</th>
+              <th>周一</th>
+              <th>周二</th>
+              <th>周三</th>
+              <th>周四</th>
+              <th>周五</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${scheduleData ? generateTableRowsWithData(scheduleData, viewMode) : generateEmptyTableRows()}
+          </tbody>
+        </table>
+        
+        <div class="footer">
+          <p>生成时间: ${new Date().toLocaleString()}</p>
+        </div>
       </div>
-    `).join('');
-
+    `;
+  }
+  
   return `
-    <div class="print-footer">
-      <div class="statistics">
-        ${statsHtml}
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>批量打印课表</title>
+      <style>
+        @page {
+          size: ${pageSize} ${orientation};
+          margin: 1cm;
+        }
+        body {
+          font-family: 'Microsoft YaHei', Arial, sans-serif;
+          margin: 0;
+          padding: 20px;
+          background: white;
+        }
+        .schedule-section {
+          margin-bottom: 30px;
+        }
+        .header {
+          text-align: center;
+          margin-bottom: 30px;
+          border-bottom: 2px solid #333;
+          padding-bottom: 20px;
+        }
+        .title {
+          font-size: 24px;
+          font-weight: bold;
+          margin-bottom: 10px;
+        }
+        .subtitle {
+          font-size: 16px;
+          color: #666;
+        }
+        .schedule-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-top: 20px;
+        }
+        .schedule-table th,
+        .schedule-table td {
+          border: 1px solid #ddd;
+          padding: 8px;
+          text-align: center;
+          vertical-align: top;
+          min-height: 60px;
+        }
+        .schedule-table th {
+          background-color: #f5f5f5;
+          font-weight: bold;
+        }
+        .time-column {
+          width: 120px;
+          background-color: #f9f9f9;
+        }
+        .course-cell {
+          min-height: 60px;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+        }
+        .course-name {
+          font-weight: bold;
+          margin-bottom: 4px;
+        }
+        .course-details {
+          font-size: 12px;
+          color: #666;
+        }
+        .footer {
+          margin-top: 30px;
+          text-align: center;
+          font-size: 12px;
+          color: #999;
+          border-top: 1px solid #eee;
+          padding-top: 20px;
+        }
+        @media print {
+          body { margin: 0; }
+          .no-print { display: none; }
+          .schedule-section { page-break-after: always; }
+        }
+      </style>
+    </head>
+    <body>
+      ${schedulesHtml}
+      
+      <div class="no-print" style="text-align: center; margin-top: 20px;">
+        <button onclick="window.print()">批量打印课表</button>
+        <button onclick="window.close()">关闭窗口</button>
       </div>
-      <div style="text-align: center; margin-top: 10px;">
-        <small>此课表由智能排课系统生成 © ${new Date().getFullYear()}</small>
-      </div>
-    </div>
+    </body>
+    </html>
   `;
+}
+
+/**
+ * 生成包含实际数据的表格行HTML
+ * 
+ * @param scheduleData 课表数据
+ * @param viewMode 视图模式
+ * @returns HTML字符串
+ */
+function generateTableRowsWithData(scheduleData: any, viewMode: ViewMode): string {
+  const timeSlots = [
+    '第1节<br>08:00-08:45',
+    '第2节<br>08:55-09:40',
+    '第3节<br>10:00-10:45',
+    '第4节<br>10:55-11:40',
+    '第5节<br>14:00-14:45',
+    '第6节<br>14:55-15:40',
+    '第7节<br>16:00-16:45',
+    '第8节<br>16:55-17:40'
+  ];
+  
+  let rows = '';
+  
+  for (let period = 1; period <= 8; period++) {
+    rows += '<tr>';
+    rows += `<td class="time-column">${timeSlots[period - 1]}</td>`;
+    
+    for (let day = 1; day <= 5; day++) {
+      const courseSlot = scheduleData.weekSchedule?.[day]?.[period];
+      if (courseSlot) {
+        rows += `<td><div class="course-cell">${formatCourseHtml(courseSlot, viewMode)}</div></td>`;
+      } else {
+        rows += '<td></td>';
+      }
+    }
+    
+    rows += '</tr>';
+  }
+  
+  return rows;
+}
+
+/**
+ * 生成批量打印HTML
+ * 
+ * @param batchOptions 批量打印选项
+ * @returns HTML字符串
+ */
+function generateBatchPrintHtml(batchOptions: ExportOptions['batchPrint']): string {
+  const pageSize = 'A4';
+  const orientation = 'portrait';
+  
+  let schedulesHtml = '';
+  
+  // 为每个目标生成课表HTML
+  for (const target of batchOptions!.targets) {
+    schedulesHtml += `
+      <div class="schedule-section" style="page-break-after: always;">
+        <div class="header">
+          <div class="title">${target.name} 课表</div>
+          <div class="subtitle">批量打印 - ${target.type === 'class' ? '班级' : target.type === 'teacher' ? '教师' : '教室'}</div>
+        </div>
+        
+        <table class="schedule-table">
+          <thead>
+            <tr>
+              <th class="time-column">时间</th>
+              <th>周一</th>
+              <th>周二</th>
+              <th>周三</th>
+              <th>周四</th>
+              <th>周五</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${generateEmptyTableRows()}
+          </tbody>
+        </table>
+        
+        <div class="footer">
+          <p>生成时间: ${new Date().toLocaleString()}</p>
+        </div>
+      </div>
+    `;
+  }
+  
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>批量打印课表</title>
+      <style>
+        @page {
+          size: ${pageSize} ${orientation};
+          margin: 1cm;
+        }
+        body {
+          font-family: 'Microsoft YaHei', Arial, sans-serif;
+          margin: 0;
+          padding: 20px;
+          background: white;
+        }
+        .schedule-section {
+          margin-bottom: 30px;
+        }
+        .header {
+          text-align: center;
+          margin-bottom: 30px;
+          border-bottom: 2px solid #333;
+          padding-bottom: 20px;
+        }
+        .title {
+          font-size: 24px;
+          font-weight: bold;
+          margin-bottom: 10px;
+        }
+        .subtitle {
+          font-size: 16px;
+          color: #666;
+        }
+        .schedule-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-top: 20px;
+        }
+        .schedule-table th,
+        .schedule-table td {
+          border: 1px solid #ddd;
+          padding: 8px;
+          text-align: center;
+          vertical-align: top;
+          min-height: 60px;
+        }
+        .schedule-table th {
+          background-color: #f5f5f5;
+          font-weight: bold;
+        }
+        .time-column {
+          width: 120px;
+          background-color: #f9f9f9;
+        }
+        .footer {
+          margin-top: 30px;
+          text-align: center;
+          font-size: 12px;
+          color: #999;
+          border-top: 1px solid #eee;
+          padding-top: 20px;
+        }
+        @media print {
+          body { margin: 0; }
+          .no-print { display: none; }
+          .schedule-section { page-break-after: always; }
+        }
+      </style>
+    </head>
+    <body>
+      ${schedulesHtml}
+      
+      <div class="no-print" style="text-align: center; margin-top: 20px;">
+        <button onclick="window.print()">批量打印课表</button>
+        <button onclick="window.close()">关闭窗口</button>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+/**
+ * 生成空表格行（用于批量打印模板）
+ * 
+ * @returns HTML字符串
+ */
+function generateEmptyTableRows(): string {
+  const timeSlots = [
+    '第1节<br>08:00-08:45',
+    '第2节<br>08:55-09:40',
+    '第3节<br>10:00-10:45',
+    '第4节<br>10:55-11:40',
+    '第5节<br>14:00-14:45',
+    '第6节<br>14:55-15:40',
+    '第7节<br>16:00-16:45',
+    '第8节<br>16:55-17:40'
+  ];
+  
+  let rows = '';
+  
+  for (let period = 1; period <= 8; period++) {
+    rows += '<tr>';
+    rows += `<td class="time-column">${timeSlots[period - 1]}</td>`;
+    
+    for (let day = 1; day <= 5; day++) {
+      rows += '<td></td>';
+    }
+    
+    rows += '</tr>';
+  }
+  
+  return rows;
+}
+
+/**
+ * 下载文件
+ * 
+ * @param blob 文件blob
+ * @param fileName 文件名
+ */
+function downloadFile(blob: Blob, fileName: string): void {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
 } 

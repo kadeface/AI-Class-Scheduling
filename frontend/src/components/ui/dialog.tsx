@@ -15,8 +15,8 @@ import { Button } from './button';
  * 对话框属性接口
  */
 interface DialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   children: React.ReactNode;
   className?: string;
 }
@@ -74,15 +74,18 @@ interface DialogFooterProps {
  *   React.ReactElement: 对话框组件
  */
 export function Dialog({ open, onOpenChange, children, className }: DialogProps) {
+  // 如果没有提供 open 状态，则默认显示
+  const isOpen = open !== undefined ? open : true;
+  
   // 处理 ESC 键关闭
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && open) {
+      if (event.key === 'Escape' && isOpen && onOpenChange) {
         onOpenChange(false);
       }
     };
 
-    if (open) {
+    if (isOpen) {
       document.addEventListener('keydown', handleEscape);
       // 防止背景滚动
       document.body.style.overflow = 'hidden';
@@ -92,9 +95,9 @@ export function Dialog({ open, onOpenChange, children, className }: DialogProps)
       document.removeEventListener('keydown', handleEscape);
       document.body.style.overflow = 'unset';
     };
-  }, [open, onOpenChange]);
+  }, [isOpen, onOpenChange]);
 
-  if (!open) return null;
+  if (isOpen === false) return null;
 
   return (
     <div className="fixed inset-0 z-50">
@@ -211,4 +214,21 @@ export function DialogClose({ onClose, className }: DialogCloseProps) {
       <X className="h-4 w-4" />
     </Button>
   );
+}
+
+/**
+ * 对话框触发器组件
+ * 
+ * Args:
+ *   children: 子组件
+ * 
+ * Returns:
+ *   React.ReactElement: 对话框触发器
+ */
+interface DialogTriggerProps {
+  children: React.ReactNode;
+}
+
+export function DialogTrigger({ children }: DialogTriggerProps) {
+  return <>{children}</>;
 }
