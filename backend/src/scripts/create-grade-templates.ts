@@ -58,7 +58,7 @@ async function createPrimarySchoolTemplates(courses: any[]) {
       }
       
       // 根据学科分类筛选
-      const subjects = ['语文', '数学', '英语', '科学', '社会', '音乐', '美术', '体育', '写字', '情商管理', '道德与法治'];
+      const subjects = ['语文', '数学', '英语', '科学',  '音乐', '美术', '体育', '写字', '情商管理', '道德与法治', '班会'];
       return subjects.some(subject => courseName.includes(subject.toLowerCase()));
     });
 
@@ -123,7 +123,7 @@ async function createJuniorHighTemplates(courses: any[]) {
         return false;
       }
       
-      const subjects = ['语文', '数学', '英语', '物理', '化学', '生物', '历史', '地理', '政治', '音乐', '美术', '体育'];
+      const subjects = ['语文', '数学', '英语', '物理', '化学', '生物', '历史', '地理', '政治', '音乐', '美术', '体育', '班会', '信息科技', '心理健康', '劳动教育'];
       return subjects.some(subject => courseName.includes(subject.toLowerCase()));
     });
 
@@ -187,7 +187,7 @@ async function createSeniorHighTemplates(courses: any[]) {
         return false;
       }
       
-      const subjects = ['语文', '数学', '英语', '物理', '化学', '生物', '历史', '地理', '政治', '音乐', '美术', '体育'];
+      const subjects = ['语文', '数学', '英语', '物理', '化学', '生物', '历史', '地理', '政治', '音乐', '美术', '体育', '班会', '信息科技', '心理健康', '劳动教育'];
       return subjects.some(subject => courseName.includes(subject.toLowerCase()));
     });
 

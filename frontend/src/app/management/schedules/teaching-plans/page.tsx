@@ -52,7 +52,6 @@ import {
   formatSemester,
   TEACHING_PLAN_STATUS
 } from '@/lib/api';
-import { gradeTemplateApi } from '@/lib/grade-template-api';
 import { formatDateTime, cn } from '@/lib/utils';
 import { BatchTeachingPlanForm, BatchCourseConfig, BatchClassTeacherAssignment } from '@/types/schedule';
 import { generateCsv, downloadCsv } from '@/lib/csv';
@@ -240,31 +239,22 @@ export default function TeachingPlansPage() {
     try {
       setCoursesLoading(true);
       
-      // 1. 尝试获取该年级的默认课程模板
-      const templateRes = await gradeTemplateApi.getDefaultByGrade(grade);
+      // 直接从课程名称中筛选包含年级信息的课程
+      const filteredCourses = courses.filter(course => {
+        // 检查课程名称是否包含该年级
+        return course.name.includes(grade);
+      });
       
-      if (templateRes.success && templateRes.data && templateRes.data.courses) {
-        // 2. 如果找到模板，根据模板中的课程ID筛选课程
-        const templateCourseIds = templateRes.data.courses.map(c => c.courseId);
-        const filteredCourses = courses.filter(course => 
-          templateCourseIds.includes(course._id)
-        );
-        
-        // 3. 缓存结果
-        setFilteredCoursesByGrade(prev => ({
-          ...prev,
-          [grade]: filteredCourses
-        }));
-        
-        return filteredCourses;
-      } else {
-        // 4. 如果没有找到模板，返回所有课程（降级方案）
-        console.warn(`未找到${grade}的课程模板，显示所有课程`);
-        return courses;
-      }
+      // 缓存结果
+      setFilteredCoursesByGrade(prev => ({
+        ...prev,
+        [grade]: filteredCourses
+      }));
+      
+      return filteredCourses;
     } catch (error) {
       console.error(`获取${grade}课程失败:`, error);
-      // 5. 出错时返回所有课程（降级方案）
+      // 出错时返回所有课程（降级方案）
       return courses;
     } finally {
       setCoursesLoading(false);
@@ -1518,9 +1508,7 @@ export default function TeachingPlansPage() {
                     <div className="flex items-center gap-2 text-green-600">
                       <CheckCircle size={16} />
                       已筛选{batchForm.grade}的课程（{filteredCoursesByGrade[batchForm.grade].length}门）
-                      <span className="text-gray-500 ml-2">
-                        （从{filteredCoursesByGrade[batchForm.grade].length}门课程中选择，而非全部{courses.length}门课程）
-                      </span>
+
                       {batchForm.courses.length > 0 && (
                         <span className="text-blue-600 ml-2">
                           （当前已选择{batchForm.courses.length}门，剩余{getAvailableCourses(batchForm.grade, batchForm.courses).length}门可选）
@@ -1530,7 +1518,7 @@ export default function TeachingPlansPage() {
                   ) : (
                     <div className="flex items-center gap-2 text-amber-600">
                       <AlertCircle size={16} />
-                      未找到{batchForm.grade}的课程模板，显示所有课程（{courses.length}门）
+                      未找到{batchForm.grade}的课程，显示所有课程（{courses.length}门）
                     </div>
                   )}
                 </div>

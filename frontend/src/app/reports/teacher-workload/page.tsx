@@ -80,7 +80,7 @@ export default function TeacherWorkloadPage() {
     setError(undefined);
 
     try {
-      const response = await fetch('http://localhost:5000/api/schedule-view/options/teachers');
+      const response = await fetch('/api/schedule-view/options/teachers');
       const data: ApiResponse<ScheduleOption[]> = await response.json();
 
       if (data.success && data.data) {
@@ -117,7 +117,7 @@ export default function TeacherWorkloadPage() {
       });
 
       const response = await fetch(
-        `http://localhost:5000/api/schedule-view/teacher/${teacherId}?${params}`
+        `/api/schedule-view/teacher/${teacherId}?${params}`
       );
       
       const data: ApiResponse<ScheduleViewData> = await response.json();

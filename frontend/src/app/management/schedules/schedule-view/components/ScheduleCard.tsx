@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
  */
 interface ScheduleCardProps {
   courseSlot: CourseSlot;
+  viewMode?: 'class' | 'teacher' | 'room'; // 添加视图模式
   className?: string;
   onClick?: (courseSlot: CourseSlot) => void;
   onHover?: (courseSlot: CourseSlot | null) => void;
@@ -24,6 +25,7 @@ interface ScheduleCardProps {
  */
 export function ScheduleCard({ 
   courseSlot, 
+  viewMode = 'class',
   className,
   onClick,
   onHover 
@@ -52,19 +54,22 @@ export function ScheduleCard({
   return (
     <div
       className={cn(
-        'relative rounded-lg p-3 text-white text-sm cursor-pointer transition-all duration-200',
-        'hover:shadow-lg hover:scale-105 hover:z-10',
-        isHovered && 'ring-2 ring-white ring-opacity-50',
-        courseSlot.duration > 1 && 'row-span-2', // 连排课程占两行
+        'relative rounded-lg p-3 text-white text-sm transition-all duration-200',
+        // 连排延续部分使用特殊样式
+        courseSlot.isConsecutiveContinuation 
+          ? 'bg-gray-400 cursor-default hover:scale-100' // 延续部分不显示悬停效果
+          : 'cursor-pointer hover:shadow-lg hover:scale-105 hover:z-10',
+        isHovered && !courseSlot.isConsecutiveContinuation && 'ring-2 ring-white ring-opacity-50',
+        courseSlot.duration && courseSlot.duration > 1 && 'row-span-2', // 连排课程占两行
         className
       )}
-      style={{
+      style={courseSlot.isConsecutiveContinuation ? {} : {
         backgroundColor: subjectColor,
         background: `linear-gradient(135deg, ${subjectColor} 0%, ${subjectColor}dd 100%)`
       }}
-      onClick={handleClick}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
+      onClick={courseSlot.isConsecutiveContinuation ? undefined : handleClick}
+      onMouseEnter={courseSlot.isConsecutiveContinuation ? undefined : handleMouseEnter}
+      onMouseLeave={courseSlot.isConsecutiveContinuation ? undefined : handleMouseLeave}
     >
       {/* 主要内容 */}
       <div className="space-y-1">
@@ -73,18 +78,45 @@ export function ScheduleCard({
           {courseSlot.courseName}
         </div>
         
-        {/* 教师信息 */}
-        <div className="text-white/90 text-xs">
-          👨‍🏫 {courseSlot.teacherName}
-        </div>
+        {/* 根据视图模式显示不同信息 */}
+        {viewMode === 'class' && (
+          <>
+            {/* 班级视图：显示教师和教室 */}
+            <div className="text-white/90 text-xs">
+              👨‍🏫 {courseSlot.teacherName}
+            </div>
+            <div className="text-white/90 text-xs">
+              🏢 {courseSlot.roomName}
+            </div>
+          </>
+        )}
         
-        {/* 教室信息 */}
-        <div className="text-white/90 text-xs">
-          🏢 {courseSlot.roomName}
-        </div>
+        {viewMode === 'teacher' && (
+          <>
+            {/* 教师视图：显示班级和教室 */}
+            <div className="text-white/90 text-xs">
+              👥 {courseSlot.className || '未知班级'}
+            </div>
+            <div className="text-white/90 text-xs">
+              🏢 {courseSlot.roomName}
+            </div>
+          </>
+        )}
+        
+        {viewMode === 'room' && (
+          <>
+            {/* 教室视图：显示班级和教师 */}
+            <div className="text-white/90 text-xs">
+              👥 {courseSlot.className || '未知班级'}
+            </div>
+            <div className="text-white/90 text-xs">
+              👨‍🏫 {courseSlot.teacherName}
+            </div>
+          </>
+        )}
         
         {/* 连排标识 */}
-        {courseSlot.duration > 1 && (
+        {courseSlot.duration && courseSlot.duration > 1 && (
           <div className="absolute top-1 right-1">
             <div className="bg-white/20 rounded px-1 py-0.5 text-xs">
               连排

@@ -1,10 +1,11 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { ViewMode, ScheduleOption, ScheduleFilters } from '../types';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { 
   Calendar, 
   Users, 
@@ -14,7 +15,10 @@ import {
   Download,
   Settings,
   Filter,
-  Search
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  X
 } from 'lucide-react';
 
 /**
@@ -50,6 +54,7 @@ interface ScheduleHeaderProps {
  * 课表头部控制面板组件
  * 
  * 提供视图切换、目标选择、筛选等控制功能
+ * 优化了数据展示，支持搜索、筛选和分页
  */
 export function ScheduleHeader({
   viewMode,
@@ -66,12 +71,125 @@ export function ScheduleHeader({
   onSettings
 }: ScheduleHeaderProps) {
   
+  // 本地状态管理
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(12); // 每页显示12个项目
+
   // 视图模式选项
   const viewModeOptions = [
     { key: 'class' as ViewMode, label: '班级课表', icon: Users, color: 'bg-blue-500' },
     { key: 'teacher' as ViewMode, label: '教师课表', icon: User, color: 'bg-green-500' },
     { key: 'room' as ViewMode, label: '教室课表', icon: Building, color: 'bg-purple-500' }
   ];
+
+  // 搜索和筛选逻辑
+  const filteredTargets = useMemo(() => {
+    if (!searchTerm.trim()) {
+      return availableTargets;
+    }
+
+    const searchLower = searchTerm.toLowerCase();
+    return availableTargets.filter(target => {
+      // 基础名称搜索
+      if (target.name.toLowerCase().includes(searchLower)) {
+        return true;
+      }
+
+      // 班级：按年级搜索
+      if (viewMode === 'class' && target.grade) {
+        if (`${target.grade}年级`.includes(searchLower)) {
+          return true;
+        }
+      }
+
+      // 教师：按科目搜索
+      if (viewMode === 'teacher' && target.subjects) {
+        if (target.subjects.some(subject => 
+          subject.toLowerCase().includes(searchLower)
+        )) {
+          return true;
+        }
+      }
+
+      // 教室：按类型和编号搜索
+      if (viewMode === 'room') {
+        if (target.type?.toLowerCase().includes(searchLower) ||
+            target.roomNumber?.toLowerCase().includes(searchLower)) {
+          return true;
+        }
+      }
+
+      return false;
+    });
+  }, [availableTargets, searchTerm, viewMode]);
+
+  // 分页计算
+  const totalPages = Math.ceil(filteredTargets.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentTargets = filteredTargets.slice(startIndex, endIndex);
+
+  // 分组显示逻辑
+  const groupedTargets = useMemo(() => {
+    if (viewMode === 'class') {
+      // 按年级分组
+      const groups: { [key: number]: ScheduleOption[] } = {};
+      currentTargets.forEach(target => {
+        const grade = target.grade || 0;
+        if (!groups[grade]) groups[grade] = [];
+        groups[grade].push(target);
+      });
+      return Object.entries(groups)
+        .sort(([a], [b]) => parseInt(a) - parseInt(b))
+        .map(([grade, targets]) => ({ grade: parseInt(grade), targets }));
+    } else if (viewMode === 'teacher') {
+      // 按科目分组
+      const groups: { [key: string]: ScheduleOption[] } = {};
+      currentTargets.forEach(target => {
+        if (target.subjects && target.subjects.length > 0) {
+          const primarySubject = target.subjects[0];
+          if (!groups[primarySubject]) groups[primarySubject] = [];
+          groups[primarySubject].push(target);
+        } else {
+          if (!groups['其他']) groups['其他'] = [];
+          groups['其他'].push(target);
+        }
+      });
+      return Object.entries(groups)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([subject, targets]) => ({ subject, targets }));
+    } else if (viewMode === 'room') {
+      // 按教室类型分组
+      const groups: { [key: string]: ScheduleOption[] } = {};
+      currentTargets.forEach(target => {
+        const type = target.type || '其他';
+        if (!groups[type]) groups[type] = [];
+        groups[type].push(target);
+      });
+      return Object.entries(groups)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([type, targets]) => ({ type, targets }));
+    }
+    return [];
+  }, [currentTargets, viewMode]);
+
+  // 处理搜索变化
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+    setCurrentPage(1); // 重置到第一页
+  };
+
+  // 处理页面变化
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  // 清除搜索
+  const clearSearch = () => {
+    setSearchTerm('');
+    setCurrentPage(1);
+  };
 
   return (
     <Card className="p-6 space-y-6">
@@ -147,6 +265,47 @@ export function ScheduleHeader({
         </div>
       </div>
 
+      {/* 搜索和筛选区域 */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Search className="h-4 w-4 text-gray-500" />
+          <span className="text-sm font-medium text-gray-700">
+            搜索{viewModeOptions.find(v => v.key === viewMode)?.label.replace('课表', '')}
+          </span>
+        </div>
+        
+        <div className="relative">
+          <Input
+            type="text"
+            placeholder={`搜索${viewMode === 'class' ? '班级名称或年级' : 
+                         viewMode === 'teacher' ? '教师姓名或科目' : 
+                         '教室名称或类型'}...`}
+            value={searchTerm}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            className="pr-10"
+          />
+          {searchTerm && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearSearch}
+              className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+
+        {/* 搜索结果统计 */}
+        {searchTerm && (
+          <div className="text-sm text-gray-500">
+            找到 {filteredTargets.length} 个结果
+            {filteredTargets.length !== availableTargets.length && 
+              `（共 ${availableTargets.length} 个）`}
+          </div>
+        )}
+      </div>
+
       {/* 目标选择区域 */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
@@ -165,56 +324,142 @@ export function ScheduleHeader({
           )}
         </div>
 
-        {/* 目标选择列表 */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 max-h-40 overflow-y-auto">
-          {availableTargets.map((target) => {
-            const isSelected = selectedTarget?._id === target._id;
-            
-            return (
-              <Button
-                key={target._id}
-                variant={isSelected ? "default" : "outline"}
-                size="sm"
-                onClick={() => onTargetChange(target)}
-                className="justify-start text-left h-auto p-3"
-              >
-                <div className="space-y-1 w-full">
-                  <div className="font-medium text-sm truncate">
-                    {target.name}
-                  </div>
-                  
-                  {/* 额外信息显示 */}
-                  {viewMode === 'class' && target.grade && (
-                    <div className="text-xs text-gray-500">
-                      {target.grade}年级
-                    </div>
-                  )}
-                  
-                  {viewMode === 'teacher' && target.subjects && (
-                    <div className="text-xs text-gray-500 truncate">
-                      {target.subjects.slice(0, 2).join('、')}
-                      {target.subjects.length > 2 && '等'}
-                    </div>
-                  )}
-                  
-                  {viewMode === 'room' && (
-                    <div className="text-xs text-gray-500">
-                      {target.roomNumber ? `${target.roomNumber} - ` : ''}
-                      {target.type}
-                    </div>
-                  )}
+        {/* 分组显示目标选择列表 */}
+        {groupedTargets.length > 0 ? (
+          <div className="space-y-4">
+            {groupedTargets.map((group, groupIndex) => (
+              <div key={groupIndex} className="space-y-2">
+                {/* 分组标题 */}
+                <div className="flex items-center gap-2">
+                  <div className="h-px flex-1 bg-gray-200"></div>
+                  <span className="text-xs font-medium text-gray-500 px-2">
+                    {viewMode === 'class' ? `${group.grade}年级` :
+                     viewMode === 'teacher' ? group.subject :
+                     group.type}
+                  </span>
+                  <div className="h-px flex-1 bg-gray-200"></div>
                 </div>
-              </Button>
-            );
-          })}
-        </div>
 
-        {/* 无数据提示 */}
-        {availableTargets.length === 0 && (
+                {/* 分组内容 */}
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
+                  {group.targets.map((target) => {
+                    const isSelected = selectedTarget?._id === target._id;
+                    
+                    return (
+                      <Button
+                        key={target._id}
+                        variant={isSelected ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => onTargetChange(target)}
+                        className="justify-start text-left h-auto p-3"
+                      >
+                        <div className="space-y-1 w-full">
+                          <div className="font-medium text-sm truncate">
+                            {target.name}
+                          </div>
+                          
+                          {/* 额外信息显示 */}
+                          {viewMode === 'class' && target.grade && (
+                            <div className="text-xs text-gray-500">
+                              {target.grade}年级
+                            </div>
+                          )}
+                          
+                          {viewMode === 'teacher' && target.subjects && (
+                            <div className="text-xs text-gray-500 truncate">
+                              {target.subjects.slice(0, 2).join('、')}
+                              {target.subjects.length > 2 && '等'}
+                            </div>
+                          )}
+                          
+                          {viewMode === 'room' && (
+                            <div className="text-xs text-gray-500">
+                              {target.roomNumber ? `${target.roomNumber} - ` : ''}
+                              {target.type}
+                            </div>
+                          )}
+                        </div>
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          /* 无数据提示 */
           <div className="text-center py-8 text-gray-500">
             <Building className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-            <p>暂无可用的{viewModeOptions.find(v => v.key === viewMode)?.label.replace('课表', '')}数据</p>
-            <p className="text-sm mt-1">请检查数据配置或联系管理员</p>
+            <p>
+              {searchTerm ? '没有找到匹配的结果' : 
+               `暂无可用的${viewModeOptions.find(v => v.key === viewMode)?.label.replace('课表', '')}数据`}
+            </p>
+            {searchTerm && (
+              <p className="text-sm mt-1">
+                尝试调整搜索关键词或清除搜索条件
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* 分页控制 */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+            <div className="text-sm text-gray-500">
+              显示第 {startIndex + 1}-{Math.min(endIndex, filteredTargets.length)} 项，
+              共 {filteredTargets.length} 项
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="gap-1"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                上一页
+              </Button>
+              
+              <div className="flex items-center gap-1">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={currentPage === pageNum ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => handlePageChange(pageNum)}
+                      className="w-8 h-8 p-0"
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
+              </div>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="gap-1"
+              >
+                下一页
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         )}
       </div>

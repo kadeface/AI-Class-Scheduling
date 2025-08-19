@@ -12,10 +12,13 @@ export interface CourseSlot {
   subject: string;
   teacherId: string;
   teacherName: string;
+  classId: string; // 班级ID
+  className: string; // 班级名称
   roomId: string;
   roomName: string;
   duration: number;
   notes?: string;
+  isConsecutiveContinuation?: boolean; // 标记是否为连排课程的延续部分
 }
 
 /**

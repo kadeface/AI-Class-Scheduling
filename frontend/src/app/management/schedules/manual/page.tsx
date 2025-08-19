@@ -104,10 +104,10 @@ export default function ManualSchedulePage() {
     try {
       setLoading(true);
       const [classRes, courseRes, teacherRes, roomRes] = await Promise.all([
-        fetch('http://localhost:5000/api/classes'),
-        fetch('http://localhost:5000/api/courses'),
-        fetch('http://localhost:5000/api/teachers'),
-        fetch('http://localhost:5000/api/rooms')
+        fetch('/api/classes'),
+        fetch('/api/courses'),
+        fetch('/api/teachers'),
+        fetch('/api/rooms')
       ]);
 
       const [classData, courseData, teacherData, roomData] = await Promise.all([
@@ -135,7 +135,7 @@ export default function ManualSchedulePage() {
   const loadSchedules = async () => {
     try {
       const response = await fetch(
-        `http://localhost:5000/api/schedules?academicYear=${filters.academicYear}&semester=${filters.semester}`
+        `/api/schedules?academicYear=${filters.academicYear}&semester=${filters.semester}`
       );
       const data = await response.json();
       
@@ -156,7 +156,7 @@ export default function ManualSchedulePage() {
    */
   const checkConflicts = async (scheduleData: any) => {
     try {
-      const response = await fetch('http://localhost:5000/api/manual-scheduling/check-conflicts', {
+      const response = await fetch('/api/manual-scheduling/check-conflicts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -224,8 +224,8 @@ export default function ManualSchedulePage() {
       };
 
       const url = editingSchedule 
-        ? `http://localhost:5000/api/schedules/${editingSchedule._id}`
-        : 'http://localhost:5000/api/schedules';
+        ? `/api/schedules/${editingSchedule._id}`
+        : '/api/schedules';
       
       const method = editingSchedule ? 'PUT' : 'POST';
 
@@ -259,7 +259,7 @@ export default function ManualSchedulePage() {
     if (!confirm('确定要删除这个课程安排吗？')) return;
 
     try {
-      const response = await fetch(`http://localhost:5000/api/schedules/${id}`, {
+              const response = await fetch(`/api/schedules/${id}`, {
         method: 'DELETE'
       });
 

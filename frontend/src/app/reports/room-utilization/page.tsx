@@ -83,7 +83,7 @@ export default function RoomUtilizationPage() {
     setError(undefined);
 
     try {
-      const response = await fetch('http://localhost:5000/api/schedule-view/options/rooms');
+      const response = await fetch('/api/schedule-view/options/rooms');
       const data: ApiResponse<ScheduleOption[]> = await response.json();
 
       if (data.success && data.data) {
@@ -120,7 +120,7 @@ export default function RoomUtilizationPage() {
       });
 
       const response = await fetch(
-        `http://localhost:5000/api/schedule-view/room/${roomId}?${params}`
+        `/api/schedule-view/room/${roomId}?${params}`
       );
       
       const data: ApiResponse<ScheduleViewData> = await response.json();

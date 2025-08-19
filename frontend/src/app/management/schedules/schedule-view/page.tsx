@@ -54,7 +54,7 @@ export default function ScheduleViewPage() {
       const endpoint = mode === 'class' ? 'classes' : 
                      mode === 'teacher' ? 'teachers' : 'rooms';
       
-      const response = await fetch(`http://localhost:5000/api/schedule-view/options/${endpoint}`);
+      const response = await fetch(`/api/schedule-view/options/${endpoint}`);
       const data: ApiResponse<ScheduleOption[]> = await response.json();
 
       if (data.success && data.data) {
@@ -101,12 +101,13 @@ export default function ScheduleViewPage() {
       });
 
       const response = await fetch(
-        `http://localhost:5000/api/schedule-view/${endpoint}?${params}`
+        `/api/schedule-view/${endpoint}?${params}`
       );
       
       const data: ApiResponse<ScheduleViewData> = await response.json();
 
       if (data.success && data.data) {
+        console.log('课表数据加载成功:', data.data);
         setScheduleData(data.data);
       } else {
         throw new Error(data.message || '获取课表数据失败');
@@ -278,6 +279,7 @@ export default function ScheduleViewPage() {
         ) : scheduleData ? (
           <ScheduleGrid
             weekSchedule={scheduleData.weekSchedule}
+            viewMode={viewMode} // 传递视图模式
             onCourseClick={handleCourseClick}
             onCourseHover={handleCourseHover}
           />

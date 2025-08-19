@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
  */
 interface ScheduleGridProps {
   weekSchedule: WeekSchedule;
+  viewMode?: 'class' | 'teacher' | 'room'; // 添加视图模式
   className?: string;
   onCourseClick?: (courseSlot: CourseSlot) => void;
   onCourseHover?: (courseSlot: CourseSlot | null) => void;
@@ -25,6 +26,7 @@ interface ScheduleGridProps {
  */
 export function ScheduleGrid({
   weekSchedule,
+  viewMode = 'class', // 默认值
   className,
   onCourseClick,
   onCourseHover
@@ -81,6 +83,11 @@ export function ScheduleGrid({
                 {TIME_CONFIG.DAYS.map((day) => {
                   const courseSlot = weekSchedule[day.value]?.[period.value];
                   
+                  // 调试日志
+                  if (courseSlot) {
+                    console.log(`Day ${day.value}, Period ${period.value}:`, courseSlot);
+                  }
+                  
                   return (
                     <td
                       key={`${day.value}-${period.value}`}
@@ -90,6 +97,7 @@ export function ScheduleGrid({
                         {courseSlot ? (
                           <ScheduleCard
                             courseSlot={courseSlot}
+                            viewMode={viewMode} // 传递视图模式
                             onClick={onCourseClick}
                             onHover={onCourseHover}
                             className="h-full"

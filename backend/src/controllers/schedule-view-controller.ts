@@ -20,10 +20,13 @@ interface CourseSlot {
   subject: string;
   teacherId: string;
   teacherName: string;
+  classId: string; // 班级ID字段
+  className: string; // 班级名称字段
   roomId: string;
   roomName: string;
   duration: number;
   notes?: string;
+  isConsecutiveContinuation?: boolean; // 标记是否为连排课程的延续部分
 }
 
 /**
@@ -114,6 +117,8 @@ export async function getClassSchedule(req: Request, res: Response): Promise<voi
         subject: course?.subject || '未知科目',
         teacherId: teacher?._id?.toString() || '',
         teacherName: teacher?.name || '未知教师',
+        classId: classId, // 使用传入的班级ID
+        className: classInfo.name, // 使用班级名称
         roomId: room?._id?.toString() || '',
         roomName: room?.name || '未知教室',
         duration: 1, // 基础时长，后续处理连排
@@ -215,10 +220,12 @@ export async function getTeacherSchedule(req: Request, res: Response): Promise<v
 
       const courseSlot: CourseSlot = {
         courseId: course?._id?.toString() || '',
-        courseName: `${course?.name || '未知课程'} - ${classInfo?.name || '未知班级'}`,
+        courseName: course?.name || '未知课程', // 只显示课程名称
         subject: course?.subject || '未知科目',
         teacherId: schedule.teacher._id?.toString() || '',
         teacherName: teacherInfo.name,
+        classId: classInfo?._id?.toString() || '', // 班级ID
+        className: classInfo?.name || '未知班级', // 班级名称
         roomId: room?._id?.toString() || '',
         roomName: room?.name || '未知教室',
         duration: 1,
@@ -320,10 +327,12 @@ export async function getRoomSchedule(req: Request, res: Response): Promise<void
 
       const courseSlot: CourseSlot = {
         courseId: course?._id?.toString() || '',
-        courseName: `${course?.name || '未知课程'} - ${classInfo?.name || '未知班级'}`,
+        courseName: course?.name || '未知课程', // 只显示课程名称
         subject: course?.subject || '未知科目',
         teacherId: teacher?._id?.toString() || '',
         teacherName: teacher?.name || '未知教师',
+        classId: classInfo?._id?.toString() || '', // 班级ID
+        className: classInfo?.name || '未知班级', // 班级名称
         roomId: schedule.room._id?.toString() || '',
         roomName: roomInfo.name,
         duration: 1,
@@ -437,11 +446,18 @@ function processConsecutiveCourses(weekSchedule: WeekSchedule): void {
       // 如果当前节次和下一节次是同一门课程（同一教师、同一班级）
       if (currentSlot && nextSlot &&
           currentSlot.courseId === nextSlot.courseId &&
-          currentSlot.teacherId === nextSlot.teacherId) {
+          currentSlot.teacherId === nextSlot.teacherId &&
+          currentSlot.classId === nextSlot.classId) { // 添加班级检查
         
         // 合并为连排课程
         currentSlot.duration = 2;
-        weekSchedule[day][period + 1] = null; // 清空下一节次
+        
+        // 在第二节课位置创建连排延续标识
+        weekSchedule[day][period + 1] = {
+          ...currentSlot,
+          isConsecutiveContinuation: true, // 标记为连排延续
+          duration: 0 // 延续部分不计算时长
+        };
       }
     }
   }
