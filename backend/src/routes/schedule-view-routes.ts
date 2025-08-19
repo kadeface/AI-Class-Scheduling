@@ -9,7 +9,9 @@ import {
   getClassSchedule,
   getTeacherSchedule,
   getRoomSchedule,
-  getScheduleOptions
+  getScheduleOptions,
+  getTeachersWithSchedules,
+  getAvailableAcademicPeriods
 } from '../controllers/schedule-view-controller';
 
 const router = Router();
@@ -35,5 +37,13 @@ router.get('/room/:roomId', getRoomSchedule);
 // GET /api/schedule-view/options/teachers
 // GET /api/schedule-view/options/rooms
 router.get('/options/:type', getScheduleOptions);
+
+// 获取有课表的教师列表（优化版本）
+// GET /api/schedule-view/teachers-with-schedules?academicYear=2024-2025&semester=1
+router.get('/teachers-with-schedules', getTeachersWithSchedules);
+
+// 获取可用的学年学期列表
+// GET /api/schedule-view/academic-periods
+router.get('/academic-periods', getAvailableAcademicPeriods);
 
 export default router; 

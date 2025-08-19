@@ -58,8 +58,8 @@ export type ViewMode = 'class' | 'teacher' | 'room';
  * 筛选条件接口
  */
 export interface ScheduleFilters {
-  academicYear?: string;
-  semester?: string;
+  academicYear: string;  // 改为必需字段
+  semester: string;      // 改为必需字段
   grade?: number;
   subject?: string;
   teacher?: string;

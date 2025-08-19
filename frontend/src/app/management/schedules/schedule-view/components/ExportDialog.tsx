@@ -67,7 +67,8 @@ export function ExportDialog({ scheduleData, viewMode, trigger }: ExportDialogPr
     batchPrint: {
       enabled: false,
       targets: [],
-      printAll: false
+      printAll: false,
+      filterTeachers: true // 默认启用教师筛选
     }
   });
 
@@ -75,7 +76,8 @@ export function ExportDialog({ scheduleData, viewMode, trigger }: ExportDialogPr
   const [gradeSelection, setGradeSelection] = useState({
     schoolType: '小学',
     grade: '一年级',
-    classCount: 4
+    classCount: 4,
+    targetType: 'class' as 'class' | 'teacher'
   });
 
   // 导出状态
@@ -127,7 +129,7 @@ export function ExportDialog({ scheduleData, viewMode, trigger }: ExportDialogPr
     // 如果启用批量导出，尝试获取真实班级数据
     if (enabled) {
       try {
-        const realClasses = await fetchRealClasses(gradeSelection.grade);
+        const realClasses = await fetchRealData(gradeSelection.grade, 'class');
         if (realClasses.length > 0) {
           // 使用真实班级数据，并更新班级数量
           const actualClassCount = realClasses.length;
@@ -195,47 +197,198 @@ export function ExportDialog({ scheduleData, viewMode, trigger }: ExportDialogPr
   };
 
   /**
-   * 从数据库获取真实班级列表
+   * 从数据库获取真实数据列表（班级或教师）
    */
-  const fetchRealClasses = async (grade: string) => {
+  const fetchRealData = async (grade: string, targetType: 'class' | 'teacher') => {
     try {
-      const response = await fetch('/api/classes');
-      if (response.ok) {
-        const data = await response.json();
-        console.log('API响应数据结构:', data);
-        
-        // 正确的数据访问路径：data.data.items
-        const classes = data.data?.items || [];
-        const gradeNumber = GRADE_TO_NUMBER[grade as keyof typeof GRADE_TO_NUMBER];
-        
-        console.log(`查找年级${grade}(${gradeNumber})的班级，总班级数:`, classes.length);
-        
-        const gradeClasses = classes.filter((cls: any) => {
-          console.log(`检查班级: ${cls.name}, 年级: ${cls.grade}, 类型: ${typeof cls.grade}`);
-          // 处理年级字段可能是字符串或数字的情况
-          const clsGrade = typeof cls.grade === 'string' ? parseInt(cls.grade) : cls.grade;
-          return clsGrade === gradeNumber;
-        });
-        
-        console.log(`年级${grade}(${gradeNumber})的班级:`, gradeClasses);
-        
-        return gradeClasses.map((cls: any) => ({
-          id: cls._id, // 使用真实的MongoDB ObjectId
-          name: cls.name,
-          type: 'class' as const
-        }));
-      } else {
-        console.error('API响应状态码:', response.status);
-        const errorText = await response.text();
-        console.error('API错误响应:', errorText);
+      if (targetType === 'class') {
+        // 获取班级数据
+        const response = await fetch('/api/classes');
+        if (response.ok) {
+          const data = await response.json();
+          console.log('API响应数据结构:', data);
+          
+          // 正确的数据访问路径：data.data.items
+          const classes = data.data?.items || [];
+          const gradeNumber = GRADE_TO_NUMBER[grade as keyof typeof GRADE_TO_NUMBER];
+          
+          console.log(`查找年级${grade}(${gradeNumber})的班级，总班级数:`, classes.length);
+          
+          const gradeClasses = classes.filter((cls: any) => {
+            console.log(`检查班级: ${cls.name}, 年级: ${cls.grade}, 类型: ${typeof cls.grade}`);
+            // 处理年级字段可能是字符串或数字的情况
+            const clsGrade = typeof cls.grade === 'string' ? parseInt(cls.grade) : cls.grade;
+            return clsGrade === gradeNumber;
+          });
+          
+          console.log(`年级${grade}(${gradeNumber})的班级:`, gradeClasses);
+          
+          return gradeClasses.map((cls: any) => ({
+            id: cls._id, // 使用真实的MongoDB ObjectId
+            name: cls.name,
+            type: 'class' as const
+          }));
+        }
+      } else if (targetType === 'teacher') {
+        // 获取教师数据
+        const response = await fetch('/api/teachers');
+        if (response.ok) {
+          const data = await response.json();
+          console.log('获取教师数据:', data);
+          
+          const teachers = data.data?.items || [];
+          console.log(`获取到教师总数: ${teachers.length}`);
+          
+          // 根据用户选择决定是否筛选
+          if (exportOptions.batchPrint?.filterTeachers !== false) {
+            // 智能筛选：优先使用优化API，失败时回退到原有方案
+            const teachersWithSchedules = await smartFilterTeachers(teachers);
+            console.log(`筛选后有课的教师数量: ${teachersWithSchedules.length}`);
+            
+            if (teachersWithSchedules.length === 0) {
+              console.warn('筛选后没有找到有课的教师，可能的原因：');
+              console.warn('1. 教师课表API有问题');
+              console.warn('2. 课表数据结构与预期不符');
+              console.warn('3. 所有教师确实都没有课');
+              console.warn('4. 优化API和回退方案都失败');
+              console.warn('建议：检查教师课表API或选择"不筛选"选项');
+            }
+            
+            return teachersWithSchedules;
+          } else {
+            // 返回所有教师（不筛选）
+            console.log('用户选择不筛选，返回所有教师');
+            return teachers.map((teacher: any) => ({
+              id: teacher._id,
+              name: teacher.name,
+              type: 'teacher' as const
+            }));
+          }
+        }
       }
+      
+      // 错误处理已在各自的if块中处理
     } catch (error) {
-      console.error('获取班级列表失败:', error);
+      console.error(`获取${targetType === 'class' ? '班级' : '教师'}列表失败:`, error);
     }
     return [];
   };
 
+  /**
+   * 智能教师筛选（混合优化）
+   * 优先使用优化的API，失败时回退到原有方案
+   */
+  const smartFilterTeachers = async (teachers: Array<{ _id: string; name: string }>) => {
+    try {
+      console.log('开始智能教师筛选...');
+      
+      // 使用当前课表的学年学期参数
+      const params = new URLSearchParams({
+        academicYear: scheduleData.academicYear,
+        semester: scheduleData.semester
+      });
+      
+      // 首先尝试使用优化的API
+      const response = await fetch(`/api/schedule-view/teachers-with-schedules?${params}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.data.length > 0) {
+          console.log('✅ 使用优化API获取有课教师成功:', data.data.length);
+          console.log('优化API返回的教师数据:', data.data);
+          
+          // 转换数据格式以匹配现有接口
+          const optimizedTeachers = data.data.map((teacher: any) => ({
+            id: teacher.id,
+            name: teacher.name,
+            type: 'teacher' as const,
+            courseCount: teacher.courseCount
+          }));
+          
+          return optimizedTeachers;
+        } else {
+          console.warn('⚠️ 优化API返回空数据，回退到原有方案');
+        }
+      } else {
+        console.warn(`⚠️ 优化API调用失败 (${response.status})，回退到原有方案`);
+        const errorText = await response.text();
+        console.log('错误详情:', errorText);
+      }
+      
+      // 如果优化API失败，回退到原有方案
+      console.log('🔄 回退到原有筛选方案...');
+      return await filterTeachersWithSchedules(teachers);
+      
+    } catch (error) {
+      console.error('❌ 智能筛选失败，回退到原有方案:', error);
+      return await filterTeachersWithSchedules(teachers);
+    }
+  };
 
+  /**
+   * 筛选有课表的教师（原有方案）
+   */
+  const filterTeachersWithSchedules = async (teachers: Array<{ _id: string; name: string }>) => {
+    console.log('开始筛选有课表的教师...');
+    const teachersWithSchedules = [];
+    
+    for (const teacher of teachers) {
+      try {
+        console.log(`正在检查教师 ${teacher.name} (ID: ${teacher._id}) 的课表...`);
+        
+        // 检查该教师是否有课表数据
+        const scheduleResponse = await fetch(`/api/schedule-view/teacher/${teacher._id}`);
+        if (scheduleResponse.ok) {
+          const scheduleData = await scheduleResponse.json();
+          console.log(`教师 ${teacher.name} 课表API响应:`, scheduleData);
+          
+          // 检查是否有课表数据且不为空
+          if (scheduleData.data && scheduleData.data.weekSchedule) {
+            console.log(`教师 ${teacher.name} 课表数据结构:`, scheduleData.data.weekSchedule);
+            
+            // 更宽松的筛选逻辑：检查是否有任何课程数据
+            let hasSchedule = false;
+            let courseCount = 0;
+            
+            for (let day = 1; day <= 5; day++) {
+              const daySchedule = scheduleData.data.weekSchedule[day];
+              if (daySchedule) {
+                for (let period = 1; period <= 8; period++) {
+                  const courseSlot = daySchedule[period];
+                  if (courseSlot && courseSlot.courseName) {
+                    courseCount++;
+                    hasSchedule = true;
+                    console.log(`教师 ${teacher.name} 第${day}天第${period}节有课: ${courseSlot.courseName}`);
+                  }
+                }
+              }
+            }
+            
+            if (hasSchedule) {
+              teachersWithSchedules.push({
+                id: teacher._id,
+                name: teacher.name,
+                type: 'teacher' as const
+              });
+              console.log(`教师 ${teacher.name} 有课表 (${courseCount}节课)，已添加到筛选列表`);
+            } else {
+              console.log(`教师 ${teacher.name} 课表为空，跳过`);
+            }
+          } else {
+            console.log(`教师 ${teacher.name} 没有课表数据，跳过`);
+          }
+        } else {
+          console.log(`获取教师 ${teacher.name} 课表失败:`, scheduleResponse.status);
+          const errorText = await scheduleResponse.text();
+          console.log(`错误详情:`, errorText);
+        }
+      } catch (error) {
+        console.error(`检查教师 ${teacher.name} 课表时出错:`, error);
+      }
+    }
+    
+    console.log(`筛选完成，有课的教师: ${teachersWithSchedules.length}/${teachers.length}`);
+    return teachersWithSchedules;
+  };
 
   /**
    * 处理学校类型变化
@@ -246,14 +399,15 @@ export function ExportDialog({ scheduleData, viewMode, trigger }: ExportDialogPr
     // 如果批量导出已启用，尝试获取真实班级数据
     if (exportOptions.batchPrint?.enabled) {
       try {
-        const realClasses = await fetchRealClasses(newGrade);
+        const realClasses = await fetchRealData(newGrade, 'class');
         if (realClasses.length > 0) {
           // 使用真实班级数据，并更新班级数量
           const actualClassCount = realClasses.length;
           setGradeSelection({
             schoolType,
             grade: newGrade,
-            classCount: actualClassCount
+            classCount: actualClassCount,
+            targetType: 'class'
           });
           
           setExportOptions(prev => ({
@@ -271,7 +425,8 @@ export function ExportDialog({ scheduleData, viewMode, trigger }: ExportDialogPr
           setGradeSelection({
             schoolType,
             grade: newGrade,
-            classCount: fallbackClassCount
+            classCount: fallbackClassCount,
+            targetType: 'class'
           });
           
           setExportOptions(prev => ({
@@ -291,7 +446,8 @@ export function ExportDialog({ scheduleData, viewMode, trigger }: ExportDialogPr
         setGradeSelection({
           schoolType,
           grade: newGrade,
-          classCount: fallbackClassCount
+          classCount: fallbackClassCount,
+          targetType: 'class'
         });
         
         setExportOptions(prev => ({
@@ -308,7 +464,8 @@ export function ExportDialog({ scheduleData, viewMode, trigger }: ExportDialogPr
       setGradeSelection({
         schoolType,
         grade: newGrade,
-        classCount: defaultClassCount
+        classCount: defaultClassCount,
+        targetType: 'class'
       });
     }
   };
@@ -320,7 +477,7 @@ export function ExportDialog({ scheduleData, viewMode, trigger }: ExportDialogPr
     // 如果批量导出已启用，尝试获取真实班级数据
     if (exportOptions.batchPrint?.enabled) {
       try {
-        const realClasses = await fetchRealClasses(grade);
+        const realClasses = await fetchRealData(grade, 'class');
         if (realClasses.length > 0) {
           // 使用真实班级数据，并更新班级数量
           const actualClassCount = realClasses.length;
@@ -388,6 +545,59 @@ export function ExportDialog({ scheduleData, viewMode, trigger }: ExportDialogPr
   };
 
   /**
+   * 处理目标类型变化
+   */
+  const handleTargetTypeChange = async (targetType: 'class' | 'teacher') => {
+    if (exportOptions.batchPrint?.enabled) {
+      try {
+        if (targetType === 'class') {
+          // 获取班级数据
+          const realClasses = await fetchRealData(gradeSelection.grade, 'class');
+          if (realClasses.length > 0) {
+            const actualClassCount = realClasses.length;
+            setGradeSelection(prev => ({
+              ...prev,
+              classCount: actualClassCount
+            }));
+            
+            setExportOptions(prev => ({
+              ...prev,
+              batchPrint: {
+                ...prev.batchPrint!,
+                targets: realClasses
+              }
+            }));
+            
+            console.log(`目标类型改为班级，年级${gradeSelection.grade}实际班级数量: ${actualClassCount}`);
+          }
+        } else if (targetType === 'teacher') {
+          // 获取教师数据
+          const realTeachers = await fetchRealData(gradeSelection.grade, 'teacher');
+          if (realTeachers.length > 0) {
+            const actualTeacherCount = realTeachers.length;
+            setGradeSelection(prev => ({
+              ...prev,
+              classCount: actualTeacherCount
+            }));
+            
+            setExportOptions(prev => ({
+              ...prev,
+              batchPrint: {
+                ...prev.batchPrint!,
+                targets: realTeachers
+              }
+            }));
+            
+            console.log(`目标类型改为教师，实际教师数量: ${actualTeacherCount}`);
+          }
+        }
+      } catch (error) {
+        console.error('获取真实数据失败:', error);
+      }
+    }
+  };
+
+  /**
    * 处理批量导出目标变化
    */
   const handleBatchTargetChange = (index: number, field: 'name' | 'type', value: string) => {
@@ -440,18 +650,20 @@ export function ExportDialog({ scheduleData, viewMode, trigger }: ExportDialogPr
       if (exportOptions.batchPrint?.enabled) {
         console.log('启用批量导出，显示预览...');
         try {
-          const realClasses = await fetchRealClasses(gradeSelection.grade);
-          console.log('获取到的真实班级:', realClasses);
+          // 根据用户选择的目标类型获取数据
+          const targetType = gradeSelection.targetType || 'class';
+          const realData = await fetchRealData(gradeSelection.grade, targetType);
+          console.log(`获取到的真实${targetType === 'class' ? '班级' : '教师'}数据:`, realData);
           
-          if (realClasses.length > 0) {
-            console.log('更新批量导出目标为真实班级数据:', realClasses);
+          if (realData.length > 0) {
+            console.log(`更新批量导出目标为真实${targetType === 'class' ? '班级' : '教师'}数据:`, realData);
             
             // 更新导出选项
             setExportOptions(prev => ({
               ...prev,
               batchPrint: {
                 ...prev.batchPrint!,
-                targets: realClasses
+                targets: realData
               }
             }));
             
@@ -460,10 +672,10 @@ export function ExportDialog({ scheduleData, viewMode, trigger }: ExportDialogPr
             setShowBatchPreview(true);
             return; // 直接返回，不执行实际导出
           } else {
-            console.warn('未获取到真实班级数据，将使用模拟数据');
+            console.warn(`未获取到真实${targetType === 'class' ? '班级' : '教师'}数据，将使用模拟数据`);
           }
         } catch (error) {
-          console.error('刷新真实班级数据失败:', error);
+          console.error(`刷新真实${gradeSelection.targetType === 'class' ? '班级' : '教师'}数据失败:`, error);
         }
       }
       
@@ -606,6 +818,30 @@ export function ExportDialog({ scheduleData, viewMode, trigger }: ExportDialogPr
                   />
                 </div>
                 
+                {/* 教师筛选选项 */}
+                {exportOptions.batchPrint?.enabled && gradeSelection.targetType === 'teacher' && (
+                  <div className="flex items-center justify-between p-3 bg-blue-50 rounded border border-blue-200">
+                    <div>
+                      <label className="text-sm font-medium text-blue-800">智能筛选教师</label>
+                      <p className="text-xs text-blue-600">只导出有课表的教师，跳过空课表</p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={exportOptions.batchPrint?.filterTeachers || true}
+                      onChange={(e) => {
+                        setExportOptions(prev => ({
+                          ...prev,
+                          batchPrint: {
+                            ...prev.batchPrint!,
+                            filterTeachers: e.target.checked
+                          }
+                        }));
+                      }}
+                      className="h-4 w-4 text-blue-600"
+                    />
+                  </div>
+                )}
+                
                 {exportOptions.batchPrint?.enabled && (
                   <div className="space-y-3">
                     {/* 年级班级选择 */}
@@ -636,42 +872,90 @@ export function ExportDialog({ scheduleData, viewMode, trigger }: ExportDialogPr
                           </select>
                         </div>
                         <div className="flex-1">
-                          <label className="text-xs font-medium text-gray-600 block mb-1">班级数量</label>
+                          <label className="text-xs font-medium text-gray-600 block mb-1">目标类型</label>
                           <select
-                            value={gradeSelection.classCount}
+                            value={gradeSelection.targetType || 'class'}
                             onChange={(e) => {
-                              const newCount = parseInt(e.target.value);
-                              setGradeSelection(prev => ({ ...prev, classCount: newCount }));
+                              const newTargetType = e.target.value as 'class' | 'teacher';
+                              setGradeSelection(prev => ({ ...prev, targetType: newTargetType }));
+                              // 当目标类型改变时，重新获取数据
                               if (exportOptions.batchPrint?.enabled) {
-                                setExportOptions(prev => ({
-                                  ...prev,
-                                  batchPrint: {
-                                    ...prev.batchPrint!,
-                                    targets: generateClassTargets(gradeSelection.grade, newCount)
-                                  }
-                                }));
+                                handleTargetTypeChange(newTargetType);
                               }
                             }}
                             className="w-full text-xs px-2 py-1 border rounded"
                           >
-                            {Array.from({ length: 12 }, (_, i) => i + 1).map(count => (
-                              <option key={count} value={count}>{count}个班</option>
-                            ))}
+                            <option value="class">班级</option>
+                            <option value="teacher">教师</option>
+                          </select>
+                        </div>
+                        <div className="flex-1">
+                          <label className="text-xs font-medium text-gray-600 block mb-1">数量</label>
+                          <select
+                            value={gradeSelection.classCount === -1 ? 'all' : gradeSelection.classCount}
+                            onChange={(e) => {
+                              const newValue = e.target.value;
+                              if (newValue === 'all') {
+                                // 处理"全部教师"选项
+                                setGradeSelection(prev => ({ ...prev, classCount: -1 })); // -1 表示全部
+                                if (exportOptions.batchPrint?.enabled && gradeSelection.targetType === 'teacher') {
+                                  // 获取所有教师数据
+                                  handleTargetTypeChange('teacher');
+                                }
+                              } else {
+                                const newCount = parseInt(newValue);
+                                setGradeSelection(prev => ({ ...prev, classCount: newCount }));
+                                if (exportOptions.batchPrint?.enabled) {
+                                  setExportOptions(prev => ({
+                                    ...prev,
+                                    batchPrint: {
+                                      ...prev.batchPrint!,
+                                      targets: generateClassTargets(gradeSelection.grade, newCount)
+                                    }
+                                  }));
+                                }
+                              }
+                            }}
+                            className="w-full text-xs px-2 py-1 border rounded"
+                          >
+                            {gradeSelection.targetType === 'teacher' ? (
+                              <>
+                                <option value="all">全部教师</option>
+                                {Array.from({ length: 50 }, (_, i) => i + 1).map(count => (
+                                  <option key={count} value={count}>
+                                    {count}个教师
+                                  </option>
+                                ))}
+                              </>
+                            ) : (
+                              Array.from({ length: 12 }, (_, i) => i + 1).map(count => (
+                                <option key={count} value={count}>
+                                  {count}个班
+                                </option>
+                              ))
+                            )}
                           </select>
                         </div>
                       </div>
                       
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-600">当前选择：{gradeSelection.grade}，共{gradeSelection.classCount}个班</span>
+                        <span className="text-xs text-gray-600">
+                          当前选择：{gradeSelection.grade}，共{
+                            gradeSelection.classCount === -1 
+                              ? '全部' 
+                              : gradeSelection.classCount
+                          }个{gradeSelection.targetType === 'class' ? '班' : '教师'}
+                        </span>
                         <div className="flex gap-2">
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={async () => {
-                              console.log('测试获取真实班级数据...');
-                              const realClasses = await fetchRealClasses(gradeSelection.grade);
-                              console.log('测试结果:', realClasses);
-                              alert(`获取到 ${realClasses.length} 个真实班级`);
+                              const targetType = gradeSelection.targetType || 'class';
+                              console.log(`测试获取真实${targetType === 'class' ? '班级' : '教师'}数据...`);
+                              const realData = await fetchRealData(gradeSelection.grade, targetType);
+                              console.log('测试结果:', realData);
+                              alert(`获取到 ${realData.length} 个真实${targetType === 'class' ? '班级' : '教师'}`);
                             }}
                             className="h-6 px-2 text-xs"
                           >

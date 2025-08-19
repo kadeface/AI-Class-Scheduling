@@ -12,6 +12,7 @@ import { ScheduleHeader } from './components/ScheduleHeader';
 import { ScheduleGrid, ScheduleGridSkeleton } from './components/ScheduleGrid';
 import { ExportDialog } from './components/ExportDialog';
 import { SettingsDialog } from './components/SettingsDialog';
+import { AcademicPeriodSelector } from './components/AcademicPeriodSelector';
 import { 
   ViewMode, 
   ScheduleOption, 
@@ -228,6 +229,15 @@ export default function ScheduleViewPage() {
           <SettingsDialog />
         }
       />
+
+      {/* 学年学期选择器 */}
+      <Card className="p-4">
+        <AcademicPeriodSelector
+          value={filters}
+          onChange={handleFiltersChange}
+          className="justify-center"
+        />
+      </Card>
 
       {/* 错误提示 */}
       {error && (

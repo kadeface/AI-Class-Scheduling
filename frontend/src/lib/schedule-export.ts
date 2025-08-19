@@ -25,6 +25,7 @@ export interface ExportOptions {
       type: 'class' | 'teacher' | 'room';
     }>;
     printAll?: boolean;
+    filterTeachers?: boolean; // 是否筛选有课的教师
   };
 }
 
@@ -751,27 +752,60 @@ async function batchPrintToHtml(batchOptions: ExportOptions['batchPrint']): Prom
   
   console.log('批量打印HTML生成完成，准备打开打印窗口');
   
-  // 打开打印窗口
-  const printWindow = window.open('', '_blank');
-  if (!printWindow) {
-    throw new Error('无法打开打印窗口，请检查浏览器设置');
-  }
+  // 尝试打开打印窗口
+  let printWindow: Window | null = null;
   
-  printWindow.document.write(batchHtml);
-  printWindow.document.close();
-  printWindow.focus();
-  
-  // 延迟打印
-  setTimeout(() => {
-    try {
-      printWindow.print();
-      setTimeout(() => {
-        printWindow.close();
-      }, 1000);
-    } catch (e) {
-      console.warn('自动打印失败，用户可能需要手动打印:', e);
+  try {
+    // 使用更友好的方式打开窗口
+    printWindow = window.open('', '_blank', 'width=800,height=600,scrollbars=yes,resizable=yes');
+    
+    if (!printWindow) {
+      // 如果弹窗被阻止，尝试在当前窗口打开
+      console.warn('弹窗被阻止，尝试在当前窗口打开打印预览');
+      printWindow = window;
     }
-  }, 500);
+    
+    // 写入HTML内容
+    if (printWindow !== window) {
+      printWindow.document.write(batchHtml);
+      printWindow.document.close();
+      printWindow.focus();
+    } else {
+      // 在当前窗口显示内容
+      document.body.innerHTML = batchHtml;
+    }
+    
+    // 延迟打印
+    setTimeout(() => {
+      try {
+        if (printWindow && printWindow !== window) {
+          printWindow.print();
+          setTimeout(() => {
+            printWindow?.close();
+          }, 1000);
+        } else {
+          // 在当前窗口打印
+          window.print();
+        }
+      } catch (e) {
+        console.warn('自动打印失败，用户可能需要手动打印:', e);
+        // 显示手动打印提示
+        if (printWindow && printWindow !== window) {
+          printWindow.document.body.innerHTML += `
+            <div style="text-align: center; margin-top: 20px; padding: 20px; background: #f0f0f0; border: 1px solid #ccc;">
+              <h3>打印提示</h3>
+              <p>自动打印失败，请手动按 Ctrl+P (Windows) 或 Cmd+P (Mac) 进行打印</p>
+              <p>或者选择"另存为PDF"选项保存文件</p>
+            </div>
+          `;
+        }
+      }
+    }, 500);
+    
+  } catch (error) {
+    console.error('打开打印窗口失败:', error);
+    throw new Error(`打开打印窗口失败: ${error instanceof Error ? error.message : '未知错误'}`);
+  }
 }
 
 

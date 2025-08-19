@@ -462,3 +462,195 @@ function processConsecutiveCourses(weekSchedule: WeekSchedule): void {
     }
   }
 } 
+
+/**
+ * 获取有课表的教师列表（优化版本）
+ * 直接从schedules表筛选，避免逐个查询
+ * 
+ * @param req Express请求对象
+ * @param res Express响应对象
+ */
+export async function getTeachersWithSchedules(req: Request, res: Response): Promise<void> {
+  try {
+    const { academicYear = '2025-2026', semester = '1' } = req.query;
+    const semesterKey = `${academicYear}-${semester}`;
+
+    console.log(`开始查询学期 ${semesterKey} 有课表的教师...`);
+
+    // 直接从schedules表查询有课的教师ID
+    const teacherIds = await Schedule.distinct('teacher', {
+      semester: semesterKey,
+      status: 'active'
+    });
+
+    console.log(`找到 ${teacherIds.length} 个有课的教师ID`);
+
+    if (teacherIds.length === 0) {
+      res.json({
+        success: true,
+        data: [],
+        message: '该学期没有找到有课表的教师'
+      });
+      return;
+    }
+
+    // 获取教师详细信息
+    const teachers = await Teacher.find({
+      _id: { $in: teacherIds }
+    }).select('_id name');
+
+    console.log(`成功获取 ${teachers.length} 个教师信息`);
+
+    // 统计每个教师的课程数量
+    const teacherCourseCounts = await Schedule.aggregate([
+      {
+        $match: {
+          semester: semesterKey,
+          status: 'active'
+        }
+      },
+      {
+        $group: {
+          _id: '$teacher',
+          courseCount: { $sum: 1 }
+        }
+      }
+    ]);
+
+    console.log(`统计完成，教师课程数量:`, teacherCourseCounts);
+
+    // 合并教师信息和课程数量
+    const teachersWithCounts = teachers.map((teacher: any) => {
+      const countInfo = teacherCourseCounts.find((t: any) => t._id.toString() === teacher._id.toString());
+      return {
+        id: teacher._id,
+        name: teacher.name,
+        type: 'teacher' as const,
+        courseCount: countInfo?.courseCount || 0
+      };
+    });
+
+    // 按课程数量排序（课程多的排在前面）
+    teachersWithCounts.sort((a, b) => b.courseCount - a.courseCount);
+
+    console.log(`返回 ${teachersWithCounts.length} 个有课教师，按课程数量排序`);
+
+    res.json({
+      success: true,
+      data: teachersWithCounts,
+      message: `成功获取 ${teachersWithCounts.length} 个有课表的教师`
+    });
+
+  } catch (error) {
+    console.error('获取有课表的教师列表失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取有课表的教师列表失败',
+      error: process.env.NODE_ENV === 'development' ? (error as Error).message : undefined
+    });
+  }
+} 
+
+/**
+ * 获取可用的学年学期列表
+ * 从数据库动态获取，避免硬编码
+ * 
+ * @param req Express请求对象
+ * @param res Express响应对象
+ */
+export async function getAvailableAcademicPeriods(req: Request, res: Response): Promise<void> {
+  try {
+    console.log('开始获取可用的学年学期列表...');
+
+    // 从schedules表获取所有可用的学期
+    const semesters = await Schedule.distinct('semester', { status: 'active' });
+    
+    // 从schedules表获取所有可用的学年
+    const academicYears = await Schedule.distinct('academicYear', { status: 'active' });
+
+    console.log(`找到 ${semesters.length} 个学期，${academicYears.length} 个学年`);
+
+    if (semesters.length === 0) {
+      res.json({
+        success: true,
+        data: [],
+        message: '没有找到可用的学年学期数据'
+      });
+      return;
+    }
+
+    // 解析学期数据，提取学年和学期信息
+    const periods = semesters.map(semester => {
+      // 处理 "2025-2026-1" 格式，提取学年和学期
+      const parts = semester.split('-');
+      let academicYear, semesterNumber;
+      
+      if (parts.length === 3) {
+        // 格式: "2025-2026-1" -> 学年: "2025-2026", 学期: "1"
+        academicYear = `${parts[0]}-${parts[1]}`;
+        semesterNumber = parts[2];
+      } else if (parts.length === 2) {
+        // 格式: "2025-1" -> 学年: "2025", 学期: "1"
+        academicYear = parts[0];
+        semesterNumber = parts[1];
+      } else {
+        // 其他格式，使用原始值
+        academicYear = semester;
+        semesterNumber = '1';
+      }
+      
+      return {
+        semester: semester,
+        academicYear: academicYear,
+        semesterNumber: semesterNumber,
+        displayName: `${academicYear}学年第${semesterNumber}学期`
+      };
+    });
+
+    // 按学年和学期排序
+    periods.sort((a, b) => {
+      if (a.academicYear !== b.academicYear) {
+        return b.academicYear.localeCompare(a.academicYear); // 学年降序
+      }
+      return parseInt(a.semesterNumber) - parseInt(b.semesterNumber); // 学期升序
+    });
+
+    // 获取当前活跃的学年学期（数据最多的）
+    const semesterStats = await Schedule.aggregate([
+      {
+        $match: { status: 'active' }
+      },
+      {
+        $group: {
+          _id: '$semester',
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $sort: { count: -1 }
+      }
+    ]);
+
+    const currentPeriod = semesterStats.length > 0 ? semesterStats[0]._id : null;
+
+    console.log(`当前活跃学期: ${currentPeriod}, 可用学期数量: ${periods.length}`);
+
+    res.json({
+      success: true,
+      data: {
+        periods,
+        currentPeriod,
+        academicYears: academicYears.sort().reverse() // 学年降序
+      },
+      message: `成功获取 ${periods.length} 个可用的学年学期`
+    });
+
+  } catch (error) {
+    console.error('获取可用学年学期列表失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取可用学年学期列表失败',
+      error: process.env.NODE_ENV === 'development' ? (error as Error).message : undefined
+    });
+  }
+} 
