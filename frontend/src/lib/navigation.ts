@@ -17,7 +17,9 @@ import {
   BarChart3,
   FileText,
   UserCheck,
-  Building2
+  Building2,
+  Clock,
+  CalendarDays
 } from 'lucide-react';
 
 /**
@@ -41,6 +43,26 @@ export const navigationItems: NavigationItem[] = [
         label: '用户管理',
         href: '/management/users',
         icon: Users
+      },
+      {
+        id: 'schedule-config',
+        label: '时间配置',
+        href: '/management/schedule-config',
+        icon: Clock,
+        children: [
+          {
+            id: 'period-times',
+            label: '课程时间配置',
+            href: '/management/schedule-config',
+            icon: Clock
+          },
+          {
+            id: 'semester-calendar',
+            label: '学期日历管理',
+            href: '/management/schedule-config/calendar',
+            icon: CalendarDays
+          }
+        ]
       },
       {
         id: 'teachers',
@@ -72,6 +94,7 @@ export const navigationItems: NavigationItem[] = [
         href: '/management/grade-templates',
         icon: BookOpen
       },
+
       {
         id: 'schedules',
         label: '排课设置',

@@ -34,6 +34,7 @@ import { default as scheduleRoutes } from './routes/schedule-routes';
 import { default as importRoutes } from './routes/import-routes';
 import statisticsRoutes from './routes/statistics-routes';
 import gradeTemplateRoutes from './routes/grade-template-routes';
+import scheduleConfigRoutes from './routes/schedule-config-routes';
 
 // 加载环境变量
 dotenv.config();
@@ -125,11 +126,14 @@ function configureRoutes(): void {
   // 课表查看路由
    app.use('/api/schedule-view', scheduleViewRoutes);
   
-  // 课程安排管理路由
-   app.use('/api/schedules', scheduleRoutes);
+    // 课程安排管理路由
+  app.use('/api/schedules', scheduleRoutes);
+
+  // 课程时间配置路由
+  app.use('/api/schedule-config', scheduleConfigRoutes);
 
   // 导入路由
-   app.use('/api', importRoutes);
+  app.use('/api', importRoutes);
 
   // 统计路由
    app.use('/api/statistics', statisticsRoutes);

@@ -151,20 +151,39 @@ async function exportToExcel(
     friday: ''
   });
   
-  // 添加时间行
-  const timeSlots = [
-    '第1节 (08:00-08:45)',
-    '第2节 (08:55-09:40)',
-    '第3节 (10:00-10:45)',
-    '第4节 (10:55-11:40)',
-    '第5节 (14:00-14:45)',
-    '第6节 (14:55-15:40)',
-    '第7节 (16:00-16:45)',
-    '第8节 (16:55-17:40)'
-  ];
+  // 动态获取时间配置
+  let timeSlots: string[] = [];
+  
+  try {
+    const response = await fetch(`/api/schedule-config/period-times?academicYear=${scheduleData.academicYear}&semester=${scheduleData.semester}`);
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success && data.data.length > 0) {
+        timeSlots = data.data.map((config: any) => 
+          `第${config.period}节 (${config.startTime}-${config.endTime})`
+        );
+      }
+    }
+  } catch (error) {
+    console.warn('获取时间配置失败，使用默认时间:', error);
+  }
+  
+  // 如果获取失败，使用默认时间
+  if (timeSlots.length === 0) {
+    timeSlots = [
+      '第1节 (08:00-08:45)',
+      '第2节 (08:55-09:40)',
+      '第3节 (10:00-10:45)',
+      '第4节 (10:55-11:40)',
+      '第5节 (14:00-14:45)',
+      '第6节 (14:55-15:40)',
+      '第7节 (16:00-16:45)',
+      '第8节 (16:55-17:40)'
+    ];
+  }
   
   // 填充课表数据
-  for (let period = 1; period <= 8; period++) {
+  for (let period = 1; period <= timeSlots.length; period++) {
     const rowData: any = { time: timeSlots[period - 1] };
     
     for (let day = 1; day <= 5; day++) {
@@ -212,20 +231,39 @@ async function exportToCSV(
   csvData.push(['时间', '周一', '周二', '周三', '周四', '周五']);
   csvData.push([`${scheduleData.targetName} 课表`, `${scheduleData.academicYear} 学年第${scheduleData.semester}学期`, '', '', '', '']);
   
-  // 添加时间行
-  const timeSlots = [
-    '第1节 (08:00-08:45)',
-    '第2节 (08:55-09:40)',
-    '第3节 (10:00-10:45)',
-    '第4节 (10:55-11:40)',
-    '第5节 (14:00-14:45)',
-    '第6节 (14:55-15:40)',
-    '第7节 (16:00-16:45)',
-    '第8节 (16:55-17:40)'
-  ];
+  // 动态获取时间配置
+  let timeSlots: string[] = [];
+  
+  try {
+    const response = await fetch(`/api/schedule-config/period-times?academicYear=${scheduleData.academicYear}&semester=${scheduleData.semester}`);
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success && data.data.length > 0) {
+        timeSlots = data.data.map((config: any) => 
+          `第${config.period}节 (${config.startTime}-${config.endTime})`
+        );
+      }
+    }
+  } catch (error) {
+    console.warn('获取时间配置失败，使用默认时间:', error);
+  }
+  
+  // 如果获取失败，使用默认时间
+  if (timeSlots.length === 0) {
+    timeSlots = [
+      '第1节 (08:00-08:45)',
+      '第2节 (08:55-09:40)',
+      '第3节 (10:00-10:45)',
+      '第4节 (10:55-11:40)',
+      '第5节 (14:00-14:45)',
+      '第6节 (14:55-15:40)',
+      '第7节 (16:00-16:45)',
+      '第8节 (16:55-17:40)'
+    ];
+  }
   
   // 填充课表数据
-  for (let period = 1; period <= 8; period++) {
+  for (let period = 1; period <= timeSlots.length; period++) {
     const rowData = [timeSlots[period - 1]];
     
     for (let day = 1; day <= 5; day++) {

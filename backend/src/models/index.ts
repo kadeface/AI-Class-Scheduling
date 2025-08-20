@@ -12,6 +12,8 @@ export { Room, IRoom } from './Room';
 export { Schedule, ISchedule } from './Schedule';
 export { default as TeachingPlan, ITeachingPlan, ICourseAssignment } from './TeachingPlan';
 export { SchedulingRules, ISchedulingRules, ITimeRules, ITeacherConstraints, IRoomConstraints, ICourseArrangementRules, IConflictResolutionRules } from './SchedulingRules';
+export { PeriodTimeConfig, IPeriodTimeConfig } from './PeriodTimeConfig';
+export { SemesterCalendar, ISemesterCalendar } from './SemesterCalendar';
 
 /**
  * 数据库初始化工具
