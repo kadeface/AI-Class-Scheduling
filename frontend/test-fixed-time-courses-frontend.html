@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>固定时间课程前端测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #0056b3;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 3px;
+            white-space: pre-wrap;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 固定时间课程前端测试</h1>
+    
+    <div class="test-section">
+        <h2>测试数据准备</h2>
+        <p>准备测试用的固定时间课程数据</p>
+        <button class="test-button" onclick="prepareTestData()">准备测试数据</button>
+        <div id="testDataResult" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>测试数据序列化</h2>
+        <p>测试数据在JSON序列化过程中的格式</p>
+        <button class="test-button" onclick="testDataSerialization()">测试序列化</button>
+        <div id="serializationResult" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>测试API调用</h2>
+        <p>测试实际的API调用（需要后端服务运行）</p>
+        <button class="test-button" onclick="testApiCall()">测试API调用</button>
+        <div id="apiResult" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>测试数据转换</h2>
+        <p>测试各种数据转换方法</p>
+        <button class="test-button" onclick="testDataTransformation()">测试数据转换</button>
+        <div id="transformationResult" class="result"></div>
+    </div>
+
+    <script>
+        // 测试数据
+        let testData = null;
+        
+        function prepareTestData() {
+            testData = {
+                name: '前端测试排课规则',
+                description: '测试固定时间课程数据格式',
+                schoolType: 'primary',
+                academicYear: '2025-2026',
+                semester: 1,
+                timeRules: {
+                    dailyPeriods: 7,
+                    workingDays: [1, 2, 3, 4, 5],
+                    periodDuration: 40,
+                    breakDuration: 10,
+                    lunchBreakStart: 4,
+                    lunchBreakDuration: 90,
+                    morningPeriods: [1, 2, 3],
+                    afternoonPeriods: [5, 6, 7, 4],
+                    forbiddenSlots: []
+                },
+                teacherConstraints: {
+                    maxDailyHours: 6,
+                    maxContinuousHours: 2,
+                    minRestBetweenCourses: 1,
+                    avoidFridayAfternoon: false,
+                    respectTeacherPreferences: true,
+                    allowCrossGradeTeaching: true,
+                    rotationStrategy: {
+                        enableRotation: true,
+                        rotationMode: 'round_robin',
+                        roundCompletion: true,
+                        minIntervalBetweenClasses: 1,
+                        maxConsecutiveClasses: 2,
+                        rotationOrder: 'alphabetical',
+                        customRotationOrder: []
+                    }
+                },
+                roomConstraints: {
+                    respectCapacityLimits: true,
+                    allowRoomSharing: false,
+                    preferFixedClassrooms: true,
+                    specialRoomPriority: 'preferred'
+                },
+                courseArrangementRules: {
+                    allowContinuousCourses: false,
+                    maxContinuousHours: 2,
+                    distributionPolicy: 'balanced',
+                    avoidFirstLastPeriod: [],
+                    coreSubjectPriority: true,
+                    labCoursePreference: 'afternoon',
+                    subjectSpecificRules: [],
+                    enableSubjectConstraints: true,
+                    defaultSubjectInterval: 1,
+                    coreSubjectStrategy: {
+                        enableCoreSubjectStrategy: true,
+                        coreSubjects: ['语文', '数学', '英语'],
+                        distributionMode: 'daily',
+                        maxDailyOccurrences: 2,
+                        minDaysPerWeek: 5,
+                        avoidConsecutiveDays: true,
+                        preferredTimeSlots: [2, 3, 5, 6, 4, 1, 7],
+                        avoidTimeSlots: [8],
+                        maxConcentration: 1,
+                        balanceWeight: 100,
+                        enforceEvenDistribution: true
+                    },
+                    fixedTimeCourses: {
+                        enabled: true,
+                        courses: [
+                            {
+                                type: 'class-meeting',
+                                dayOfWeek: 1,
+                                period: 1,
+                                weekType: 'all',
+                                startWeek: 1,
+                                endWeek: 20,
+                                notes: '班主任主持班会'
+                            }
+                        ],
+                        priority: true,
+                        allowOverride: false,
+                        conflictStrategy: 'strict'
+                    }
+                },
+                conflictResolutionRules: {
+                    teacherConflictResolution: 'strict',
+                    roomConflictResolution: 'warn',
+                    classConflictResolution: 'warn',
+                    allowOverride: false,
+                    priorityOrder: ['teacher', 'room', 'time']
+                },
+                isDefault: false,
+                isActive: true
+            };
+            
+            document.getElementById('testDataResult').innerHTML = 
+                '<div class="success">✅ 测试数据准备完成</div>' +
+                '<strong>fixedTimeCourses 类型:</strong> ' + typeof testData.courseArrangementRules.fixedTimeCourses + '<br>' +
+                '<strong>courses 类型:</strong> ' + typeof testData.courseArrangementRules.fixedTimeCourses.courses + '<br>' +
+                '<strong>courses 长度:</strong> ' + testData.courseArrangementRules.fixedTimeCourses.courses.length;
+        }
+        
+        function testDataSerialization() {
+            if (!testData) {
+                document.getElementById('serializationResult').innerHTML = 
+                    '<div class="error">❌ 请先准备测试数据</div>';
+                return;
+            }
+            
+            try {
+                // 测试JSON序列化
+                const jsonString = JSON.stringify(testData, null, 2);
+                const parsedData = JSON.parse(jsonString);
+                
+                // 检查序列化后的数据
+                const fixedTimeCourses = parsedData.courseArrangementRules.fixedTimeCourses;
+                const courses = fixedTimeCourses.courses;
+                
+                document.getElementById('serializationResult').innerHTML = 
+                    '<div class="success">✅ JSON序列化测试完成</div>' +
+                    '<strong>序列化后 fixedTimeCourses 类型:</strong> ' + typeof fixedTimeCourses + '<br>' +
+                    '<strong>序列化后 courses 类型:</strong> ' + typeof courses + '<br>' +
+                    '<strong>序列化后 courses 长度:</strong> ' + courses.length + '<br>' +
+                    '<strong>序列化后 courses 是否为数组:</strong> ' + Array.isArray(courses) + '<br>' +
+                    '<strong>序列化后数据示例:</strong><br>' +
+                    '<pre>' + JSON.stringify(fixedTimeCourses, null, 2) + '</pre>';
+                    
+            } catch (error) {
+                document.getElementById('serializationResult').innerHTML = 
+                    '<div class="error">❌ 序列化测试失败: ' + error.message + '</div>';
+            }
+        }
+        
+        async function testApiCall() {
+            if (!testData) {
+                document.getElementById('apiResult').innerHTML = 
+                    '<div class="error">❌ 请先准备测试数据</div>';
+                return;
+            }
+            
+            try {
+                document.getElementById('apiResult').innerHTML = '🔄 正在测试API调用...';
+                
+                const response = await fetch('http://localhost:3001/api/scheduling-rules', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(testData)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    document.getElementById('apiResult').innerHTML = 
+                        '<div class="success">✅ API调用成功</div>' +
+                        '<strong>响应状态:</strong> ' + response.status + '<br>' +
+                        '<strong>响应数据:</strong><br>' +
+                        '<pre>' + JSON.stringify(result, null, 2) + '</pre>';
+                } else {
+                    document.getElementById('apiResult').innerHTML = 
+                        '<div class="error">❌ API调用失败</div>' +
+                        '<strong>状态码:</strong> ' + response.status + '<br>' +
+                        '<strong>错误信息:</strong> ' + JSON.stringify(result, null, 2);
+                }
+                
+            } catch (error) {
+                document.getElementById('apiResult').innerHTML = 
+                    '<div class="error">❌ API调用异常: ' + error.message + '</div>';
+            }
+        }
+        
+        function testDataTransformation() {
+            if (!testData) {
+                document.getElementById('transformationResult').innerHTML = 
+                    '<div class="error">❌ 请先准备测试数据</div>';
+                return;
+            }
+            
+            try {
+                // 测试各种数据转换方法
+                const transformations = [];
+                
+                // 1. 直接赋值
+                let data1 = { ...testData };
+                transformations.push({
+                    method: '直接赋值 (spread operator)',
+                    fixedTimeCoursesType: typeof data1.courseArrangementRules.fixedTimeCourses,
+                    coursesType: typeof data1.courseArrangementRules.fixedTimeCourses.courses,
+                    coursesIsArray: Array.isArray(data1.courseArrangementRules.fixedTimeCourses.courses)
+                });
+                
+                // 2. JSON序列化后解析
+                let data2 = JSON.parse(JSON.stringify(testData));
+                transformations.push({
+                    method: 'JSON序列化后解析',
+                    fixedTimeCoursesType: typeof data2.courseArrangementRules.fixedTimeCourses,
+                    coursesType: typeof data2.courseArrangementRules.fixedTimeCourses.courses,
+                    coursesIsArray: Array.isArray(data2.courseArrangementRules.fixedTimeCourses.courses)
+                });
+                
+                // 3. 结构化克隆（如果支持）
+                let data3 = null;
+                if (typeof structuredClone === 'function') {
+                    data3 = structuredClone(testData);
+                    transformations.push({
+                        method: 'structuredClone',
+                        fixedTimeCoursesType: typeof data3.courseArrangementRules.fixedTimeCourses,
+                        coursesType: typeof data3.courseArrangementRules.fixedTimeCourses.courses,
+                        coursesIsArray: Array.isArray(data3.courseArrangementRules.fixedTimeCourses.courses)
+                    });
+                }
+                
+                // 4. 手动深拷贝
+                let data4 = JSON.parse(JSON.stringify(testData));
+                transformations.push({
+                    method: '手动深拷贝 (JSON.parse + JSON.stringify)',
+                    fixedTimeCoursesType: typeof data4.courseArrangementRules.fixedTimeCourses,
+                    coursesType: typeof data4.courseArrangementRules.fixedTimeCourses.courses,
+                    coursesIsArray: Array.isArray(data4.courseArrangementRules.fixedTimeCourses.courses)
+                });
+                
+                // 显示结果
+                let resultHtml = '<div class="success">✅ 数据转换测试完成</div>';
+                resultHtml += '<table border="1" style="border-collapse: collapse; width: 100%;">';
+                resultHtml += '<tr><th>转换方法</th><th>fixedTimeCourses类型</th><th>courses类型</th><th>courses是否为数组</th></tr>';
+                
+                transformations.forEach(t => {
+                    resultHtml += `<tr>
+                        <td>${t.method}</td>
+                        <td>${t.fixedTimeCoursesType}</td>
+                        <td>${t.coursesType}</td>
+                        <td>${t.coursesIsArray}</td>
+                    </tr>`;
+                });
+                
+                resultHtml += '</table>';
+                
+                document.getElementById('transformationResult').innerHTML = resultHtml;
+                
+            } catch (error) {
+                document.getElementById('transformationResult').innerHTML = 
+                    '<div class="error">❌ 数据转换测试失败: ' + error.message + '</div>';
+            }
+        }
+    </script>
+</body>
+</html>

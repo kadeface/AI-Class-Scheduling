@@ -72,6 +72,11 @@ export interface CourseAssignment {
   roomId: mongoose.Types.ObjectId;     // 教室ID
   timeSlot: TimeSlot;                  // 时间段
   isFixed: boolean;                    // 是否为固定安排（不可修改）
+  
+  // 🆕 新增：固定时间课程相关字段
+  weekType?: 'all' | 'odd' | 'even';  // 周次类型（全周/单周/双周）
+  startWeek?: number;                  // 开始周次
+  endWeek?: number;                    // 结束周次
 }
 
 /**

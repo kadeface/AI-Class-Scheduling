@@ -388,18 +388,18 @@ export class K12ConstraintChecker {
     timeSlot: any, 
     currentAssignments: Map<string, any>
   ): boolean {
-    console.log(`            🔍 [副科约束] 检查变量 ${variable.id} 的副科一天一节约束...`);
-    console.log(`               - 科目: ${variable.subject}`);
-    console.log(`               - 班级: ${variable.classId}`);
-    console.log(`               - 时间: 周${timeSlot.dayOfWeek}第${timeSlot.period}节`);
+    //console.log(`            🔍 [副科约束] 检查变量 ${variable.id} 的副科一天一节约束...`);
+    //console.log(`               - 科目: ${variable.subject}`);
+    //console.log(`               - 班级: ${variable.classId}`);
+    //console.log(`               - 时间: 周${timeSlot.dayOfWeek}第${timeSlot.period}节`);
     
     // 跳过核心课程检查
     if (this.isCoreSubject(variable.subject)) {
-      console.log(`               ✅ 核心课程 ${variable.subject}，跳过检查`);
+      //console.log(`               ✅ 核心课程 ${variable.subject}，跳过检查`);
       return true;
     }
 
-    console.log(`               🔍 副科 ${variable.subject}，开始检查一天一节约束...`);
+    //console.log(`               🔍 副科 ${variable.subject}，开始检查一天一节约束...`);
 
     const classId = variable.classId;
     const dayOfWeek = timeSlot.dayOfWeek;
@@ -407,7 +407,7 @@ export class K12ConstraintChecker {
 
     // 统计当天该科目的课程数量
     for (const assignment of Array.from(currentAssignments.values())) {
-      console.log(`               🔍 检查分配: 班级=${assignment.classId}, 时间=${assignment.timeSlot.dayOfWeek}-${assignment.timeSlot.period}, 科目=${assignment.subject}`);
+      //console.log(`               🔍 检查分配: 班级=${assignment.classId}, 时间=${assignment.timeSlot.dayOfWeek}-${assignment.timeSlot.period}, 科目=${assignment.subject}`);
       
       if (assignment.classId.toString() === classId.toString() && 
           assignment.timeSlot.dayOfWeek === dayOfWeek &&
@@ -417,7 +417,7 @@ export class K12ConstraintChecker {
       }
     }
 
-    console.log(`               📊 当天 ${variable.subject} 课程数量: ${dailyCount}`);
+    //console.log(`               📊 当天 ${variable.subject} 课程数量: ${dailyCount}`);
 
     // 副科每日最多1节（硬约束）
     if (dailyCount > 1) {
@@ -425,7 +425,7 @@ export class K12ConstraintChecker {
       return false;
     }
 
-    console.log(`               ✅ 副科 ${variable.subject} 一天一节约束检查通过`);
+   // console.log(`               ✅ 副科 ${variable.subject} 一天一节约束检查通过`);
     return true;
   }
 

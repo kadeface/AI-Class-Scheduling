@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>前端数据流调试</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
+        .test-button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px; }
+        .result { margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 3px; white-space: pre-wrap; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .warning { background: #fff3cd; color: #856404; }
+        .data-display { background: #e9ecef; padding: 10px; border-radius: 3px; margin: 10px 0; }
+        .step { background: #f8f9fa; padding: 10px; margin: 5px 0; border-left: 4px solid #007bff; }
+    </style>
+</head>
+<body>
+    <h1>🔍 前端数据流调试</h1>
+    
+    <div class="test-section">
+        <h2>1. 模拟完整的数据流程</h2>
+        <button class="test-button" onclick="simulateCompleteDataFlow()">模拟完整数据流程</button>
+        <div id="completeFlowResult" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>2. 测试数据转换过程</h2>
+        <button class="test-button" onclick="testDataTransformations()">测试数据转换</button>
+        <div id="transformationResult" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>3. 检查浏览器控制台</h2>
+        <p>请打开浏览器开发者工具的控制台，然后点击下面的按钮查看详细日志</p>
+        <button class="test-button" onclick="logDetailedData()">输出详细日志到控制台</button>
+        <div id="consoleResult" class="result"></div>
+    </div>
+
+    <script>
+        let mockData = null;
+        let processedData = null;
+        
+        function simulateCompleteDataFlow() {
+            console.log('🚀 开始模拟完整数据流程...');
+            
+            // 步骤1: 模拟后端API响应
+            console.log('步骤1: 模拟后端API响应');
+            mockData = {
+                success: true,
+                data: {
+                    items: [{
+                        _id: '6899364612c2294d95ab07e4',
+                        name: '长师附小排课规则',
+                        courseArrangementRules: {
+                            fixedTimeCourses: {
+                                enabled: true,
+                                courses: [{
+                                    type: 'class-meeting',
+                                    dayOfWeek: 1,
+                                    period: 1,
+                                    weekType: 'all',
+                                    startWeek: 1,
+                                    endWeek: 20,
+                                    notes: ''
+                                }],
+                                priority: false,
+                                allowOverride: false,
+                                conflictStrategy: 'strict'
+                            }
+                        }
+                    }]
+                }
+            };
+            
+            console.log('原始API响应:', mockData);
+            
+            // 步骤2: 前端接收数据
+            console.log('步骤2: 前端接收数据');
+            const response = mockData;
+            const schedulingRules = response.data.items;
+            console.log('解析后的排课规则:', schedulingRules);
+            
+            // 步骤3: 设置到状态
+            console.log('步骤3: 设置到状态');
+            processedData = schedulingRules;
+            console.log('状态中的排课规则:', processedData);
+            
+            // 步骤4: 编辑时加载数据
+            console.log('步骤4: 编辑时加载数据');
+            const rules = processedData[0];
+            const formData = {
+                name: rules.name,
+                courseArrangementRules: {
+                    ...rules.courseArrangementRules,
+                    fixedTimeCourses: rules.courseArrangementRules?.fixedTimeCourses || {
+                        enabled: false,
+                        courses: [],
+                        priority: false,
+                        allowOverride: false,
+                        conflictStrategy: 'strict'
+                    }
+                }
+            };
+            
+            console.log('表单数据:', formData);
+            
+            // 步骤5: 检查数据完整性
+            console.log('步骤5: 检查数据完整性');
+            const ftc = formData.courseArrangementRules.fixedTimeCourses;
+            console.log('固定时间课程配置:', ftc);
+            console.log('enabled 类型:', typeof ftc.enabled);
+            console.log('courses 类型:', typeof ftc.courses);
+            console.log('courses 是否为数组:', Array.isArray(ftc.courses));
+            console.log('courses 长度:', ftc.courses ? ftc.courses.length : 'undefined');
+            
+            // 步骤6: 模拟表单提交
+            console.log('步骤6: 模拟表单提交');
+            const submitData = { ...formData };
+            console.log('提交数据:', submitData);
+            
+            // 步骤7: 检查提交数据的JSON序列化
+            console.log('步骤7: 检查JSON序列化');
+            const jsonString = JSON.stringify(submitData);
+            console.log('JSON字符串:', jsonString);
+            console.log('JSON字符串长度:', jsonString.length);
+            
+            // 检查转义字符
+            const escapeCount = (jsonString.match(/\\/g) || []).length;
+            console.log('转义字符数量:', escapeCount);
+            
+            if (escapeCount > 0) {
+                console.warn('⚠️ 发现转义字符，可能存在序列化问题');
+            }
+            
+            // 步骤8: 解析回对象
+            console.log('步骤8: 解析回对象');
+            const parsedData = JSON.parse(jsonString);
+            console.log('解析后的数据:', parsedData);
+            
+            // 最终检查
+            const finalFtc = parsedData.courseArrangementRules.fixedTimeCourses;
+            console.log('最终固定时间课程配置:', finalFtc);
+            console.log('最终 enabled 类型:', typeof finalFtc.enabled);
+            console.log('最终 courses 类型:', typeof finalFtc.courses);
+            console.log('最终 courses 是否为数组:', Array.isArray(finalFtc.courses));
+            
+            // 显示结果
+            let resultHtml = '<div class="success">✅ 完整数据流程模拟完成</div>';
+            resultHtml += '<div class="step">步骤1: API响应数据接收成功</div>';
+            resultHtml += '<div class="step">步骤2: 前端数据解析成功</div>';
+            resultHtml += '<div class="step">步骤3: 状态设置成功</div>';
+            resultHtml += '<div class="step">步骤4: 表单数据加载成功</div>';
+            resultHtml += '<div class="step">步骤5: 数据完整性检查通过</div>';
+            resultHtml += '<div class="step">步骤6: 表单提交数据准备完成</div>';
+            resultHtml += '<div class="step">步骤7: JSON序列化检查完成</div>';
+            resultHtml += '<div class="step">步骤8: 数据解析验证完成</div>';
+            
+            resultHtml += '<div class="data-display">';
+            resultHtml += '<strong>最终数据状态:</strong><br>';
+            resultHtml += 'enabled: ' + finalFtc.enabled + ' (类型: ' + typeof finalFtc.enabled + ')<br>';
+            resultHtml += 'courses 类型: ' + typeof finalFtc.courses + '<br>';
+            resultHtml += 'courses 是否为数组: ' + Array.isArray(finalFtc.courses) + '<br>';
+            resultHtml += 'courses 长度: ' + (finalFtc.courses ? finalFtc.courses.length : 'undefined') + '<br>';
+            resultHtml += '转义字符数量: ' + escapeCount + '<br>';
+            resultHtml += '</div>';
+            
+            document.getElementById('completeFlowResult').innerHTML = resultHtml;
+        }
+        
+        function testDataTransformations() {
+            if (!processedData) {
+                document.getElementById('transformationResult').innerHTML = '<div class="error">❌ 请先模拟完整数据流程</div>';
+                return;
+            }
+            
+            console.log('🧪 开始测试数据转换过程...');
+            
+            const originalData = processedData[0];
+            const transformations = [];
+            
+            // 测试1: 直接赋值
+            console.log('测试1: 直接赋值');
+            let data1 = { ...originalData };
+            transformations.push({
+                method: '直接赋值 (spread operator)',
+                fixedTimeCoursesType: typeof data1.courseArrangementRules.fixedTimeCourses,
+                coursesType: typeof data1.courseArrangementRules.fixedTimeCourses.courses,
+                coursesIsArray: Array.isArray(data1.courseArrangementRules.fixedTimeCourses.courses),
+                coursesLength: data1.courseArrangementRules.fixedTimeCourses.courses ? data1.courseArrangementRules.fixedTimeCourses.courses.length : 'undefined'
+            });
+            
+            // 测试2: JSON序列化后解析
+            console.log('测试2: JSON序列化后解析');
+            let data2 = JSON.parse(JSON.stringify(originalData));
+            transformations.push({
+                method: 'JSON序列化后解析',
+                fixedTimeCoursesType: typeof data2.courseArrangementRules.fixedTimeCourses,
+                coursesType: typeof data2.courseArrangementRules.fixedTimeCourses.courses,
+                coursesIsArray: Array.isArray(data2.courseArrangementRules.fixedTimeCourses.courses),
+                coursesLength: data2.courseArrangementRules.fixedTimeCourses.courses ? data2.courseArrangementRules.fixedTimeCourses.courses.length : 'undefined'
+            });
+            
+            // 测试3: 结构化克隆（如果支持）
+            if (typeof structuredClone === 'function') {
+                console.log('测试3: structuredClone');
+                let data3 = structuredClone(originalData);
+                transformations.push({
+                    method: 'structuredClone',
+                    fixedTimeCoursesType: typeof data3.courseArrangementRules.fixedTimeCourses,
+                    coursesType: typeof data3.courseArrangementRules.fixedTimeCourses.courses,
+                    coursesIsArray: Array.isArray(data3.courseArrangementRules.fixedTimeCourses.courses),
+                    coursesLength: data3.courseArrangementRules.fixedTimeCourses.courses ? data3.courseArrangementRules.fixedTimeCourses.courses.length : 'undefined'
+                });
+            }
+            
+            // 测试4: 手动深拷贝
+            console.log('测试4: 手动深拷贝');
+            let data4 = JSON.parse(JSON.stringify(originalData));
+            transformations.push({
+                method: '手动深拷贝 (JSON.parse + JSON.stringify)',
+                fixedTimeCoursesType: typeof data4.courseArrangementRules.fixedTimeCourses,
+                coursesType: typeof data4.courseArrangementRules.fixedTimeCourses.courses,
+                coursesIsArray: Array.isArray(data4.courseArrangementRules.fixedTimeCourses.courses),
+                coursesLength: data4.courseArrangementRules.fixedTimeCourses.courses ? data4.courseArrangementRules.fixedTimeCourses.courses.length : 'undefined'
+            });
+            
+            // 显示结果
+            let resultHtml = '<div class="success">✅ 数据转换测试完成</div>';
+            resultHtml += '<table border="1" style="border-collapse: collapse; width: 100%; margin: 10px 0;">';
+            resultHtml += '<tr><th>转换方法</th><th>fixedTimeCourses类型</th><th>courses类型</th><th>courses是否为数组</th><th>courses长度</th></tr>';
+            
+            transformations.forEach(t => {
+                resultHtml += `<tr>
+                    <td>${t.method}</td>
+                    <td>${t.fixedTimeCoursesType}</td>
+                    <td>${t.coursesType}</td>
+                    <td>${t.coursesIsArray}</td>
+                    <td>${t.coursesLength}</td>
+                </tr>`;
+            });
+            
+            resultHtml += '</table>';
+            
+            // 检查是否有异常
+            const hasIssues = transformations.some(t => !t.coursesIsArray);
+            if (hasIssues) {
+                resultHtml += '<div class="warning">⚠️ 发现数据转换问题！某些方法导致courses不再是数组</div>';
+            } else {
+                resultHtml += '<div class="success">✅ 所有数据转换方法都保持数据完整性</div>';
+            }
+            
+            document.getElementById('transformationResult').innerHTML = resultHtml;
+        }
+        
+        function logDetailedData() {
+            if (!processedData) {
+                document.getElementById('consoleResult').innerHTML = '<div class="error">❌ 请先模拟完整数据流程</div>';
+                return;
+            }
+            
+            console.log('📊 详细数据日志开始 ====================');
+            
+            const originalData = processedData[0];
+            console.log('原始数据:', originalData);
+            
+            const ftc = originalData.courseArrangementRules.fixedTimeCourses;
+            console.log('固定时间课程配置:', ftc);
+            console.log('固定时间课程配置类型:', typeof ftc);
+            console.log('固定时间课程配置构造函数:', ftc.constructor.name);
+            
+            console.log('courses字段:', ftc.courses);
+            console.log('courses字段类型:', typeof ftc.courses);
+            console.log('courses字段构造函数:', ftc.courses.constructor.name);
+            console.log('courses是否为数组:', Array.isArray(ftc.courses));
+            console.log('courses长度:', ftc.courses.length);
+            
+            // 检查每个课程对象
+            ftc.courses.forEach((course, index) => {
+                console.log(`课程 ${index + 1}:`, course);
+                console.log(`课程 ${index + 1} 类型:`, typeof course);
+                console.log(`课程 ${index + 1} 构造函数:`, course.constructor.name);
+                console.log(`课程 ${index + 1} 属性:`, Object.keys(course));
+            });
+            
+            // 检查JSON序列化
+            console.log('JSON序列化测试:');
+            const jsonString = JSON.stringify(ftc);
+            console.log('JSON字符串:', jsonString);
+            console.log('JSON字符串长度:', jsonString.length);
+            
+            // 检查转义字符
+            const escapeCount = (jsonString.match(/\\/g) || []).length;
+            console.log('转义字符数量:', escapeCount);
+            console.log('转义字符位置:', [...jsonString.matchAll(/\\/g)].map(m => m.index));
+            
+            // 解析回对象
+            try {
+                const parsed = JSON.parse(jsonString);
+                console.log('解析后的对象:', parsed);
+                console.log('解析后courses类型:', typeof parsed.courses);
+                console.log('解析后courses是否为数组:', Array.isArray(parsed.courses));
+            } catch (error) {
+                console.error('JSON解析失败:', error);
+            }
+            
+            console.log('📊 详细数据日志结束 ====================');
+            
+            document.getElementById('consoleResult').innerHTML = '<div class="success">✅ 详细日志已输出到控制台，请查看浏览器开发者工具</div>';
+        }
+    </script>
+</body>
+</html>

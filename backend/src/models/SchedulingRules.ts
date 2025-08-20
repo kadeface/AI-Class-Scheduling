@@ -116,6 +116,30 @@ export interface ICoreSubjectStrategy {
 }
 
 /**
+ * 固定时间课程接口定义
+ */
+export interface IFixedTimeCourse {
+  type: 'class-meeting' | 'flag-raising' | 'eye-exercise' | 'morning-reading' | 'afternoon-reading' | 'cleaning' | 'other';
+  dayOfWeek: number;                   // 星期几 (1-7)
+  period: number;                       // 第几节课 (1-12)
+  weekType: 'all' | 'odd' | 'even';    // 周次类型
+  startWeek: number;                    // 开始周次
+  endWeek: number;                      // 结束周次
+  notes?: string;                       // 备注信息
+}
+
+/**
+ * 固定时间课程全局配置接口
+ */
+export interface IFixedTimeCoursesConfig {
+  enabled: boolean;                     // 是否启用固定时间课程
+  courses: IFixedTimeCourse[];          // 固定时间课程列表
+  priority: boolean;                    // 是否优先于其他课程
+  allowOverride: boolean;               // 是否允许手动调整
+  conflictStrategy: 'strict' | 'flexible' | 'warning'; // 冲突处理策略
+}
+
+/**
  * 课程排列规则接口定义
  * 
  * 定义课程安排相关的约束规则
@@ -135,6 +159,9 @@ export interface ICourseArrangementRules {
   
   // 新增：核心课程策略
   coreSubjectStrategy: ICoreSubjectStrategy; // 核心课程策略配置
+  
+  // 新增：固定时间课程配置
+  fixedTimeCourses?: IFixedTimeCoursesConfig; // 固定时间课程配置
 }
 
 /**
@@ -553,6 +580,92 @@ const CourseArrangementRulesSchema = new Schema<ICourseArrangementRules>({
   coreSubjectStrategy: {
     type: CoreSubjectStrategySchema,
     default: () => ({})
+  },
+  
+  // 新增：固定时间课程配置
+  fixedTimeCourses: {
+    type: new Schema<IFixedTimeCoursesConfig>({
+      enabled: {
+        type: Boolean,
+        default: false
+      },
+      courses: {
+        type: [new Schema<IFixedTimeCourse>({
+          type: {
+            type: String,
+            required: [true, '课程类型不能为空'],
+            enum: {
+              values: ['class-meeting', 'flag-raising', 'eye-exercise', 'morning-reading', 'afternoon-reading', 'cleaning', 'other'],
+              message: '课程类型必须是有效的固定时间课程类型'
+            }
+          },
+          dayOfWeek: {
+            type: Number,
+            required: [true, '星期不能为空'],
+            min: [1, '星期必须在1-7之间'],
+            max: [7, '星期必须在1-7之间']
+          },
+          period: {
+            type: Number,
+            required: [true, '节次不能为空'],
+            min: [1, '节次必须从1开始'],
+            max: [12, '节次不能超过12']
+          },
+          weekType: {
+            type: String,
+            required: [true, '周次类型不能为空'],
+            enum: {
+              values: ['all', 'odd', 'even'],
+              message: '周次类型必须是: all(全周), odd(单周), even(双周) 中的一个'
+            },
+            default: 'all'
+          },
+          startWeek: {
+            type: Number,
+            required: [true, '开始周次不能为空'],
+            min: [1, '开始周次不能小于1'],
+            max: [30, '开始周次不能超过30'],
+            default: 1
+          },
+          endWeek: {
+            type: Number,
+            required: [true, '结束周次不能为空'],
+            min: [1, '结束周次不能小于1'],
+            max: [30, '结束周次不能超过30'],
+            default: 20
+          },
+          notes: {
+            type: String,
+            maxlength: [200, '备注信息不能超过200个字符']
+          }
+        }, { _id: false })],
+        default: []
+      },
+      priority: {
+        type: Boolean,
+        default: false
+      },
+      allowOverride: {
+        type: Boolean,
+        default: false
+      },
+      conflictStrategy: {
+        type: String,
+        required: [true, '冲突处理策略不能为空'],
+        enum: {
+          values: ['strict', 'flexible', 'warning'],
+          message: '冲突处理策略必须是: strict(严格), flexible(灵活), warning(警告) 中的一个'
+        },
+        default: 'strict'
+      }
+    }, { _id: false }),
+    default: () => ({
+      enabled: false,
+      courses: [],
+      priority: false,
+      allowOverride: false,
+      conflictStrategy: 'strict'
+    })
   }
 }, { _id: false });
 

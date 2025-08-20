@@ -171,6 +171,13 @@ export default function SchedulingRulesPage() {
       coreSubjectPriority: true,
       labCoursePreference: 'morning',
       coreSubjectStrategy: DEFAULT_CORE_SUBJECT_STRATEGY,
+      fixedTimeCourses: {
+        enabled: false,
+        courses: [],
+        priority: false,
+        allowOverride: false,
+        conflictStrategy: 'strict'
+      },
     },
     conflictResolutionRules: {
       teacherConflictResolution: 'strict',
@@ -301,6 +308,13 @@ export default function SchedulingRulesPage() {
         coreSubjectPriority: true,
         labCoursePreference: 'morning',
         coreSubjectStrategy: DEFAULT_CORE_SUBJECT_STRATEGY,
+        fixedTimeCourses: {
+          enabled: false,
+          courses: [],
+          priority: false,
+          allowOverride: false,
+          conflictStrategy: 'strict'
+        },
       },
       conflictResolutionRules: {
         teacherConflictResolution: 'strict',
@@ -342,7 +356,14 @@ export default function SchedulingRulesPage() {
       roomConstraints: rules.roomConstraints,
       courseArrangementRules: {
         ...rules.courseArrangementRules,
-        coreSubjectStrategy: safeCoreSubjectStrategy
+        coreSubjectStrategy: safeCoreSubjectStrategy,
+        fixedTimeCourses: rules.courseArrangementRules?.fixedTimeCourses || {
+          enabled: false,
+          courses: [],
+          priority: false,
+          allowOverride: false,
+          conflictStrategy: 'strict'
+        }
       },
       conflictResolutionRules: rules.conflictResolutionRules,
       isDefault: rules.isDefault,
@@ -1752,6 +1773,364 @@ export default function SchedulingRulesPage() {
                   )}
                 </CardContent>
               </Card>
+
+              {/* 固定时间课程配置 */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="h-5 w-5" />
+                    固定时间课程配置
+                  </CardTitle>
+                  <CardDescription>
+                    配置班会、升旗仪式等每周固定时间进行的课程安排
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {/* 启用开关 */}
+                  <div className="flex items-center space-x-2 mb-4">
+                    <Switch
+                      id="enableFixedTimeCourses"
+                      checked={formData.courseArrangementRules.fixedTimeCourses?.enabled || false}
+                      onCheckedChange={(checked) => setFormData(prev => ({
+                        ...prev,
+                        courseArrangementRules: {
+                          ...prev.courseArrangementRules,
+                          fixedTimeCourses: {
+                            ...prev.courseArrangementRules.fixedTimeCourses,
+                            enabled: checked
+                          }
+                        }
+                      }))}
+                    />
+                    <Label htmlFor="enableFixedTimeCourses" className="text-base font-medium">
+                      启用固定时间课程
+                    </Label>
+                  </div>
+
+                  {formData.courseArrangementRules.fixedTimeCourses?.enabled && (
+                    <div className="space-y-6">
+                      {/* 固定时间课程列表 */}
+                      <div>
+                        <Label>固定时间课程列表</Label>
+                        <div className="mt-2 space-y-3">
+                          {(formData.courseArrangementRules.fixedTimeCourses?.courses || []).map((course, index) => (
+                            <div key={index} className="border rounded-lg p-4 bg-gray-50">
+                              <div className="grid gap-4 md:grid-cols-4">
+                                <div>
+                                  <Label className="text-sm">课程类型</Label>
+                                  <Select
+                                    value={course.type}
+                                    onValueChange={(value) => {
+                                      const newCourses = [...(formData.courseArrangementRules.fixedTimeCourses?.courses || [])];
+                                      newCourses[index] = { ...newCourses[index], type: value as any };
+                                      setFormData(prev => ({
+                                        ...prev,
+                                        courseArrangementRules: {
+                                          ...prev.courseArrangementRules,
+                                          fixedTimeCourses: {
+                                            ...prev.courseArrangementRules.fixedTimeCourses,
+                                            courses: newCourses
+                                          }
+                                        }
+                                      }));
+                                    }}
+                                  >
+                                    <option value="class-meeting">班会</option>
+                                    <option value="flag-raising">升旗仪式</option>
+                                    <option value="eye-exercise">眼保健操</option>
+                                    <option value="morning-reading">晨读</option>
+                                    <option value="afternoon-reading">午读</option>
+                                    <option value="cleaning">大扫除</option>
+                                    <option value="other">其他</option>
+                                  </Select>
+                                </div>
+                                
+                                <div>
+                                  <Label className="text-sm">星期</Label>
+                                  <Select
+                                    value={course.dayOfWeek.toString()}
+                                    onValueChange={(value) => {
+                                      const newCourses = [...(formData.courseArrangementRules.fixedTimeCourses?.courses || [])];
+                                      newCourses[index] = { ...newCourses[index], dayOfWeek: parseInt(value) };
+                                      setFormData(prev => ({
+                                        ...prev,
+                                        courseArrangementRules: {
+                                          ...prev.courseArrangementRules,
+                                          fixedTimeCourses: {
+                                            ...prev.courseArrangementRules.fixedTimeCourses,
+                                            courses: newCourses
+                                          }
+                                        }
+                                      }));
+                                    }}
+                                  >
+                                    <option value="1">周一</option>
+                                    <option value="2">周二</option>
+                                    <option value="3">周三</option>
+                                    <option value="4">周四</option>
+                                    <option value="5">周五</option>
+                                    <option value="6">周六</option>
+                                    <option value="7">周日</option>
+                                  </Select>
+                                </div>
+                                
+                                <div>
+                                  <Label className="text-sm">节次</Label>
+                                  <Select
+                                    value={course.period.toString()}
+                                    onValueChange={(value) => {
+                                      const newCourses = [...(formData.courseArrangementRules.fixedTimeCourses?.courses || [])];
+                                      newCourses[index] = { ...newCourses[index], period: parseInt(value) };
+                                      setFormData(prev => ({
+                                        ...prev,
+                                        courseArrangementRules: {
+                                          ...prev.courseArrangementRules,
+                                          fixedTimeCourses: {
+                                            ...prev.courseArrangementRules.fixedTimeCourses,
+                                            courses: newCourses
+                                          }
+                                        }
+                                      }));
+                                    }}
+                                  >
+                                    {[1, 2, 3, 4, 5, 6, 7, 8].map(period => (
+                                      <option key={period} value={period.toString()}>
+                                        第{period}节
+                                      </option>
+                                    ))}
+                                  </Select>
+                                </div>
+                                
+                                <div className="flex items-end">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      const newCourses = (formData.courseArrangementRules.fixedTimeCourses?.courses || []).filter((_, i) => i !== index);
+                                      setFormData(prev => ({
+                                        ...prev,
+                                        courseArrangementRules: {
+                                          ...prev.courseArrangementRules,
+                                          fixedTimeCourses: {
+                                            ...prev.courseArrangementRules.fixedTimeCourses,
+                                            courses: newCourses
+                                          }
+                                        }
+                                      }));
+                                    }}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                              
+                              {/* 周次设置 */}
+                              <div className="mt-3 grid gap-4 md:grid-cols-3">
+                                <div>
+                                  <Label className="text-sm">周次类型</Label>
+                                  <Select
+                                    value={course.weekType || 'all'}
+                                    onValueChange={(value) => {
+                                      const newCourses = [...(formData.courseArrangementRules.fixedTimeCourses?.courses || [])];
+                                      newCourses[index] = { ...newCourses[index], weekType: value as any };
+                                      setFormData(prev => ({
+                                        ...prev,
+                                        courseArrangementRules: {
+                                          ...prev.courseArrangementRules,
+                                          fixedTimeCourses: {
+                                            ...prev.courseArrangementRules.fixedTimeCourses,
+                                            courses: newCourses
+                                          }
+                                        }
+                                      }));
+                                    }}
+                                  >
+                                    <option value="all">全周</option>
+                                    <option value="odd">单周</option>
+                                    <option value="even">双周</option>
+                                  </Select>
+                                </div>
+                                
+                                <div>
+                                  <Label className="text-sm">开始周次</Label>
+                                  <Input
+                                    type="number"
+                                    min="1"
+                                    max="30"
+                                    value={course.startWeek || 1}
+                                    onChange={(e) => {
+                                      const newCourses = [...(formData.courseArrangementRules.fixedTimeCourses?.courses || [])];
+                                      newCourses[index] = { ...newCourses[index], startWeek: parseInt(e.target.value) || 1 };
+                                      setFormData(prev => ({
+                                        ...prev,
+                                        courseArrangementRules: {
+                                          ...prev.courseArrangementRules,
+                                          fixedTimeCourses: {
+                                            ...prev.courseArrangementRules.fixedTimeCourses,
+                                            courses: newCourses
+                                          }
+                                        }
+                                      }));
+                                    }}
+                                  />
+                                </div>
+                                
+                                <div>
+                                  <Label className="text-sm">结束周次</Label>
+                                  <Input
+                                    type="number"
+                                    min="1"
+                                    max="30"
+                                    value={course.endWeek || 20}
+                                    onChange={(e) => {
+                                      const newCourses = [...(formData.courseArrangementRules.fixedTimeCourses?.courses || [])];
+                                      newCourses[index] = { ...newCourses[index], endWeek: parseInt(e.target.value) || 20 };
+                                      setFormData(prev => ({
+                                        ...prev,
+                                        courseArrangementRules: {
+                                          ...prev.courseArrangementRules,
+                                          fixedTimeCourses: {
+                                            ...prev.courseArrangementRules.fixedTimeCourses,
+                                            courses: newCourses
+                                          }
+                                        }
+                                      }));
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                              
+                              {/* 备注 */}
+                              <div className="mt-3">
+                                <Label className="text-sm">备注</Label>
+                                <Input
+                                  placeholder="课程说明或特殊要求"
+                                  value={course.notes || ''}
+                                  onChange={(e) => {
+                                    const newCourses = [...(formData.courseArrangementRules.fixedTimeCourses?.courses || [])];
+                                    newCourses[index] = { ...newCourses[index], notes: e.target.value };
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      courseArrangementRules: {
+                                        ...prev.courseArrangementRules,
+                                        fixedTimeCourses: {
+                                          ...prev.courseArrangementRules.fixedTimeCourses,
+                                          courses: newCourses
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                          
+                          {/* 添加新课程按钮 */}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              const newCourse = {
+                                type: 'class-meeting' as const,
+                                dayOfWeek: 1,
+                                period: 1,
+                                weekType: 'all' as const,
+                                startWeek: 1,
+                                endWeek: 20,
+                                notes: ''
+                              };
+                              const newCourses = [...(formData.courseArrangementRules.fixedTimeCourses?.courses || []), newCourse];
+                              setFormData(prev => ({
+                                ...prev,
+                                courseArrangementRules: {
+                                  ...prev.courseArrangementRules,
+                                  fixedTimeCourses: {
+                                    ...prev.courseArrangementRules.fixedTimeCourses,
+                                    courses: newCourses
+                                  }
+                                }
+                              }));
+                            }}
+                            className="w-full"
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            添加固定时间课程
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* 全局设置 */}
+                      <div className="space-y-4">
+                        <Separator />
+                        <h4 className="font-medium text-gray-900">全局设置</h4>
+                        
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div className="flex items-center space-x-2">
+                            <Switch
+                              id="fixedTimePriority"
+                              checked={formData.courseArrangementRules.fixedTimeCourses?.priority || false}
+                              onCheckedChange={(checked) => setFormData(prev => ({
+                                ...prev,
+                                courseArrangementRules: {
+                                  ...prev.courseArrangementRules,
+                                  fixedTimeCourses: {
+                                    ...prev.courseArrangementRules.fixedTimeCourses,
+                                    priority: checked
+                                  }
+                                }
+                              }))}
+                            />
+                            <Label htmlFor="fixedTimePriority">固定时间课程优先</Label>
+                          </div>
+                          
+                          <div className="flex items-center space-x-2">
+                            <Switch
+                              id="allowFixedTimeOverride"
+                              checked={formData.courseArrangementRules.fixedTimeCourses?.allowOverride || false}
+                              onCheckedChange={(checked) => setFormData(prev => ({
+                                ...prev,
+                                courseArrangementRules: {
+                                  ...prev.courseArrangementRules,
+                                  fixedTimeCourses: {
+                                    ...prev.courseArrangementRules.fixedTimeCourses,
+                                    allowOverride: checked
+                                  }
+                                }
+                              }))}
+                            />
+                            <Label htmlFor="allowFixedTimeOverride">允许手动调整</Label>
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <Label className="text-sm">冲突处理策略</Label>
+                          <Select
+                            value={formData.courseArrangementRules.fixedTimeCourses?.conflictStrategy || 'strict'}
+                            onValueChange={(value) => setFormData(prev => ({
+                              ...prev,
+                              courseArrangementRules: {
+                                ...prev.courseArrangementRules,
+                                fixedTimeCourses: {
+                                  ...prev.courseArrangementRules.fixedTimeCourses,
+                                  conflictStrategy: value as any
+                                }
+                              }
+                            }))}
+                          >
+                            <option value="strict">严格模式（不允许冲突）</option>
+                            <option value="flexible">灵活模式（允许调整其他课程）</option>
+                            <option value="warning">警告模式（提示冲突但允许继续）</option>
+                          </Select>
+                          <p className="text-xs text-gray-500 mt-1">
+                            当固定时间课程与其他课程冲突时的处理方式
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </TabsContent>
 
             {/* 冲突解决 */}
@@ -2819,6 +3198,364 @@ export default function SchedulingRulesPage() {
                           </div>
                           <p className="text-xs text-gray-500 mt-1">
                             调整核心课程分布策略在排课算法中的重要性权重
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* 固定时间课程配置 */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="h-5 w-5" />
+                    固定时间课程配置
+                  </CardTitle>
+                  <CardDescription>
+                    配置班会、升旗仪式等每周固定时间进行的课程安排
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {/* 启用开关 */}
+                  <div className="flex items-center space-x-2 mb-4">
+                    <Switch
+                      id="edit-enableFixedTimeCourses"
+                      checked={formData.courseArrangementRules.fixedTimeCourses?.enabled || false}
+                      onCheckedChange={(checked) => setFormData(prev => ({
+                        ...prev,
+                        courseArrangementRules: {
+                          ...prev.courseArrangementRules,
+                          fixedTimeCourses: {
+                            ...prev.courseArrangementRules.fixedTimeCourses,
+                            enabled: checked
+                          }
+                        }
+                      }))}
+                    />
+                    <Label htmlFor="edit-enableFixedTimeCourses" className="text-base font-medium">
+                      启用固定时间课程
+                    </Label>
+                  </div>
+
+                  {formData.courseArrangementRules.fixedTimeCourses?.enabled && (
+                    <div className="space-y-6">
+                      {/* 固定时间课程列表 */}
+                      <div>
+                        <Label>固定时间课程列表</Label>
+                        <div className="mt-2 space-y-3">
+                          {(formData.courseArrangementRules.fixedTimeCourses?.courses || []).map((course, index) => (
+                            <div key={index} className="border rounded-lg p-4 bg-gray-50">
+                              <div className="grid gap-4 md:grid-cols-4">
+                                <div>
+                                  <Label className="text-sm">课程类型</Label>
+                                  <Select
+                                    value={course.type}
+                                    onValueChange={(value) => {
+                                      const newCourses = [...(formData.courseArrangementRules.fixedTimeCourses?.courses || [])];
+                                      newCourses[index] = { ...newCourses[index], type: value as any };
+                                      setFormData(prev => ({
+                                        ...prev,
+                                        courseArrangementRules: {
+                                          ...prev.courseArrangementRules,
+                                          fixedTimeCourses: {
+                                            ...prev.courseArrangementRules.fixedTimeCourses,
+                                            courses: newCourses
+                                          }
+                                        }
+                                      }));
+                                    }}
+                                  >
+                                    <option value="class-meeting">班会</option>
+                                    <option value="flag-raising">升旗仪式</option>
+                                    <option value="eye-exercise">眼保健操</option>
+                                    <option value="morning-reading">晨读</option>
+                                    <option value="afternoon-reading">午读</option>
+                                    <option value="cleaning">大扫除</option>
+                                    <option value="other">其他</option>
+                                  </Select>
+                                </div>
+                                
+                                <div>
+                                  <Label className="text-sm">星期</Label>
+                                  <Select
+                                    value={course.dayOfWeek.toString()}
+                                    onValueChange={(value) => {
+                                      const newCourses = [...(formData.courseArrangementRules.fixedTimeCourses?.courses || [])];
+                                      newCourses[index] = { ...newCourses[index], dayOfWeek: parseInt(value) };
+                                      setFormData(prev => ({
+                                        ...prev,
+                                        courseArrangementRules: {
+                                          ...prev.courseArrangementRules,
+                                          fixedTimeCourses: {
+                                            ...prev.courseArrangementRules.fixedTimeCourses,
+                                            courses: newCourses
+                                          }
+                                        }
+                                      }));
+                                    }}
+                                  >
+                                    <option value="1">周一</option>
+                                    <option value="2">周二</option>
+                                    <option value="3">周三</option>
+                                    <option value="4">周四</option>
+                                    <option value="5">周五</option>
+                                    <option value="6">周六</option>
+                                    <option value="7">周日</option>
+                                  </Select>
+                                </div>
+                                
+                                <div>
+                                  <Label className="text-sm">节次</Label>
+                                  <Select
+                                    value={course.period.toString()}
+                                    onValueChange={(value) => {
+                                      const newCourses = [...(formData.courseArrangementRules.fixedTimeCourses?.courses || [])];
+                                      newCourses[index] = { ...newCourses[index], period: parseInt(value) };
+                                      setFormData(prev => ({
+                                        ...prev,
+                                        courseArrangementRules: {
+                                          ...prev.courseArrangementRules,
+                                          fixedTimeCourses: {
+                                            ...prev.courseArrangementRules.fixedTimeCourses,
+                                            courses: newCourses
+                                          }
+                                        }
+                                      }));
+                                    }}
+                                  >
+                                    {[1, 2, 3, 4, 5, 6, 7, 8].map(period => (
+                                      <option key={period} value={period.toString()}>
+                                        第{period}节
+                                      </option>
+                                    ))}
+                                  </Select>
+                                </div>
+                                
+                                <div className="flex items-end">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      const newCourses = (formData.courseArrangementRules.fixedTimeCourses?.courses || []).filter((_, i) => i !== index);
+                                      setFormData(prev => ({
+                                        ...prev,
+                                        courseArrangementRules: {
+                                          ...prev.courseArrangementRules,
+                                          fixedTimeCourses: {
+                                            ...prev.courseArrangementRules.fixedTimeCourses,
+                                            courses: newCourses
+                                          }
+                                        }
+                                      }));
+                                    }}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                              
+                              {/* 周次设置 */}
+                              <div className="mt-3 grid gap-4 md:grid-cols-3">
+                                <div>
+                                  <Label className="text-sm">周次类型</Label>
+                                  <Select
+                                    value={course.weekType || 'all'}
+                                    onValueChange={(value) => {
+                                      const newCourses = [...(formData.courseArrangementRules.fixedTimeCourses?.courses || [])];
+                                      newCourses[index] = { ...newCourses[index], weekType: value as any };
+                                      setFormData(prev => ({
+                                        ...prev,
+                                        courseArrangementRules: {
+                                          ...prev.courseArrangementRules,
+                                          fixedTimeCourses: {
+                                            ...prev.courseArrangementRules.fixedTimeCourses,
+                                            courses: newCourses
+                                          }
+                                        }
+                                      }));
+                                    }}
+                                  >
+                                    <option value="all">全周</option>
+                                    <option value="odd">单周</option>
+                                    <option value="even">双周</option>
+                                  </Select>
+                                </div>
+                                
+                                <div>
+                                  <Label className="text-sm">开始周次</Label>
+                                  <Input
+                                    type="number"
+                                    min="1"
+                                    max="30"
+                                    value={course.startWeek || 1}
+                                    onChange={(e) => {
+                                      const newCourses = [...(formData.courseArrangementRules.fixedTimeCourses?.courses || [])];
+                                      newCourses[index] = { ...newCourses[index], startWeek: parseInt(e.target.value) || 1 };
+                                      setFormData(prev => ({
+                                        ...prev,
+                                        courseArrangementRules: {
+                                          ...prev.courseArrangementRules,
+                                          fixedTimeCourses: {
+                                            ...prev.courseArrangementRules.fixedTimeCourses,
+                                            courses: newCourses
+                                          }
+                                        }
+                                      }));
+                                    }}
+                                  />
+                                </div>
+                                
+                                <div>
+                                  <Label className="text-sm">结束周次</Label>
+                                  <Input
+                                    type="number"
+                                    min="1"
+                                    max="30"
+                                    value={course.endWeek || 20}
+                                    onChange={(e) => {
+                                      const newCourses = [...(formData.courseArrangementRules.fixedTimeCourses?.courses || [])];
+                                      newCourses[index] = { ...newCourses[index], endWeek: parseInt(e.target.value) || 20 };
+                                      setFormData(prev => ({
+                                        ...prev,
+                                        courseArrangementRules: {
+                                          ...prev.courseArrangementRules,
+                                          fixedTimeCourses: {
+                                            ...prev.courseArrangementRules.fixedTimeCourses,
+                                            courses: newCourses
+                                          }
+                                        }
+                                      }));
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                              
+                              {/* 备注 */}
+                              <div className="mt-3">
+                                <Label className="text-sm">备注</Label>
+                                <Input
+                                  placeholder="课程说明或特殊要求"
+                                  value={course.notes || ''}
+                                  onChange={(e) => {
+                                    const newCourses = [...(formData.courseArrangementRules.fixedTimeCourses?.courses || [])];
+                                    newCourses[index] = { ...newCourses[index], notes: e.target.value };
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      courseArrangementRules: {
+                                        ...prev.courseArrangementRules,
+                                        fixedTimeCourses: {
+                                          ...prev.courseArrangementRules.fixedTimeCourses,
+                                          courses: newCourses
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                          
+                          {/* 添加新课程按钮 */}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              const newCourse = {
+                                type: 'class-meeting' as const,
+                                dayOfWeek: 1,
+                                period: 1,
+                                weekType: 'all' as const,
+                                startWeek: 1,
+                                endWeek: 20,
+                                notes: ''
+                              };
+                              const newCourses = [...(formData.courseArrangementRules.fixedTimeCourses?.courses || []), newCourse];
+                              setFormData(prev => ({
+                                ...prev,
+                                courseArrangementRules: {
+                                  ...prev.courseArrangementRules,
+                                  fixedTimeCourses: {
+                                    ...prev.courseArrangementRules.fixedTimeCourses,
+                                    courses: newCourses
+                                  }
+                                }
+                              }));
+                            }}
+                            className="w-full"
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            添加固定时间课程
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* 全局设置 */}
+                      <div className="space-y-4">
+                        <Separator />
+                        <h4 className="font-medium text-gray-900">全局设置</h4>
+                        
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div className="flex items-center space-x-2">
+                            <Switch
+                              id="edit-fixedTimePriority"
+                              checked={formData.courseArrangementRules.fixedTimeCourses?.priority || false}
+                              onCheckedChange={(checked) => setFormData(prev => ({
+                                ...prev,
+                                courseArrangementRules: {
+                                  ...prev.courseArrangementRules,
+                                  fixedTimeCourses: {
+                                    ...prev.courseArrangementRules.fixedTimeCourses,
+                                    priority: checked
+                                  }
+                                }
+                              }))}
+                            />
+                            <Label htmlFor="edit-fixedTimePriority">固定时间课程优先</Label>
+                          </div>
+                          
+                          <div className="flex items-center space-x-2">
+                            <Switch
+                              id="edit-allowFixedTimeOverride"
+                              checked={formData.courseArrangementRules.fixedTimeCourses?.allowOverride || false}
+                              onCheckedChange={(checked) => setFormData(prev => ({
+                                ...prev,
+                                courseArrangementRules: {
+                                  ...prev.courseArrangementRules,
+                                  fixedTimeCourses: {
+                                    ...prev.courseArrangementRules.fixedTimeCourses,
+                                    allowOverride: checked
+                                  }
+                                }
+                              }))}
+                            />
+                            <Label htmlFor="edit-allowFixedTimeOverride">允许手动调整</Label>
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <Label className="text-sm">冲突处理策略</Label>
+                          <Select
+                            value={formData.courseArrangementRules.fixedTimeCourses?.conflictStrategy || 'strict'}
+                            onValueChange={(value) => setFormData(prev => ({
+                              ...prev,
+                              courseArrangementRules: {
+                                ...prev.courseArrangementRules,
+                                fixedTimeCourses: {
+                                  ...prev.courseArrangementRules.fixedTimeCourses,
+                                  conflictStrategy: value as any
+                                }
+                              }
+                            }))}
+                          >
+                            <option value="strict">严格模式（不允许冲突）</option>
+                            <option value="flexible">灵活模式（允许调整其他课程）</option>
+                            <option value="warning">警告模式（提示冲突但允许继续）</option>
+                          </Select>
+                          <p className="text-xs text-gray-500 mt-1">
+                            当固定时间课程与其他课程冲突时的处理方式
                           </p>
                         </div>
                       </div>

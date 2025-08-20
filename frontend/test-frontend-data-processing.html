@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>前端数据处理测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1000px; margin: 0 auto; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
+        .test-button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px; }
+        .result { margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 3px; white-space: pre-wrap; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>🧪 前端数据处理测试</h1>
+    
+    <div class="test-section">
+        <h2>1. 模拟后端API响应数据</h2>
+        <button class="test-button" onclick="simulateApiResponse()">模拟API响应</button>
+        <div id="apiResponseResult" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>2. 测试数据接收和处理</h2>
+        <button class="test-button" onclick="testDataProcessing()">测试数据处理</button>
+        <div id="dataProcessingResult" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>3. 测试实际API调用</h2>
+        <button class="test-button" onclick="testRealApiCall()">测试实际API调用</button>
+        <div id="realApiResult" class="result"></div>
+    </div>
+
+    <script>
+        let mockApiResponse = null;
+        let processedData = null;
+        
+        function simulateApiResponse() {
+            // 模拟从后端接收到的数据
+            mockApiResponse = {
+                success: true,
+                data: {
+                    items: [{
+                        _id: '6899364612c2294d95ab07e4',
+                        name: '长师附小排课规则',
+                        courseArrangementRules: {
+                            fixedTimeCourses: {
+                                enabled: true,
+                                courses: [{
+                                    type: 'class-meeting',
+                                    dayOfWeek: 1,
+                                    period: 1,
+                                    weekType: 'all',
+                                    startWeek: 1,
+                                    endWeek: 20,
+                                    notes: ''
+                                }],
+                                priority: false,
+                                allowOverride: false,
+                                conflictStrategy: 'strict'
+                            }
+                        }
+                    }],
+                    total: 1
+                }
+            };
+            
+            document.getElementById('apiResponseResult').innerHTML = 
+                '<div class="success">✅ API响应数据模拟完成</div>' +
+                '<strong>固定时间课程配置:</strong><br>' +
+                '<pre>' + JSON.stringify(mockApiResponse.data.items[0].courseArrangementRules.fixedTimeCourses, null, 2) + '</pre>';
+        }
+        
+        function testDataProcessing() {
+            if (!mockApiResponse) {
+                document.getElementById('dataProcessingResult').innerHTML = '<div class="error">❌ 请先模拟API响应</div>';
+                return;
+            }
+            
+            try {
+                const response = mockApiResponse;
+                const schedulingRules = response.data.items;
+                processedData = schedulingRules;
+                
+                const firstRule = schedulingRules[0];
+                const fixedTimeCourses = firstRule.courseArrangementRules.fixedTimeCourses;
+                
+                let resultHtml = '<div class="success">✅ 数据处理完成</div>';
+                resultHtml += '<strong>enabled:</strong> ' + fixedTimeCourses.enabled + ' (类型: ' + typeof fixedTimeCourses.enabled + ')<br>';
+                resultHtml += '<strong>courses 类型:</strong> ' + typeof fixedTimeCourses.courses + '<br>';
+                resultHtml += '<strong>courses 是否为数组:</strong> ' + Array.isArray(fixedTimeCourses.courses) + '<br>';
+                resultHtml += '<strong>courses 长度:</strong> ' + fixedTimeCourses.courses.length + '<br>';
+                
+                document.getElementById('dataProcessingResult').innerHTML = resultHtml;
+                
+            } catch (error) {
+                document.getElementById('dataProcessingResult').innerHTML = '<div class="error">❌ 数据处理异常: ' + error.message + '</div>';
+            }
+        }
+        
+        async function testRealApiCall() {
+            try {
+                document.getElementById('realApiResult').innerHTML = '🔄 正在测试实际API调用...';
+                
+                const response = await fetch('http://localhost:3001/api/scheduling-rules', {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    let resultHtml = '<div class="success">✅ 实际API调用成功</div>';
+                    resultHtml += '<strong>数据项数量:</strong> ' + (result.data?.items?.length || 0) + '<br>';
+                    
+                    if (result.data && result.data.items && result.data.items.length > 0) {
+                        const firstItem = result.data.items[0];
+                        if (firstItem.courseArrangementRules && firstItem.courseArrangementRules.fixedTimeCourses) {
+                            const ftc = firstItem.courseArrangementRules.fixedTimeCourses;
+                            resultHtml += '<strong>固定时间课程配置:</strong><br>';
+                            resultHtml += '<strong>enabled:</strong> ' + ftc.enabled + ' (类型: ' + typeof ftc.enabled + ')<br>';
+                            resultHtml += '<strong>courses 类型:</strong> ' + typeof ftc.courses + '<br>';
+                            resultHtml += '<strong>courses 是否为数组:</strong> ' + Array.isArray(ftc.courses) + '<br>';
+                            resultHtml += '<strong>courses 长度:</strong> ' + (ftc.courses ? ftc.courses.length : 'undefined') + '<br>';
+                            
+                            if (Array.isArray(ftc.courses)) {
+                                resultHtml += '<strong>courses 内容:</strong><br>';
+                                ftc.courses.forEach((course, index) => {
+                                    resultHtml += `   课程 ${index + 1}: ${course.type} 周${course.dayOfWeek}第${course.period}节<br>`;
+                                });
+                            }
+                            
+                            resultHtml += '<strong>完整数据:</strong><br>';
+                            resultHtml += '<pre>' + JSON.stringify(ftc, null, 2) + '</pre>';
+                        } else {
+                            resultHtml += '<strong>❌ 没有找到固定时间课程配置</strong>';
+                        }
+                    }
+                    
+                    document.getElementById('realApiResult').innerHTML = resultHtml;
+                    
+                } else {
+                    document.getElementById('realApiResult').innerHTML = 
+                        '<div class="error">❌ 实际API调用失败</div>' +
+                        '<strong>状态码:</strong> ' + response.status;
+                }
+                
+            } catch (error) {
+                document.getElementById('realApiResult').innerHTML = '<div class="error">❌ 实际API调用异常: ' + error.message + '</div>';
+            }
+        }
+    </script>
+</body>
+</html>

@@ -544,6 +544,30 @@ export interface RoomConstraintsRequest {
 }
 
 /**
+ * 固定时间课程接口定义 (API层)
+ */
+export interface FixedTimeCourseRequest {
+  type: 'class-meeting' | 'flag-raising' | 'eye-exercise' | 'morning-reading' | 'afternoon-reading' | 'cleaning' | 'other';
+  dayOfWeek: number;                   // 星期几 (1-7)
+  period: number;                       // 第几节课 (1-12)
+  weekType: 'all' | 'odd' | 'even';    // 周次类型
+  startWeek: number;                    // 开始周次
+  endWeek: number;                      // 结束周次
+  notes?: string;                       // 备注信息
+}
+
+/**
+ * 固定时间课程全局配置接口 (API层)
+ */
+export interface FixedTimeCoursesConfigRequest {
+  enabled: boolean;                     // 是否启用固定时间课程
+  courses: FixedTimeCourseRequest[];    // 固定时间课程列表
+  priority: boolean;                    // 是否优先于其他课程
+  allowOverride: boolean;               // 是否允许手动调整
+  conflictStrategy: 'strict' | 'flexible' | 'warning'; // 冲突处理策略
+}
+
+/**
  * 课程排列规则接口定义 (API层)
  */
 export interface CourseArrangementRulesRequest {
@@ -568,6 +592,9 @@ export interface CourseArrangementRulesRequest {
     balanceWeight: number;                     // 平衡权重
     enforceEvenDistribution: boolean;          // 是否强制均匀分布
   };
+  
+  // 新增：固定时间课程配置
+  fixedTimeCourses?: FixedTimeCoursesConfigRequest; // 固定时间课程配置
 }
 
 /**

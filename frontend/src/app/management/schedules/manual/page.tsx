@@ -111,6 +111,29 @@ interface PeriodTimeConfig {
 }
 
 /**
+ * 拖拽项目接口
+ */
+interface DragItem {
+  type: 'course';
+  scheduleId: string;
+  dayOfWeek: number;
+  period: number;
+  courseData: ScheduleItem;
+}
+
+/**
+ * 拖拽操作接口
+ */
+interface DragOperation {
+  sourceScheduleId: string;
+  sourceDay: number;
+  sourcePeriod: number;
+  targetDay: number;
+  targetPeriod: number;
+  timestamp: number;
+}
+
+/**
  * 手动排课页面组件
  */
 export default function ManualSchedulePage() {
@@ -172,6 +195,20 @@ export default function ManualSchedulePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const [conflicts, setConflicts] = useState<ConflictInfo[]>([]);
+  
+  // 拖拽状态
+  const [pendingDragOperations, setPendingDragOperations] = useState<DragOperation[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+
+  // 本地辅助函数：获取教师ID
+  const getTeacherId = (teacher: any): string => {
+    return typeof teacher === 'object' ? teacher._id : teacher || '';
+  };
+
+  // 本地辅助函数：获取班级名称
+  const getClassName = (clazz: any): string => {
+    return typeof clazz === 'object' ? clazz.name : clazz || '未知班级';
+  };
 
   // 时间配置
   const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五'];
@@ -361,6 +398,153 @@ export default function ManualSchedulePage() {
       console.error('检查教师时间冲突失败:', error);
       return false;
     }
+  };
+
+  /**
+   * 检查拖拽目标位置是否有冲突
+   * 只检查教师时间冲突，不检查时间位置冲突
+   */
+  const checkDropTargetConflict = async (targetDay: number, targetPeriod: number, excludeScheduleId?: string, draggedSchedule?: ScheduleItem): Promise<{ hasConflict: boolean; conflictInfo?: string }> => {
+    try {
+      // 只检查教师时间冲突：同一教师不能同时在多个班级上课
+      if (draggedSchedule) {
+        const teacherConflict = schedules.find(schedule => 
+          schedule.dayOfWeek === targetDay && 
+          schedule.period === targetPeriod &&
+          schedule._id !== excludeScheduleId &&
+          getTeacherId(schedule.teacher) === getTeacherId(draggedSchedule.teacher)
+        );
+
+        if (teacherConflict) {
+          const teacherName = getTeacherName(draggedSchedule.teacher);
+          const conflictClassName = getClassName(teacherConflict.class);
+          const conflictCourseName = getCourseName(teacherConflict.course);
+          const conflictInfo = `教师时间冲突：${teacherName} 老师在该时间（周${targetDay} 第${targetPeriod}节）已在 ${conflictClassName} 上 ${conflictCourseName} 课`;
+          return { hasConflict: true, conflictInfo };
+        }
+      }
+      
+      return { hasConflict: false };
+    } catch (error) {
+      console.error('检查拖拽目标冲突失败:', error);
+      return { hasConflict: true, conflictInfo: '检查冲突时发生错误' };
+    }
+  };
+
+  /**
+   * 处理课程拖拽
+   */
+  const handleCourseDrag = async (dragItem: DragItem, targetDay: number, targetPeriod: number) => {
+    // 找到被拖拽的课程信息
+    const draggedSchedule = schedules.find(schedule => schedule._id === dragItem.scheduleId);
+    
+    // 检查目标位置是否有冲突（包括教师时间冲突）
+    const conflictResult = await checkDropTargetConflict(targetDay, targetPeriod, dragItem.scheduleId, draggedSchedule);
+    
+    if (conflictResult.hasConflict) {
+      setError(conflictResult.conflictInfo || `目标位置（周${targetDay} 第${targetPeriod}节）已有课程，无法拖拽到此位置`);
+      return false;
+    }
+    
+    // 记录拖拽操作
+    const dragOperation: DragOperation = {
+      sourceScheduleId: dragItem.scheduleId,
+      sourceDay: dragItem.dayOfWeek,
+      sourcePeriod: dragItem.period,
+      targetDay,
+      targetPeriod,
+      timestamp: Date.now()
+    };
+    
+    setPendingDragOperations(prev => [...prev, dragOperation]);
+    
+    // 更新本地状态（预览效果）
+    const updatedSchedules = schedules.map(schedule => {
+      if (schedule._id === dragItem.scheduleId) {
+        return {
+          ...schedule,
+          dayOfWeek: targetDay,
+          period: targetPeriod
+        };
+      }
+      return schedule;
+    });
+    
+    setSchedules(updatedSchedules);
+    
+    // 显示成功提示
+    setError(undefined);
+    return true;
+  };
+
+  /**
+   * 提交所有待处理的拖拽操作
+   */
+  const submitDragOperations = async () => {
+    if (pendingDragOperations.length === 0) {
+      setError('没有待提交的拖拽操作');
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      
+      // 批量提交所有拖拽操作
+      const updatePromises = pendingDragOperations.map(async (operation) => {
+        const response = await fetch(`/api/schedules/${operation.sourceScheduleId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            dayOfWeek: operation.targetDay,
+            period: operation.targetPeriod
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error(`更新课程安排失败: ${response.status}`);
+        }
+        
+        return response.json();
+      });
+      
+      await Promise.all(updatePromises);
+      
+      // 清空待处理操作
+      setPendingDragOperations([]);
+      
+      // 重新加载课表数据
+      await loadSchedules();
+      
+      setError(undefined);
+      alert('拖拽操作已成功保存到数据库！');
+      
+    } catch (error) {
+      console.error('提交拖拽操作失败:', error);
+      setError('保存拖拽操作失败，请重试');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * 撤销所有待处理的拖拽操作
+   */
+  const undoDragOperations = () => {
+    if (pendingDragOperations.length === 0) {
+      setError('没有待撤销的拖拽操作');
+      return;
+    }
+    
+    // 重新加载原始数据
+    loadSchedules();
+    
+    // 清空待处理操作
+    setPendingDragOperations([]);
+    
+    setError(undefined);
+    alert('已撤销所有拖拽操作');
   };
 
   /**
@@ -834,6 +1018,186 @@ export default function ManualSchedulePage() {
   };
 
   /**
+   * 可拖拽的课程卡片组件
+   */
+  const DraggableCourseCard = ({ schedule, dayIndex, periodIndex }: { 
+    schedule: ScheduleItem; 
+    dayIndex: number; 
+    periodIndex: number; 
+  }) => {
+    const [{ isDragging }, drag] = useDrag({
+      type: 'course',
+      item: {
+        type: 'course',
+        scheduleId: schedule._id!,
+        dayOfWeek: schedule.dayOfWeek || 1,
+        period: schedule.period || 1,
+        courseData: schedule
+      },
+      collect: (monitor) => ({
+        isDragging: monitor.isDragging(),
+      }),
+    });
+
+    return (
+      <div
+        ref={drag as any}
+        className={`${getCourseBackgroundColor(getCourseName(schedule.course))} text-white rounded-lg p-3 text-sm cursor-move hover:shadow-lg hover:scale-105 transition-all duration-200 ${
+          isDragging ? 'opacity-50' : ''
+        }`}
+        style={{ opacity: isDragging ? 0.5 : 1 }}
+      >
+        {/* 课程名称 */}
+        <div className="font-semibold text-base leading-tight mb-2">
+          {getCourseName(schedule.course)}
+        </div>
+        
+        {/* 教师信息 */}
+        <div className="text-white/90 text-xs mb-1">
+          👨‍🏫 {getTeacherName(schedule.teacher)}
+        </div>
+        
+        {/* 教室信息 */}
+        <div className="text-white/90 text-xs mb-2">
+          🏢 {getRoomName(schedule.room)}
+        </div>
+        
+        {/* 操作按钮 */}
+        <div className="flex gap-1 mt-2">
+          <Button 
+            size="sm" 
+            variant="outline" 
+            className="h-6 px-2 text-xs bg-white/20 border-white/30 text-white hover:bg-white/30"
+            onClick={(e) => {
+              e.stopPropagation();
+              editSchedule(schedule);
+            }}
+          >
+            <Edit2 className="h-3 w-3" />
+          </Button>
+          <Button 
+            size="sm" 
+            variant="outline" 
+            className="h-6 px-2 text-xs bg-white/20 border-white/30 text-white hover:bg-white/30"
+            onClick={(e) => {
+              e.stopPropagation();
+              openSubstitutionDialog(schedule);
+            }}
+            title="临时调课"
+          >
+            <ArrowLeftRight className="h-3 w-3" />
+          </Button>
+          <Button 
+            size="sm" 
+            variant="outline" 
+            className="h-6 px-2 text-xs bg-white/20 border-white/30 text-white hover:bg-white/30"
+            onClick={(e) => {
+              e.stopPropagation();
+              deleteSchedule(schedule._id!);
+            }}
+          >
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  /**
+   * 可拖放的时间格子组件
+   */
+  const DroppableTimeSlot = ({ 
+    dayIndex, 
+    periodIndex, 
+    schedule, 
+    children 
+  }: { 
+    dayIndex: number; 
+    periodIndex: number; 
+    schedule: ScheduleItem | null; 
+    children: React.ReactNode; 
+  }) => {
+    const [dragPreview, setDragPreview] = useState<{ isOver: boolean; canDrop: boolean; conflictInfo?: string }>({
+      isOver: false,
+      canDrop: false
+    });
+
+    const [{ isOver, canDrop }, drop] = useDrop({
+      accept: 'course',
+      drop: async (item: DragItem) => {
+        const success = await handleCourseDrag(item, dayIndex + 1, periodIndex + 1);
+        if (success) {
+          setIsDragging(false);
+          setDragPreview({ isOver: false, canDrop: false });
+        }
+      },
+      canDrop: (item: DragItem) => {
+        // 不能拖拽到自己原来的位置
+        return !(item.dayOfWeek === dayIndex + 1 && item.period === periodIndex + 1);
+      },
+      hover: async (item: DragItem) => {
+        // 找到被拖拽的课程信息
+        const draggedSchedule = schedules.find(schedule => schedule._id === item.scheduleId);
+        
+        // 悬停时检查冲突并更新预览状态（包括教师时间冲突）
+        const conflictResult = await checkDropTargetConflict(dayIndex + 1, periodIndex + 1, item.scheduleId, draggedSchedule);
+        setDragPreview({
+          isOver: true,
+          canDrop: !conflictResult.hasConflict,
+          conflictInfo: conflictResult.conflictInfo
+        });
+      },
+      collect: (monitor) => ({
+        isOver: monitor.isOver(),
+        canDrop: monitor.canDrop(),
+      }),
+    });
+
+    // 合并拖拽状态
+    const finalDragState = {
+      isOver: isOver || dragPreview.isOver,
+      canDrop: canDrop && dragPreview.canDrop,
+      conflictInfo: dragPreview.conflictInfo
+    };
+
+    return (
+      <td
+        ref={drop as any}
+        className={`p-2 border-r border-gray-200 last:border-r-0 align-top transition-colors duration-200 relative ${
+          finalDragState.isOver && finalDragState.canDrop ? 'bg-green-100 border-green-300' : ''
+        } ${
+          finalDragState.isOver && !finalDragState.canDrop ? 'bg-red-100 border-red-300' : ''
+        }`}
+      >
+        <div className="min-h-[80px] w-full">
+          {children}
+        </div>
+        
+        {/* 拖拽悬停提示 */}
+        {finalDragState.isOver && (
+          <div className={`absolute inset-0 flex items-center justify-center pointer-events-none z-10 ${
+            finalDragState.canDrop ? 'text-green-600' : 'text-red-600'
+          }`}>
+            <div className={`px-2 py-1 rounded text-xs font-medium ${
+              finalDragState.canDrop ? 'bg-green-200' : 'bg-red-200'
+            }`}>
+              {finalDragState.canDrop ? '可以放置' : '无法放置'}
+            </div>
+          </div>
+        )}
+        
+        {/* 冲突信息提示 */}
+        {finalDragState.isOver && !finalDragState.canDrop && finalDragState.conflictInfo && (
+          <div className="absolute top-0 left-0 right-0 bg-red-100 border border-red-300 rounded p-2 text-xs text-red-700 z-20 pointer-events-none">
+            <div className="font-medium">冲突提示：</div>
+            <div className="mt-1">{finalDragState.conflictInfo}</div>
+          </div>
+        )}
+      </td>
+    );
+  };
+
+  /**
    * 渲染课程网格视图（班级课表模式）
    */
   const renderScheduleGrid = () => {
@@ -933,62 +1297,24 @@ export default function ManualSchedulePage() {
                       const schedule = gridData[periodIndex][dayIndex];
                       
                       return (
-                        <td
+                        <DroppableTimeSlot
                           key={`${dayIndex}-${periodIndex}`}
-                          className="p-2 border-r border-gray-200 last:border-r-0 align-top"
+                          dayIndex={dayIndex}
+                          periodIndex={periodIndex}
+                          schedule={schedule}
                         >
-                          <div className="min-h-[80px] w-full">
-                            {schedule ? (
-                              <div className={`${getCourseBackgroundColor(getCourseName(schedule.course))} text-white rounded-lg p-3 text-sm cursor-pointer hover:shadow-lg hover:scale-105 transition-all duration-200`}>
-                                {/* 课程名称 */}
-                                <div className="font-semibold text-base leading-tight mb-2">
-                                  {getCourseName(schedule.course)}
-                                </div>
-                                
-                                {/* 教师信息 */}
-                                <div className="text-white/90 text-xs mb-1">
-                                  👨‍🏫 {getTeacherName(schedule.teacher)}
-                                </div>
-                                
-                                {/* 教室信息 */}
-                                <div className="text-white/90 text-xs mb-2">
-                                  🏢 {getRoomName(schedule.room)}
-                                </div>
-                                
-                                {/* 操作按钮 */}
-                                <div className="flex gap-1 mt-2">
-                                  <Button 
-                                    size="sm" 
-                                    variant="outline" 
-                                    className="h-6 px-2 text-xs bg-white/20 border-white/30 text-white hover:bg-white/30"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      editSchedule(schedule);
-                                    }}
-                                  >
-                                    <Edit2 className="h-3 w-3" />
-                                  </Button>
-                                  <Button 
-                                    size="sm" 
-                                    variant="outline" 
-                                    className="h-6 px-2 text-xs bg-white/20 border-white/30 text-white hover:bg-white/30"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      openSubstitutionDialog(schedule);
-                                    }}
-                                    title="临时调课"
-                                  >
-                                    <ArrowLeftRight className="h-3 w-3" />
-                                  </Button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="text-gray-400 text-xs text-center py-6">
-                                空闲
-                              </div>
-                            )}
-                          </div>
-                        </td>
+                          {schedule ? (
+                            <DraggableCourseCard
+                              schedule={schedule}
+                              dayIndex={dayIndex}
+                              periodIndex={periodIndex}
+                            />
+                          ) : (
+                            <div className="text-gray-400 text-xs text-center py-6">
+                              空闲
+                            </div>
+                          )}
+                        </DroppableTimeSlot>
                       );
                     })}
                   </tr>
@@ -1002,7 +1328,8 @@ export default function ManualSchedulePage() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <DndProvider backend={HTML5Backend}>
+      <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">手动排课</h1>
@@ -1019,6 +1346,80 @@ export default function ManualSchedulePage() {
           </Button>
         </div>
       </div>
+
+      {/* 拖拽操作说明 */}
+      <Card className="border-blue-200 bg-blue-50">
+        <CardHeader>
+          <CardTitle className="text-lg text-blue-800">拖拽操作说明</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <div className="text-sm text-blue-700">
+              <strong>如何使用拖拽功能：</strong>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-green-400 rounded-full"></div>
+                  <span>绿色高亮：可以放置课程</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-red-400 rounded-full"></div>
+                  <span>红色高亮：无法放置（有冲突）</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-blue-400 rounded-full"></div>
+                  <span>蓝色高亮：正在拖拽中</span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div>• 拖拽课程卡片到目标时间位置</div>
+                <div>• 只检测教师时间冲突（教师不能同时在多个班级上课）</div>
+                <div>• 允许同一时间安排多门课程（不检查时间位置冲突）</div>
+                <div>• 专注于教师分配问题，简化排课流程</div>
+                <div>• 拖拽成功后需要提交到数据库</div>
+                <div>• 支持撤销操作恢复原始状态</div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 拖拽操作控制 */}
+      {pendingDragOperations.length > 0 && (
+        <Card className="border-orange-200 bg-orange-50">
+          <CardHeader>
+            <CardTitle className="text-lg text-orange-800">待提交的拖拽操作</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="text-sm text-orange-700">
+                您有 <strong>{pendingDragOperations.length}</strong> 个拖拽操作等待提交到数据库
+              </div>
+              <div className="flex gap-2">
+                <Button 
+                  onClick={submitDragOperations} 
+                  disabled={loading}
+                  className="bg-orange-600 hover:bg-orange-700"
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  {loading ? '提交中...' : '提交到数据库'}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={undoDragOperations}
+                  className="border-orange-300 text-orange-700 hover:bg-orange-100"
+                >
+                  撤销所有操作
+                </Button>
+              </div>
+              <div className="text-xs text-orange-600">
+                提示：拖拽操作只是预览效果，需要点击"提交到数据库"按钮才会真正保存
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* 筛选条件 */}
       <Card>
@@ -1389,6 +1790,7 @@ export default function ManualSchedulePage() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </DndProvider>
   );
 }

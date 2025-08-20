@@ -602,6 +602,30 @@ export interface ICoreSubjectStrategy {
 }
 
 /**
+ * 固定时间课程配置接口
+ */
+export interface FixedTimeCourse {
+  type: 'class-meeting' | 'flag-raising' | 'eye-exercise' | 'morning-reading' | 'afternoon-reading' | 'cleaning' | 'other';
+  dayOfWeek: number;
+  period: number;
+  weekType: 'all' | 'odd' | 'even';
+  startWeek: number;
+  endWeek: number;
+  notes?: string;
+}
+
+/**
+ * 固定时间课程全局配置接口
+ */
+export interface FixedTimeCoursesConfig {
+  enabled: boolean;
+  courses: FixedTimeCourse[];
+  priority: boolean;
+  allowOverride: boolean;
+  conflictStrategy: 'strict' | 'flexible' | 'warning';
+}
+
+/**
  * 课程排列规则接口定义
  */
 export interface CourseArrangementRules {
@@ -614,6 +638,9 @@ export interface CourseArrangementRules {
   
   // 新增：核心课程策略
   coreSubjectStrategy: ICoreSubjectStrategy;
+  
+  // 新增：固定时间课程配置
+  fixedTimeCourses?: FixedTimeCoursesConfig;
 }
 
 /**

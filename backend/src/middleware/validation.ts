@@ -1321,6 +1321,111 @@ function validateRoomConstraints(constraints: any): string[] {
 }
 
 /**
+ * 验证固定时间课程数据
+ * 
+ * Args:
+ *   course: 固定时间课程对象
+ * 
+ * Returns:
+ *   string[]: 验证错误列表
+ */
+function validateFixedTimeCourse(course: any): string[] {
+  const errors: string[] = [];
+
+  // 验证课程类型
+  if (!['class-meeting', 'flag-raising', 'eye-exercise', 'morning-reading', 'afternoon-reading', 'cleaning', 'other'].includes(course.type)) {
+    errors.push('课程类型必须是有效的固定时间课程类型');
+  }
+
+  // 验证星期
+  if (typeof course.dayOfWeek !== 'number' || course.dayOfWeek < 1 || course.dayOfWeek > 7) {
+    errors.push('星期必须在1-7之间');
+  }
+
+  // 验证节次
+  if (typeof course.period !== 'number' || course.period < 1 || course.period > 12) {
+    errors.push('节次必须在1-12之间');
+  }
+
+  // 验证周次类型
+  if (!['all', 'odd', 'even'].includes(course.weekType)) {
+    errors.push('周次类型必须是: all, odd, even 中的一个');
+  }
+
+  // 验证开始周次
+  if (typeof course.startWeek !== 'number' || course.startWeek < 1 || course.startWeek > 30) {
+    errors.push('开始周次必须在1-30之间');
+  }
+
+  // 验证结束周次
+  if (typeof course.endWeek !== 'number' || course.endWeek < 1 || course.endWeek > 30) {
+    errors.push('结束周次必须在1-30之间');
+  }
+
+  // 验证周次范围
+  if (course.startWeek > course.endWeek) {
+    errors.push('开始周次不能大于结束周次');
+  }
+
+  // 验证备注长度
+  if (course.notes && typeof course.notes === 'string' && course.notes.length > 200) {
+    errors.push('备注信息不能超过200个字符');
+  }
+
+  return errors;
+}
+
+/**
+ * 验证固定时间课程配置数据
+ * 
+ * Args:
+ *   config: 固定时间课程配置对象
+ * 
+ * Returns:
+ *   string[]: 验证错误列表
+ */
+function validateFixedTimeCoursesConfig(config: any): string[] {
+  const errors: string[] = [];
+
+  // 验证启用状态
+  if (typeof config.enabled !== 'boolean') {
+    errors.push('启用状态必须是布尔值');
+  }
+
+  // 如果启用，验证课程列表
+  if (config.enabled) {
+    if (!Array.isArray(config.courses)) {
+      errors.push('课程列表必须是数组');
+    } else {
+      // 验证每个课程
+      config.courses.forEach((course: any, index: number) => {
+        const courseErrors = validateFixedTimeCourse(course);
+        courseErrors.forEach(error => {
+          errors.push(`课程${index + 1}: ${error}`);
+        });
+      });
+    }
+  }
+
+  // 验证优先级
+  if (typeof config.priority !== 'boolean') {
+    errors.push('优先级字段必须是布尔值');
+  }
+
+  // 验证允许调整
+  if (typeof config.allowOverride !== 'boolean') {
+    errors.push('允许调整字段必须是布尔值');
+  }
+
+  // 验证冲突处理策略
+  if (!['strict', 'flexible', 'warning'].includes(config.conflictStrategy)) {
+    errors.push('冲突处理策略必须是: strict, flexible, warning 中的一个');
+  }
+
+  return errors;
+}
+
+/**
  * 验证课程排列规则数据
  * 
  * Args:
@@ -1359,6 +1464,12 @@ function validateCourseArrangementRules(rules: any): string[] {
   // 验证实验课偏好
   if (!['morning', 'afternoon', 'flexible'].includes(rules.labCoursePreference)) {
     errors.push('实验课时间偏好只能是: morning, afternoon, flexible');
+  }
+
+  // 验证固定时间课程配置
+  if (rules.fixedTimeCourses) {
+    const fixedTimeErrors = validateFixedTimeCoursesConfig(rules.fixedTimeCourses);
+    errors.push(...fixedTimeErrors);
   }
 
   return errors;
