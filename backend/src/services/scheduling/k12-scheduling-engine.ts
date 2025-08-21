@@ -1998,7 +1998,12 @@ private getK12PriorityScore(variable: ScheduleVariable): number {
   return 80;                                 // 活动课程
 }
 
-// K12核心课程识别
+/**
+ * K12核心课程识别
+ * 
+ * @param variable 排课变量
+ * @returns 是否为核心课程
+ */
 private isCoreSubject(variable: ScheduleVariable): boolean {
   const courseName = variable.subject || variable.courseName || 
                      this.getCourseNameSync(variable.courseId);
@@ -2017,26 +2022,230 @@ private isCoreSubject(variable: ScheduleVariable): boolean {
   );
 }
 
-// K12特有的时间段偏好
+/**
+ * 获取课程认知负荷等级
+ * 
+ * 基于认知科学理论：
+ * - 高认知负荷(3)：数学、物理、化学等逻辑思维课程
+ * - 中等认知负荷(2)：语文、英语、生物等语言和综合课程  
+ * - 低认知负荷(1)：音乐、美术、体育等艺术和体力课程
+ * 
+ * @param variable 排课变量
+ * @returns 认知负荷等级(1-3)
+ */
+private getCourseCognitiveLoad(variable: ScheduleVariable): number {
+  const subject = variable.subject?.toLowerCase() || '';
+  
+  // 高认知负荷课程：逻辑思维、抽象概念
+  if (subject.includes('数学') || subject.includes('物理') || subject.includes('化学') ||
+      subject.includes('math') || subject.includes('physics') || subject.includes('chemistry')) {
+    return 3;
+  }
+  
+  // 中等认知负荷课程：语言、综合知识
+  if (subject.includes('语文') || subject.includes('英语') || subject.includes('生物') ||
+      subject.includes('chinese') || subject.includes('english') || subject.includes('biology')) {
+    return 2;
+  }
+  
+  // 低认知负荷课程：艺术、体力活动
+  if (subject.includes('音乐') || subject.includes('美术') || subject.includes('体育') ||
+      subject.includes('music') || subject.includes('art') || subject.includes('pe')) {
+    return 1;
+  }
+  
+  return 2; // 默认中等认知负荷
+}
+
+/**
+ * 获取时间槽脑状态等级
+ * 
+ * 基于脑科学规律：
+ * - 峰值状态(3)：逻辑思维或创造力最强时段
+ * - 正常状态(2)：注意力一般，适合常规课程
+ * - 低峰状态(1)：注意力下降，适合体力活动
+ * 
+ * @param timeSlot 时间槽
+ * @returns 脑状态等级(1-3)
+ */
+private getTimeSlotBrainState(timeSlot: BaseTimeSlot): number {
+  const { period } = timeSlot;
+  
+  // 峰值状态：逻辑思维最强时段
+  if (period >= 1 && period <= 2) {
+    return 3;
+  }
+  
+  // 峰值状态：创造力较强时段
+  if (period >= 5 && period <= 6) {
+    return 3;
+  }
+  
+  // 正常状态：注意力一般时段
+  if (period === 3 || period === 4) {
+    return 2;
+  }
+  
+  // 低峰状态：注意力下降时段
+  if (period >= 7 && period <= 8) {
+    return 1;
+  }
+  
+  return 2; // 默认正常状态
+}
+
+/**
+ * K12特有的时间段偏好评分
+ * 
+ * 基于科学用脑理论，综合考虑：
+ * 1. 认知负荷与脑状态匹配度
+ * 2. 学习节奏优化
+ * 3. 科目分散度
+ * 4. 基础时间偏好
+ * 
+ * @param variable 排课变量
+ * @param timeSlot 时间槽
+ * @returns 科学用脑评分
+ */
 private getK12TimeSlotPreference(variable: ScheduleVariable, timeSlot: BaseTimeSlot): number {
   let score = 0;
 
-  // 1. 基础时间偏好 (25%)
-  score += this.getBasicTimePreference(variable, timeSlot) * 0.25;
+  // 1. 认知负荷与脑状态匹配度 (35%) - 最重要的科学因素
+  score += this.getCognitiveLoadBrainStateMatch(variable, timeSlot) * 0.35;
   
-  // 2. K12核心课程黄金时段奖励 (30%)
-  score += this.getK12CoreSubjectGoldenTimeBonus(variable, timeSlot) * 0.30;
+  // 2. K12核心课程黄金时段奖励 (25%)
+  score += this.getK12CoreSubjectGoldenTimeBonus(variable, timeSlot) * 0.25;
   
-  // 3. K12科目类型时间偏好 (25%)
-  score += this.getK12SubjectTypeTimePreference(variable, timeSlot) * 0.25;
+  // 3. 学习节奏优化评分 (20%)
+  score += this.getLearningRhythmScore(variable, timeSlot) * 0.20;
   
-  // 4. 连排课程偏好 (20%)
-  //score += this.getContinuousCoursePreference(variable, timeSlot) * 0.20;
-  
-  // 5.科目分散度评分
+  // 4. 科目分散度评分 (15%)
   score += this.getSubjectDistributionScore(variable, timeSlot) * 0.15;
+  
+  // 5. 基础时间偏好 (5%)
+  score += this.getBasicTimePreference(variable, timeSlot) * 0.05;
 
   return score;
+}
+
+/**
+ * 认知负荷与脑状态匹配度评分
+ * 
+ * 科学原理：高认知负荷课程应安排在峰值脑状态时段
+ * 匹配度越高，学习效果越好
+ * 
+ * @param variable 排课变量
+ * @param timeSlot 时间槽
+ * @returns 匹配度评分(0-100)
+ */
+private getCognitiveLoadBrainStateMatch(variable: ScheduleVariable, timeSlot: BaseTimeSlot): number {
+  const cognitiveLoad = this.getCourseCognitiveLoad(variable);
+  const brainState = this.getTimeSlotBrainState(timeSlot);
+  
+  // 完美匹配：高认知负荷课程在峰值脑状态
+  if (cognitiveLoad === 3 && brainState === 3) {
+    return 100;
+  }
+  
+  // 良好匹配：中等认知负荷课程在峰值或正常脑状态
+  if (cognitiveLoad === 2 && brainState >= 2) {
+    return 85;
+  }
+  
+  // 一般匹配：低认知负荷课程在任何脑状态
+  if (cognitiveLoad === 1) {
+    return 70;
+  }
+  
+  // 不匹配：高认知负荷课程在低峰脑状态
+  if (cognitiveLoad === 3 && brainState === 1) {
+    return 30;
+  }
+  
+  // 其他情况
+  return 60;
+}
+
+/**
+ * 学习节奏优化评分
+ * 
+ * 科学原理：避免连续高认知负荷课程，保持学习节奏的合理性
+ * 
+ * @param variable 排课变量
+ * @param timeSlot 时间槽
+ * @returns 节奏优化评分(0-100)
+ */
+private getLearningRhythmScore(variable: ScheduleVariable, timeSlot: BaseTimeSlot): number {
+  const cognitiveLoad = this.getCourseCognitiveLoad(variable);
+  const { dayOfWeek, period } = timeSlot;
+  
+  let score = 80; // 基础分
+  
+  // 检查前几节课的认知负荷
+  const previousPeriods = [period - 1, period - 2].filter(p => p > 0);
+  let highLoadCount = 0;
+  
+  for (const prevPeriod of previousPeriods) {
+    // 检查该节次是否有高认知负荷课程
+    if (this.hasHighCognitiveLoadCourseOnPeriod(variable.classId, dayOfWeek, prevPeriod)) {
+      highLoadCount++;
+    }
+  }
+  
+  // 如果前面有高认知负荷课程，当前课程适当降分
+  if (highLoadCount > 0) {
+    if (cognitiveLoad === 3) {
+      score -= 30; // 连续高认知负荷课程
+    } else if (cognitiveLoad === 2) {
+      score -= 15; // 中等认知负荷课程
+    }
+  }
+  
+  // 如果前面没有高认知负荷课程，当前课程适当加分
+  if (highLoadCount === 0) {
+    if (cognitiveLoad === 3) {
+      score += 20; // 高认知负荷课程在合适位置
+    }
+  }
+  
+  return Math.max(0, Math.min(100, score));
+}
+
+/**
+ * 检查指定节次是否有高认知负荷课程
+ * 
+ * @param classId 班级ID
+ * @param dayOfWeek 星期几
+ * @param period 节次
+ * @returns 是否有高认知负荷课程
+ */
+private hasHighCognitiveLoadCourseOnPeriod(classId: mongoose.Types.ObjectId, dayOfWeek: number, period: number): boolean {
+  for (const assignment of this.currentAssignments.values()) {
+    if (assignment.classId.toString() === classId.toString() &&
+        assignment.timeSlot.dayOfWeek === dayOfWeek &&
+        assignment.timeSlot.period === period) {
+      
+      // 获取课程信息
+      const courseInfo = this.findCourseInTeachingPlans(assignment.courseId);
+      if (courseInfo) {
+        // 创建临时变量来检查认知负荷
+        const tempVariable: ScheduleVariable = {
+          id: '',
+          classId: assignment.classId,
+          courseId: assignment.courseId,
+          teacherId: assignment.teacherId,
+          requiredHours: 1,
+          priority: 5,
+          domain: [],
+          subject: courseInfo.subject || courseInfo.name
+        };
+        
+        const cognitiveLoad = this.getCourseCognitiveLoad(tempVariable);
+        return cognitiveLoad === 3; // 高认知负荷
+      }
+    }
+  }
+  return false;
 }
 
 private getBasicTimePreference(variable: ScheduleVariable, timeSlot: BaseTimeSlot): number {
@@ -2063,27 +2272,88 @@ private getBasicTimePreference(variable: ScheduleVariable, timeSlot: BaseTimeSlo
   return score;
 }
 
+/**
+ * 基于脑科学的K12核心课程黄金时段奖励
+ * 
+ * 科学原理：
+ * - 上午1-3节：逻辑思维峰值时段，适合数学、物理等高认知负荷课程
+ * - 上午4节：注意力开始下降，适合中等认知负荷课程
+ * - 下午5-6节：创造力峰值时段，适合语文、英语等语言类课程
+ * - 下午7-8节：体力活动时段，适合体育、音乐等低认知负荷课程
+ * 
+ * @param variable 排课变量
+ * @param timeSlot 时间槽
+ * @returns 科学用脑评分奖励
+ */
 private getK12CoreSubjectGoldenTimeBonus(variable: ScheduleVariable, timeSlot: BaseTimeSlot): number {
   if (!this.isCoreSubject(variable)) return 0;
   
   let bonus = 0;
+  const subject = variable.subject?.toLowerCase() || '';
   
-  // 上午黄金时段 (1-4节)
+  // 基于脑科学的时间段分类
   if (timeSlot.period >= 1 && timeSlot.period <= 3) {
-    bonus += 100;
+    // 上午峰值时段 (1-3节)：逻辑思维最强，注意力最集中
+    bonus += 120;
     
-    // 第一节和第二节为最佳时段
+    // 第1-2节为最佳逻辑思维时段
     if (timeSlot.period === 1 || timeSlot.period === 2) {
-      bonus += 50;
+      bonus += 60;
+      
+      // 数学、物理等逻辑思维课程特别适合
+      if (subject.includes('数学') || subject.includes('物理') || subject.includes('化学')) {
+        bonus += 40;
+      }
+    }
+    
+    // 第3节：注意力开始下降，但仍适合核心课程
+    if (timeSlot.period === 3) {
+      bonus += 20;
     }
   }
   
-  // 下午黄金时段 (5-6节)
-  if (timeSlot.period >= 5 && timeSlot.period <= 6) {
+  // 上午过渡时段 (4节)：注意力下降，适合中等认知负荷课程
+  if (timeSlot.period === 4) {
     bonus += 80;
     
-    if (timeSlot.period === 5) {
+    // 语文、英语等语言类课程适合此时段
+    if (subject.includes('语文') || subject.includes('英语')) {
       bonus += 30;
+    }
+  }
+  
+  // 下午峰值时段 (5-6节)：创造力较强，适合语言和艺术类课程
+  if (timeSlot.period >= 5 && timeSlot.period <= 6) {
+    bonus += 100;
+    
+    // 第5节：下午注意力恢复，创造力提升
+    if (timeSlot.period === 5) {
+      bonus += 40;
+      
+      // 语文、英语等课程特别适合
+      if (subject.includes('语文') || subject.includes('英语')) {
+        bonus += 30;
+      }
+    }
+    
+    // 第6节：创造力持续，适合综合类课程
+    if (timeSlot.period === 6) {
+      bonus += 20;
+    }
+  }
+  
+  // 下午活动时段 (7-8节)：体力活动时段，核心课程适当降分但不完全排除
+  if (timeSlot.period >= 7 && timeSlot.period <= 8) {
+    bonus += 40; // 基础分，允许核心课程在此时段
+    
+    // 第7节：适合中等认知负荷课程
+    if (timeSlot.period === 7) {
+      bonus += 20;
+    }
+    
+    // 第8节：注意力最低，但可安排复习类课程
+    if (timeSlot.period === 8) {
+      bonus += 10;
     }
   }
   
