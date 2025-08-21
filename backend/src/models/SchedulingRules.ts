@@ -120,8 +120,9 @@ export interface ICoreSubjectStrategy {
  */
 export interface IFixedTimeCourse {
   type: 'class-meeting' | 'flag-raising' | 'eye-exercise' | 'morning-reading' | 'afternoon-reading' | 'cleaning' | 'other';
-  dayOfWeek: number;                   // 星期几 (1-7)
-  period: number;                       // 第几节课 (1-12)
+  name: string;                         // 🆕 新增：课程名称，直接存储显示名称
+  dayOfWeek: number;                    // 星期几 (1-7)
+  period: number;                        // 第几节课 (1-12)
   weekType: 'all' | 'odd' | 'even';    // 周次类型
   startWeek: number;                    // 开始周次
   endWeek: number;                      // 结束周次
@@ -598,6 +599,11 @@ const CourseArrangementRulesSchema = new Schema<ICourseArrangementRules>({
               values: ['class-meeting', 'flag-raising', 'eye-exercise', 'morning-reading', 'afternoon-reading', 'cleaning', 'other'],
               message: '课程类型必须是有效的固定时间课程类型'
             }
+          },
+          name: {
+            type: String,
+            required: [true, '课程名称不能为空'],
+            message: '课程名称用于显示和识别'
           },
           dayOfWeek: {
             type: Number,

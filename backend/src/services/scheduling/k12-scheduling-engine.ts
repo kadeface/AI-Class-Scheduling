@@ -76,12 +76,12 @@ export class K12SchedulingEngine {
     // 🔥 新增：初始化主引擎相关属性
     this.rules = {}; // 默认空规则
     this.config = {
-      maxIterations: 10000,
-      timeLimit: 300, // 5分钟
+      maxIterations: 100000,
+      timeLimit: 1800, // 30分钟
       enableLocalOptimization: true,
       localOptimizationIterations: 100,
       debugLevel: DebugLevel.MINIMAL, // 修复：使用正确的枚举值
-      backtrackLimit: 10000,
+      backtrackLimit: 100000,
       verbose: false
     };
     // 🔧 新增：初始化累积变量数组
@@ -192,7 +192,7 @@ export class K12SchedulingEngine {
     const coreSubjects = ['语文', '数学', '英语']; // 核心课程科目列表
     const coreSubjectAssignments: Array<{plan: any, assignment: any}> = [];
     const electiveSubjectAssignments: Array<{plan: any, assignment: any}> = [];
-    
+    const fixedTimeAssignments: Array<{plan: any, assignment: any}> = []; // 🆕 固定时间课程（班会等）
     console.log('🔍 [课程分类] 开始分类课程分配...');
     
     // 遍历所有教学计划，按课程分配分类
@@ -212,29 +212,37 @@ export class K12SchedulingEngine {
         
         //console.log(`      📚 课程分配: ${course.name} (${course.subject}), 每周课时: ${assignment.weeklyHours}`);
         
-        // 根据科目分类
-        if (coreSubjects.includes(course.subject)) {
+        // 🔧 修复：排除固定时间课程，避免参与流动课程排课
+
+        
+        // 课程分类逻辑
+        if (course.subject === '班会' || course.name === '班会') {
+          fixedTimeAssignments.push({ plan, assignment });
+          //console.log(`         🔒 标记为固定时间课程: ${course.subject}`);
+        } else if (coreSubjects.includes(course.subject)) {
           coreSubjectAssignments.push({ plan, assignment });
-         // console.log(`         ✅ 标记为核心课程`);
+          //console.log(`         ✅ 标记为核心课程: ${course.subject}`);
         } else {
           electiveSubjectAssignments.push({ plan, assignment });
-          //console.log(`         ✅ 标记为副科课程`);
+         //console.log(`         ✅ 标记为副科课程: ${course.subject}`);
         }
-      }
-    }
+              }
+            }
     
     console.log(`📊 [课程分类结果]`);
     console.log(`   - 核心课程分配: ${coreSubjectAssignments.length} 个`);
     console.log(`   - 副科课程分配: ${electiveSubjectAssignments.length} 个`);
+    console.log(`   - 固定时间课程分配: ${fixedTimeAssignments.length} 个`);
     
     // 计算总课时数
     const coreTotalHours = coreSubjectAssignments.reduce((total, {assignment}) => total + assignment.weeklyHours, 0);
     const electiveTotalHours = electiveSubjectAssignments.reduce((total, {assignment}) => total + assignment.weeklyHours, 0);
+    const fixedTimeTotalHours = fixedTimeAssignments.reduce((total, {assignment}) => total + assignment.weeklyHours, 0);
     
     console.log(`   - 核心课程总课时: ${coreTotalHours} 课时`);
     console.log(`   - 副科课程总课时: ${electiveTotalHours} 课时`);
-    
-    // 🔧 修复：现在按课程分配分类，而不是按教学计划分类
+    console.log(`   - 固定时间课程总课时: ${fixedTimeTotalHours} 课时`);
+   
     // 阶段1：安排核心课程
     console.log('\n📚 [阶段1] 核心课程排课开始');
     const coreResult = await this.scheduleCoreSubjectAssignments(coreSubjectAssignments);
@@ -243,12 +251,17 @@ export class K12SchedulingEngine {
     console.log('\n🎨 [阶段2] 副科课程排课开始');
     const electiveResult = await this.scheduleElectiveSubjectAssignments(electiveSubjectAssignments);
     
+    // �� 阶段3：插入固定时间课程（班会等）
+    console.log('\n🔒 [阶段3] 固定时间课程插入开始');
+    const fixedTimeResult = await this.insertFixedTimeAssignments(fixedTimeAssignments);
+    
     // 合并结果
-    const totalAssignments = coreResult + electiveResult;
+    const totalAssignments = coreResult + electiveResult + fixedTimeResult;
     
     console.log(`\n📊 [分阶段排课完成]`);
     console.log(`   - 核心课程已安排: ${coreResult} 课时`);
     console.log(`   - 副科课程已安排: ${electiveResult} 课时`);
+    console.log(`   - 固定时间课程已安排: ${fixedTimeResult} 课时`);
     console.log(`   - 总安排: ${totalAssignments} 课时`);
     
     return this.generateFinalResult();
@@ -2156,25 +2169,31 @@ private getCourseNameSync(courseId: mongoose.Types.ObjectId): string {
   private async processFixedTimeCourses(schedulingRules: any[]): Promise<Map<string, CourseAssignment>> {
     const fixedTimeAssignments = new Map<string, CourseAssignment>();
     
-    // 从排课规则中获取固定时间课程配置
-    for (const rules of schedulingRules) {
-      if (rules.courseArrangementRules?.fixedTimeCourses?.enabled) {
-        const fixedConfig = rules.courseArrangementRules.fixedTimeCourses;
-        
-        for (const fixedCourse of fixedConfig.courses) {
-          // 为每个班级创建固定时间课程分配
-          for (const plan of this.teachingPlans) {
-            const assignment = this.createFixedTimeAssignment(plan.class, fixedCourse);
-            if (assignment) {
-              fixedTimeAssignments.set(assignment.variableId, assignment);
+    console.log('🔍 [固定时间课程] 开始从教学计划中读取固定时间课程...');
+    
+    // 🆕 新增：从教学计划中读取固定时间课程
+    for (const plan of this.teachingPlans) {
+      if (plan.courseAssignments && plan.courseAssignments.length > 0) {
+        for (const assignment of plan.courseAssignments) {
+          // 检查是否为固定时间课程
+          if (assignment.isFixedTime && assignment.fixedTimeSlot) {
+            console.log(`🔒 [固定时间课程] 发现固定时间课程: 班级${plan.class}, 课程${assignment.course}, 时间${assignment.fixedTimeSlot.dayOfWeek}第${assignment.fixedTimeSlot.period}节`);
+            
+            const fixedAssignment = this.createFixedTimeAssignmentFromTeachingPlan(plan, assignment);
+            if (fixedAssignment) {
+              fixedTimeAssignments.set(fixedAssignment.variableId, fixedAssignment);
               
               // 将固定时间课程添加到当前分配中
-              this.currentAssignments.set(assignment.variableId, assignment);
+              this.currentAssignments.set(fixedAssignment.variableId, fixedAssignment);
             }
           }
         }
       }
     }
+    
+    // 🔧 修复：注释掉从排课规则读取的重复逻辑，避免重复创建固定课程
+    // 现在只从教学计划中读取固定时间课程，避免重复处理
+    console.log('🔧 [固定时间课程] 跳过排课规则中的固定课程配置，避免重复处理');
     
     console.log(`🔒 [固定时间课程] 成功处理 ${fixedTimeAssignments.size} 个固定时间课程分配`);
     return fixedTimeAssignments;
@@ -2231,6 +2250,73 @@ private getCourseNameSync(courseId: mongoose.Types.ObjectId): string {
   }
 
   /**
+   * 🆕 新增：从教学计划创建固定时间课程分配
+   * 
+   * Args:
+   *   plan: 教学计划
+   *   assignment: 课程分配
+   * 
+   * Returns:
+   *   CourseAssignment | null: 固定时间课程分配对象
+   */
+  private createFixedTimeAssignmentFromTeachingPlan(plan: any, assignment: any): CourseAssignment | null {
+    try {
+      console.log(`🔒 [固定时间课程] 从教学计划创建分配: 班级${plan.class}, 课程${assignment.course}, 教师${assignment.teacher}`);
+      
+      // 直接使用教学计划中的课程、教师和教室信息
+      const course = assignment.course;
+      let teacher = assignment.teacher;
+      
+      // 🔧 修复：处理教师ID的populate问题
+      if (typeof teacher === 'string') {
+        console.log(`🔧 [固定时间课程] 教师字段是字符串，尝试查找教师对象: ${teacher}`);
+        // 如果teacher是字符串ID，需要查找对应的教师对象
+        teacher = this.findTeacherById(teacher);
+        if (!teacher) {
+          console.log(`❌ [固定时间课程] 无法找到教师: ${assignment.teacher}`);
+          return null;
+        }
+      }
+      
+      if (!course || !teacher) {
+        console.log(`⚠️ [固定时间课程] 教学计划中缺少课程或教师信息`);
+        return null;
+      }
+      
+      // 验证教师ID是否正确
+      console.log(`🔍 [固定时间课程] 验证教师信息: ID=${teacher._id}, 类型=${typeof teacher._id}`);
+      
+      // 查找对应的教室（优先使用班级固定教室）
+      const room = this.findRoomForFixedCourse('class-meeting', plan.class);
+      
+      const fixedAssignment: CourseAssignment = {
+        variableId: `fixed_${plan.class._id}_${course._id}_${assignment.fixedTimeSlot.dayOfWeek}_${assignment.fixedTimeSlot.period}`,
+        classId: plan.class._id,
+        courseId: course._id,
+        teacherId: teacher._id,
+        roomId: room ? room._id : null,
+        timeSlot: {
+          dayOfWeek: assignment.fixedTimeSlot.dayOfWeek,
+          period: assignment.fixedTimeSlot.period,
+          startTime: this.getTimeSlotStartTime(assignment.fixedTimeSlot.period),
+          endTime: this.getTimeSlotEndTime(assignment.fixedTimeSlot.period)
+        },
+        isFixed: true, // 标记为固定时间课程
+        weekType: assignment.fixedTimeSlot.weekType || 'all',
+        startWeek: assignment.fixedTimeSlot.startWeek || 1,
+        endWeek: assignment.fixedTimeSlot.endWeek || 20
+      };
+      
+      console.log(`✅ [固定时间课程] 成功创建分配: ${fixedAssignment.variableId}`);
+      return fixedAssignment;
+      
+    } catch (error) {
+      console.error(`❌ [固定时间课程] 从教学计划创建分配失败:`, error);
+      return null;
+    }
+  }
+
+  /**
    * 🆕 新增：根据课程类型查找课程
    * 
    * Args:
@@ -2265,6 +2351,41 @@ private getCourseNameSync(courseId: mongoose.Types.ObjectId): string {
     }
     
     return null;
+  }
+
+  /**
+   * 🔧 新增：根据教师ID查找教师对象
+   * 
+   * Args:
+   *   teacherId: 教师ID
+   * 
+   * Returns:
+   *   any | null: 教师信息
+   */
+  private findTeacherById(teacherId: string): any | null {
+    try {
+      // 从教学计划中查找教师
+      for (const plan of this.teachingPlans) {
+        if (plan.courseAssignments) {
+          for (const assignment of plan.courseAssignments) {
+            if (assignment.teacher && assignment.teacher._id && assignment.teacher._id.toString() === teacherId) {
+              return assignment.teacher;
+            }
+            // 如果teacher是字符串ID，也检查
+            if (assignment.teacher && typeof assignment.teacher === 'string' && assignment.teacher === teacherId) {
+              // 这里需要进一步查找，但为了避免循环依赖，我们返回一个基本对象
+              return { _id: teacherId };
+            }
+          }
+        }
+      }
+      
+      console.log(`⚠️ [固定时间课程] 在教学计划中未找到教师: ${teacherId}`);
+      return null;
+    } catch (error) {
+      console.error(`❌ [固定时间课程] 查找教师失败:`, error);
+      return null;
+    }
   }
 
   /**
@@ -2320,7 +2441,13 @@ private getCourseNameSync(courseId: mongoose.Types.ObjectId): string {
   private findRoomForFixedCourse(courseType: string, classInfo: any): any | null {
     // 班会通常在班级固定教室进行
     if (courseType === 'class-meeting') {
-      // 查找班级的固定教室
+      // �� 修复：使用班级的homeroom字段作为固定教室
+      if (classInfo.homeroom) {
+        console.log(`      🔍 [固定时间课程] 班级 ${classInfo.name} 使用固定教室: ${classInfo.homeroom}`);
+        return { _id: classInfo.homeroom }; // 返回教室ID对象
+      }
+      
+      // 如果没有homeroom字段，查找班级的固定教室
       for (const room of this.rooms) {
         if (room.classId && room.classId.toString() === classInfo._id.toString()) {
           return room;
@@ -2328,17 +2455,21 @@ private getCourseNameSync(courseId: mongoose.Types.ObjectId): string {
       }
     }
     
-    // 其他固定时间课程使用班级固定教室或普通教室
+    // 其他固定时间课程使用班级固定教室
+    if (classInfo.homeroom) {
+      return { _id: classInfo.homeroom };
+    }
+    
+    // 如果没有固定教室，查找班级的固定教室
     for (const room of this.rooms) {
       if (room.classId && room.classId.toString() === classInfo._id.toString()) {
         return room;
       }
     }
     
-    // 如果没有固定教室，使用第一个可用教室
+    // 最后才使用第一个可用教室
     return this.rooms.length > 0 ? this.rooms[0] : null;
   }
-
   /**
    * 🆕 新增：获取时间段开始时间
    * 
@@ -2566,5 +2697,92 @@ private getCourseNameSync(courseId: mongoose.Types.ObjectId): string {
     } else {
       console.log(`      ✅ [固定时间课程保护] 所有固定时间课程时间段都受到完全保护`);
     }
+  }
+
+  /**
+   * 🆕 新增：插入固定时间课程（班会等）
+   * 在排课完成后，将固定时间课程直接插入到指定时间段
+   * 
+   * Args:
+   *   fixedTimeAssignments: 固定时间课程数组
+   * 
+   * Returns:
+   *   number: 成功插入的固定时间课程数量
+   */
+  private async insertFixedTimeAssignments(fixedTimeAssignments: Array<{plan: any, assignment: any}>): Promise<number> {
+    console.log(`   🔒 [固定时间课程] 开始插入 ${fixedTimeAssignments.length} 个固定时间课程...`);
+    
+    let insertedCount = 0;
+    
+    for (const {plan, assignment} of fixedTimeAssignments) {
+      try {
+        const course = assignment.course;
+        let teacher = assignment.teacher;
+        
+        // 🔧 处理教师ID的populate问题
+        if (typeof teacher === 'string') {
+          console.log(`      🔧 [固定时间课程] 教师字段是字符串，尝试查找教师对象: ${teacher}`);
+          teacher = this.findTeacherById(teacher);
+          if (!teacher) {
+            console.log(`      ❌ [固定时间课程] 无法找到教师: ${assignment.teacher}`);
+            continue;
+          }
+        }
+        
+        if (!course || !teacher) {
+          console.log(`      ⚠️ [固定时间课程] 教学计划中缺少课程或教师信息`);
+          continue;
+        }
+        
+        // 确定插入位置（班会课程：周一第一节）
+        const timeSlot = {
+          dayOfWeek: 1,  // 周一
+          period: 1,     // 第一节
+          startTime: this.getTimeSlotStartTime(1),
+          endTime: this.getTimeSlotEndTime(1)
+        };
+        
+        // 检查该时间段是否已被占用
+        const isTimeSlotAvailable = !this.isTimeSlotOccupiedByFixedCourse(
+          plan.class._id.toString(), 
+          timeSlot.dayOfWeek, 
+          timeSlot.period, 
+          new Map() // 传入空的Map，因为我们还没有创建固定时间课程
+        );
+        if (!isTimeSlotAvailable) {
+          console.log(`      ⚠️ [固定时间课程] 时间段被占用，跳过: ${plan.class.name} 班会`);
+          continue;
+        }
+        
+        // 查找对应的教室（优先使用班级固定教室）
+        const room = this.findRoomForFixedCourse('class-meeting', plan.class);
+        
+        // 创建固定时间课程分配
+        const fixedAssignment: CourseAssignment = {
+          variableId: `fixed_${plan.class._id}_班会_${timeSlot.dayOfWeek}_${timeSlot.period}`,
+          classId: plan.class._id,
+          courseId: course._id,
+          teacherId: teacher._id,
+          roomId: room ? room._id : null,
+          timeSlot: timeSlot,
+          isFixed: true,
+          weekType: 'all',
+          startWeek: 1,
+          endWeek: 20
+        };
+        
+        // 直接插入到当前分配中
+        this.currentAssignments.set(fixedAssignment.variableId, fixedAssignment);
+        
+        console.log(`      ✅ [固定时间课程] 成功插入: ${plan.class.name} 班会 - 周${timeSlot.dayOfWeek}第${timeSlot.period}节`);
+        insertedCount++;
+        
+      } catch (error) {
+        console.error(`      ❌ [固定时间课程] 插入失败:`, error);
+      }
+    }
+    
+    console.log(`   📊 [固定时间课程] 插入完成: ${insertedCount}/${fixedTimeAssignments.length} 个成功`);
+    return insertedCount;
   }
 }

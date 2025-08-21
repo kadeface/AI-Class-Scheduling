@@ -27,6 +27,15 @@ export interface ICourseAssignment {
     periods: number[];                  // 避免节次
   }[];
   notes?: string;                       // 备注信息
+  // 🆕 新增：固定时间课程支持
+  isFixedTime?: boolean;                // 是否为固定时间课程
+  fixedTimeSlot?: {                     // 固定时间槽配置
+    dayOfWeek: number;                  // 星期几 (1-7)
+    period: number;                      // 第几节 (1-12)
+    weekType: 'all' | 'odd' | 'even';  // 周次类型
+    startWeek: number;                  // 开始周次
+    endWeek: number;                    // 结束周次
+  };
 }
 
 /**
@@ -133,6 +142,40 @@ const CourseAssignmentSchema = new Schema<ICourseAssignment>({
   notes: {
     type: String,
     maxlength: [500, '备注信息不能超过500个字符']
+  },
+  
+  // 🆕 新增：固定时间课程支持
+  isFixedTime: {
+    type: Boolean,
+    default: false
+  },
+  
+  fixedTimeSlot: {
+    dayOfWeek: {
+      type: Number,
+      min: [1, '星期几必须在1-7之间'],
+      max: [7, '星期几必须在1-7之间']
+    },
+    period: {
+      type: Number,
+      min: [1, '节次必须从1开始'],
+      max: [12, '节次不能超过12']
+    },
+    weekType: {
+      type: String,
+      enum: ['all', 'odd', 'even'],
+      default: 'all'
+    },
+    startWeek: {
+      type: Number,
+      min: [1, '开始周次必须从1开始'],
+      max: [30, '开始周次不能超过30']
+    },
+    endWeek: {
+      type: Number,
+      min: [1, '结束周次必须从1开始'],
+      max: [30, '结束周次不能超过30']
+    }
   }
 }, { _id: false });
 
@@ -267,21 +310,7 @@ TeachingPlanSchema.pre('save', function(next) {
  * 中间件：验证连排设置
  */
 TeachingPlanSchema.pre('save', function(next) {
-  const errors: string[] = [];
-  
-  this.courseAssignments.forEach((assignment, index) => {
-    if (assignment.requiresContinuous && !assignment.continuousHours) {
-      errors.push(`课程安排 ${index + 1}: 需要连排时必须指定连排课时数`);
-    }
-    
-    if (assignment.continuousHours && assignment.continuousHours > assignment.weeklyHours) {
-      errors.push(`课程安排 ${index + 1}: 连排课时数不能超过每周课时数`);
-    }
-  });
-  
-  if (errors.length > 0) {
-    return next(new Error(errors.join('; ')));
-  }
+ 
   
   next();
 });

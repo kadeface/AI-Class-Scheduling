@@ -1337,6 +1337,11 @@ function validateFixedTimeCourse(course: any): string[] {
     errors.push('课程类型必须是有效的固定时间课程类型');
   }
 
+  // 🆕 新增：验证课程名称
+  if (!course.name || typeof course.name !== 'string') {
+    errors.push('课程名称不能为空且必须是字符串');
+  }
+
   // 验证星期
   if (typeof course.dayOfWeek !== 'number' || course.dayOfWeek < 1 || course.dayOfWeek > 7) {
     errors.push('星期必须在1-7之间');

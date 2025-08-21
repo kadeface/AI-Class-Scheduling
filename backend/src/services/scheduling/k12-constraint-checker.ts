@@ -25,7 +25,7 @@ export class K12ConstraintChecker {
     room: any, 
     currentAssignments: Map<string, any>
   ): boolean {
-    console.log(`         🔍 [约束检测] 检查变量 ${variable.id} 的约束...`);
+    //console.log(`         🔍 [约束检测] 检查变量 ${variable.id} 的约束...`);
 
     // 检查硬约束
     if (!this.checkHardConstraints(variable, timeSlot, room, currentAssignments)) {
@@ -35,9 +35,9 @@ export class K12ConstraintChecker {
 
     // 检查软约束（不阻止排课，但影响评分）
     const softConstraintScore = this.checkSoftConstraints(variable, timeSlot, room, currentAssignments);
-    console.log(`         📊 软约束评分: ${softConstraintScore}`);
+   // console.log(`         📊 软约束评分: ${softConstraintScore}`);
 
-    console.log(`         ✅ 约束检查通过`);
+   // console.log(`         ✅ 约束检查通过`);
     return true;
   }
 
@@ -56,7 +56,7 @@ export class K12ConstraintChecker {
     room: any, 
     currentAssignments: Map<string, any>
   ): boolean {
-    console.log(`            🔍 [硬约束] 检查硬约束...`);
+    //console.log(`            🔍 [硬约束] 检查硬约束...`);
 
     // 1. 教师冲突检测：教师不可同时在两个班上课
     if (this.checkTeacherConflict(variable, timeSlot, currentAssignments)) {
@@ -88,7 +88,7 @@ export class K12ConstraintChecker {
       return false;
     }
 
-    console.log(`               ✅ 硬约束检查通过`);
+    //console.log(`               ✅ 硬约束检查通过`);
     return true;
   }
 
@@ -107,7 +107,7 @@ export class K12ConstraintChecker {
     room: any, 
     currentAssignments: Map<string, any>
   ): number {
-    console.log(`            🔍 [软约束] 计算软约束评分...`);
+   // console.log(`            🔍 [软约束] 计算软约束评分...`);
 
     let totalScore = 0;
     let maxScore = 0;
@@ -133,12 +133,12 @@ export class K12ConstraintChecker {
     maxScore += 25;
 
     const finalScore = Math.round((totalScore / maxScore) * 100);
-    console.log(`               📊 软约束评分详情:`);
-    console.log(`                  - 主科分散度: ${dispersionScore}/25`);
-    console.log(`                  - 教师工作量: ${workloadScore}/25`);
-    console.log(`                  - 学生疲劳度: ${fatigueScore}/25`);
-    console.log(`                  - 课程分布: ${distributionScore}/25`);
-    console.log(`                  - 总分: ${finalScore}/100`);
+    //console.log(`               📊 软约束评分详情:`);
+    //console.log(`                  - 主科分散度: ${dispersionScore}/25`);
+    //console.log(`                  - 教师工作量: ${workloadScore}/25`);
+    //console.log(`                  - 学生疲劳度: ${fatigueScore}/25`);
+    //console.log(`                  - 课程分布: ${distributionScore}/25`);
+    //console.log(`                  - 总分: ${finalScore}/100`);
 
     return finalScore;
   }
@@ -192,7 +192,7 @@ export class K12ConstraintChecker {
    * 检查课室要求
    */
   private checkRoomRequirements(variable: any, room: any): boolean {
-    console.log(`               🔍 [课室要求] 检查课室 ${room._id} 是否满足课程要求...`);
+    //console.log(`               🔍 [课室要求] 检查课室 ${room._id} 是否满足课程要求...`);
     
     try {
       // 基本课室信息检查
@@ -248,7 +248,7 @@ export class K12ConstraintChecker {
         }
       }
 
-      console.log(`                  ✅ 课室要求检查通过`);
+      //console.log(`                  ✅ 课室要求检查通过`);
       return true;
 
     } catch (error) {

@@ -1,6 +1,8 @@
 /**
  * 排课服务
  * 
+ * 🔧 调试信息规则：循环数据只输出前3条，避免日志冗长
+ * 
  * 架构说明：
  * 1. 冲突检测：由K12排课引擎统一处理，包括硬约束和软约束
  * 2. 排课算法：K12引擎实现混合算法策略（约束满足 + 局部搜索优化）
@@ -604,7 +606,8 @@ export class SchedulingService {
     const query: any = {
       academicYear,
       semester,
-      status: 'approved',
+      // 允许草稿和已批准状态的教学计划进行排课
+      status: { $in: ['draft', 'approved'] },
       isActive: true
     };
 
@@ -972,6 +975,8 @@ export class SchedulingService {
   /**
    * 生成排课变量
    * 
+   * 🔧 调试信息规则：循环数据只输出前3条，避免日志冗长
+   * 
    * Args:
    *   teachingPlans: 教学计划列表
    * 
@@ -984,34 +989,38 @@ export class SchedulingService {
     console.log(`🔍 [generateScheduleVariables] 开始生成排课变量...`);
     console.log(`   📊 教学计划数量: ${teachingPlans.length}`);
 
+    // 🔧 简化调试信息：只输出前3条，避免日志冗长
+    let planCount = 0;
+    let assignmentCount = 0;
+    let variableCount = 0;
+    
     for (const plan of teachingPlans) {
-      console.log(`   📋 处理教学计划: 班级 ${plan.class}, 课程数量: ${plan.courseAssignments.length}`);
+      if (planCount < 3) {
+        console.log(`   📋 处理教学计划: 班级 ${plan.class}, 课程数量: ${plan.courseAssignments.length}`);
+      }
       
       for (const assignment of plan.courseAssignments) {
         // 获取课程信息（通过populate加载的课程对象）
         const course = assignment.course as any;
         
-        console.log(`      📚 课程分配: ${course?.name || '未知课程'} (${course?.subject || '未知科目'})`);
-        console.log(`         - 教师对象: ${assignment.teacher}`);
-        console.log(`         - 教师对象类型: ${typeof assignment.teacher}`);
-        console.log(`         - 教师对象是否为ObjectId: ${assignment.teacher instanceof mongoose.Types.ObjectId}`);
-        if (assignment.teacher && typeof assignment.teacher === 'object' && assignment.teacher._id) {
-          console.log(`         - 教师ID: ${assignment.teacher._id}`);
-          console.log(`         - 教师ID类型: ${typeof assignment.teacher._id}`);
+        if (assignmentCount < 3) {
+          console.log(`      📚 课程分配: ${course?.name || '未知课程'} (${course?.subject || '未知科目'})`);
+          console.log(`         - 每周课时: ${assignment.weeklyHours}`);
         }
-        console.log(`         - 每周课时: ${assignment.weeklyHours}`);
         
         // 为每周需要的课时创建变量
         for (let hour = 0; hour < assignment.weeklyHours; hour++) {
-          console.log(`         🔄 创建变量 ${hour + 1}/${assignment.weeklyHours}:`);
-          console.log(`            - 教师对象: ${assignment.teacher}`);
-          console.log(`            - 教师对象类型: ${typeof assignment.teacher}`);
+          if (variableCount < 3) {
+            console.log(`         🔄 创建变量 ${hour + 1}/${assignment.weeklyHours}`);
+          }
           
           // 🔥 修复：正确提取教师ID
           let teacherId: mongoose.Types.ObjectId;
           if (assignment.teacher && typeof assignment.teacher === 'object' && assignment.teacher._id) {
             teacherId = assignment.teacher._id;
-            console.log(`            - 提取的教师ID: ${teacherId}`);
+            if (variableCount < 3) {
+              console.log(`            - 教师ID: ${teacherId}, 班级ID: ${plan.class._id || plan.class}`);
+            }
           } else {
             console.error(`            ❌ 无法提取教师ID: ${assignment.teacher}`);
             continue; // 跳过这个变量
@@ -1021,10 +1030,8 @@ export class SchedulingService {
           let classId: mongoose.Types.ObjectId;
           if (plan.class && typeof plan.class === 'object' && plan.class._id) {
             classId = plan.class._id;
-            console.log(`            - 提取的班级ID: ${classId}`);
           } else if (plan.class instanceof mongoose.Types.ObjectId) {
             classId = plan.class;
-            console.log(`            - 班级ID (ObjectId): ${classId}`);
           } else {
             console.error(`            ❌ 无法提取班级ID: ${plan.class}`);
             continue; // 跳过这个变量
@@ -1049,34 +1056,39 @@ export class SchedulingService {
           };
 
           variables.push(variable);
+          variableCount++;
         }
+        assignmentCount++;
       }
+      planCount++;
     }
 
-    // 添加关键调试日志
+    // 🔧 简化调试信息：只输出关键统计信息
     console.log(`🔍 排课变量生成完成，共 ${variables.length} 个变量`);
     
-    // 🔥 新增：详细检查教师ID分布
+    // 🔥 简化：只检查教师ID分布的关键信息
     const teacherIdCounts = new Map<string, number>();
-    const teacherIdTypes = new Map<string, string>();
     
-    variables.forEach((v, index) => {
-      console.log(`   📋 变量 ${index + 1}: teacherId=${v.teacherId}, 类型=${typeof v.teacherId}`);
-      
+    variables.forEach((v) => {
       if (v.teacherId === null || v.teacherId === undefined) {
-        console.log(`   ⚠️ 警告：变量 ${index + 1} 的 teacherId 为 ${v.teacherId}`);
+        console.log(`   ⚠️ 警告：发现无效的 teacherId`);
         return;
       }
       
       const teacherIdStr = v.teacherId.toString();
       teacherIdCounts.set(teacherIdStr, (teacherIdCounts.get(teacherIdStr) || 0) + 1);
-      teacherIdTypes.set(teacherIdStr, typeof v.teacherId);
     });
     
-    console.log(`📊 教师ID分布检查:`);
+    // 只输出前3个教师的分布信息
+    let teacherCount = 0;
+    console.log(`📊 教师ID分布检查 (显示前3个):`);
     for (const [teacherId, count] of teacherIdCounts) {
-      const type = teacherIdTypes.get(teacherId);
-      console.log(`   - 教师 ${teacherId}: ${count} 门课程 (类型: ${type})`);
+      if (teacherCount < 3) {
+        console.log(`   - 教师 ${teacherId}: ${count} 门课程`);
+        teacherCount++;
+      } else {
+        break;
+      }
     }
     
     // 检查是否有异常的教师ID分布

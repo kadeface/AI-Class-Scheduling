@@ -548,8 +548,9 @@ export interface RoomConstraintsRequest {
  */
 export interface FixedTimeCourseRequest {
   type: 'class-meeting' | 'flag-raising' | 'eye-exercise' | 'morning-reading' | 'afternoon-reading' | 'cleaning' | 'other';
-  dayOfWeek: number;                   // 星期几 (1-7)
-  period: number;                       // 第几节课 (1-12)
+  courseId: string;                     // 🆕 新增：课程ID，用于关联具体的课程信息
+  dayOfWeek: number;                    // 星期几 (1-7)
+  period: number;                        // 第几节课 (1-12)
   weekType: 'all' | 'odd' | 'even';    // 周次类型
   startWeek: number;                    // 开始周次
   endWeek: number;                      // 结束周次

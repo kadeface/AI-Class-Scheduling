@@ -432,7 +432,7 @@ export class K12RoomAllocator {
         }
       }
 
-      console.log(`         ✅ 课室要求检查通过`);
+      //console.log(`         ✅ 课室要求检查通过`);
       return true;
 
     } catch (error) {

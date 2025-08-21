@@ -675,11 +675,26 @@ export const getCurrentPlan = async (req: Request, res: Response): Promise<void>
  */
 export const getAvailableAcademicYears = async (req: Request, res: Response): Promise<void> => {
   try {
-    // 获取所有已批准且活跃的教学计划的学年
+    console.log('🔍 开始获取可用学年...');
+    
+    // 先检查数据库连接
+    const dbState = mongoose.connection.readyState;
+    console.log('📊 数据库连接状态:', dbState === 1 ? '已连接' : '未连接');
+    
+    // 检查教学计划总数
+    const totalPlans = await TeachingPlan.countDocuments({});
+    console.log('📚 教学计划总数:', totalPlans);
+    
+    // 检查活跃的教学计划数量
+    const activePlans = await TeachingPlan.countDocuments({ isActive: true });
+    console.log('✅ 活跃教学计划数量:', activePlans);
+    
+    // 获取所有可用的教学计划学年（不限制状态）
     const academicYears = await TeachingPlan.distinct('academicYear', {
-      status: 'approved',
       isActive: true
     });
+    
+    console.log('🎯 查询到的学年:', academicYears);
 
     // 按学年倒序排列（最新的在前）
     const sortedYears = academicYears.sort((a, b) => {

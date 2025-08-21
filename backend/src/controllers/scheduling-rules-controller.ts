@@ -28,6 +28,18 @@ import mongoose from 'mongoose';
  */
 export const createSchedulingRules = async (req: Request, res: Response): Promise<void> => {
   try {
+    // 🆕 添加调试日志
+    console.log('=== 后端调试：接收到的请求数据 ===');
+    console.log('完整的 req.body:', JSON.stringify(req.body, null, 2));
+    console.log('fixedTimeCourses 类型:', typeof req.body.courseArrangementRules?.fixedTimeCourses);
+    console.log('fixedTimeCourses 内容:', req.body.courseArrangementRules?.fixedTimeCourses);
+    if (req.body.courseArrangementRules?.fixedTimeCourses?.courses) {
+      console.log('courses 类型:', typeof req.body.courseArrangementRules.fixedTimeCourses.courses);
+      console.log('courses 内容:', req.body.courseArrangementRules.fixedTimeCourses.courses);
+      console.log('courses 是否为数组:', Array.isArray(req.body.courseArrangementRules.fixedTimeCourses.courses));
+    }
+    console.log('=== 后端调试结束 ===');
+    
     const rulesData: CreateSchedulingRulesRequest = req.body;
     
     // 获取用户ID，优先使用请求中的用户ID，否则使用系统默认ID
@@ -343,6 +355,19 @@ export const getSchedulingRulesById = async (req: Request, res: Response): Promi
 export const updateSchedulingRules = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    
+    // 🆕 添加调试日志
+    console.log('=== 后端调试：更新时接收到的请求数据 ===');
+    console.log('完整的 req.body:', JSON.stringify(req.body, null, 2));
+    console.log('fixedTimeCourses 类型:', typeof req.body.courseArrangementRules?.fixedTimeCourses);
+    console.log('fixedTimeCourses 内容:', req.body.courseArrangementRules?.fixedTimeCourses);
+    if (req.body.courseArrangementRules?.fixedTimeCourses?.courses) {
+      console.log('courses 类型:', typeof req.body.courseArrangementRules.fixedTimeCourses.courses);
+      console.log('courses 内容:', req.body.courseArrangementRules.fixedTimeCourses.courses);
+      console.log('courses 是否为数组:', Array.isArray(req.body.courseArrangementRules.fixedTimeCourses.courses));
+    }
+    console.log('=== 后端调试结束 ===');
+    
     const updateData: UpdateSchedulingRulesRequest = req.body;
     // TODO: 实现用户认证中间件后启用
     // const userId = req.user?.id;

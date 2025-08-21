@@ -50,7 +50,8 @@ import {
   WEEKDAY_OPTIONS,
   DEFAULT_CORE_SUBJECT_STRATEGY,
   getRecommendedCoreSubjects,
-  CORE_SUBJECT_DISTRIBUTION_MODES
+  CORE_SUBJECT_DISTRIBUTION_MODES,
+  courseApi
 } from '@/lib/api';
 import { formatDateTime, cn } from '@/lib/utils';
 
@@ -94,6 +95,29 @@ export default function SchedulingRulesPage() {
       'enableCoreSubjectStrategy' in formData.courseArrangementRules.coreSubjectStrategy
       ? formData.courseArrangementRules.coreSubjectStrategy
       : DEFAULT_CORE_SUBJECT_STRATEGY;
+  };
+
+  /**
+   * 根据课程类型获取对应的课程名称
+   * 
+   * Args:
+   *   courseType: 课程类型（如 'class-meeting'）
+   * 
+   * Returns:
+   *   string: 课程名称
+   */
+  const getCourseNameByType = (courseType: string): string => {
+    const courseTypeMap: { [key: string]: string } = {
+      'class-meeting': '班会',
+      'flag-raising': '升旗仪式',
+      'eye-exercise': '眼保健操',
+      'morning-reading': '晨读',
+      'afternoon-reading': '午读',
+      'cleaning': '大扫除',
+      'other': '其他'
+    };
+    
+    return courseTypeMap[courseType] || courseType;
   };
 
   // 状态管理
@@ -188,6 +212,33 @@ export default function SchedulingRulesPage() {
     },
     isDefault: false,
   });
+
+  // 🆕 添加简化的固定时间课程状态管理函数
+  const updateFixedTimeCourses = (updater: (courses: any[]) => any[]) => {
+    setFormData(prev => {
+      const currentCourses = prev.courseArrangementRules?.fixedTimeCourses?.courses || [];
+      const newCourses = updater(currentCourses);
+      
+      return {
+        ...prev,
+        courseArrangementRules: {
+          ...prev.courseArrangementRules,
+          fixedTimeCourses: {
+            ...prev.courseArrangementRules?.fixedTimeCourses,
+            courses: newCourses
+          }
+        }
+      };
+    });
+  };
+
+  const updateFixedTimeCourse = (index: number, updates: Partial<any>) => {
+    updateFixedTimeCourses(courses => {
+      const newCourses = [...courses];
+      newCourses[index] = { ...newCourses[index], ...updates };
+      return newCourses;
+    });
+  };
 
   // 复制规则表单数据
   const [copyFormData, setCopyFormData] = useState({
@@ -426,6 +477,16 @@ export default function SchedulingRulesPage() {
     setOperationError('');
     
     try {
+      // 🆕 添加调试日志
+      console.log('=== 调试：formData 详细内容 ===');
+      console.log('完整的 formData:', formData);
+      console.log('fixedTimeCourses 类型:', typeof formData.courseArrangementRules.fixedTimeCourses);
+      console.log('fixedTimeCourses 内容:', formData.courseArrangementRules.fixedTimeCourses);
+      console.log('courses 类型:', typeof formData.courseArrangementRules.fixedTimeCourses?.courses);
+      console.log('courses 内容:', formData.courseArrangementRules.fixedTimeCourses?.courses);
+      console.log('courses 是否为数组:', Array.isArray(formData.courseArrangementRules.fixedTimeCourses?.courses));
+      console.log('=== 调试结束 ===');
+      
       console.log('开始创建排课规则:', formData);
       const response = await schedulingRulesApi.create(formData);
       
@@ -488,6 +549,16 @@ export default function SchedulingRulesPage() {
     setOperationError('');
     
     try {
+      // 🆕 添加调试日志
+      console.log('=== 调试：更新时的 formData 详细内容 ===');
+      console.log('完整的 formData:', formData);
+      console.log('fixedTimeCourses 类型:', typeof formData.courseArrangementRules.fixedTimeCourses);
+      console.log('fixedTimeCourses 内容:', formData.courseArrangementRules.fixedTimeCourses);
+      console.log('courses 类型:', typeof formData.courseArrangementRules.fixedTimeCourses?.courses);
+      console.log('courses 内容:', formData.courseArrangementRules.fixedTimeCourses?.courses);
+      console.log('courses 是否为数组:', Array.isArray(formData.courseArrangementRules.fixedTimeCourses?.courses));
+      console.log('=== 调试结束 ===');
+      
       console.log('开始更新排课规则:', formData);
       const response = await schedulingRulesApi.update(selectedRules._id, formData);
       if (response.success) {
@@ -1821,18 +1892,10 @@ export default function SchedulingRulesPage() {
                                   <Select
                                     value={course.type}
                                     onValueChange={(value) => {
-                                      const newCourses = [...(formData.courseArrangementRules.fixedTimeCourses?.courses || [])];
-                                      newCourses[index] = { ...newCourses[index], type: value as any };
-                                      setFormData(prev => ({
-                                        ...prev,
-                                        courseArrangementRules: {
-                                          ...prev.courseArrangementRules,
-                                          fixedTimeCourses: {
-                                            ...prev.courseArrangementRules.fixedTimeCourses,
-                                            courses: newCourses
-                                          }
-                                        }
-                                      }));
+                                      updateFixedTimeCourse(index, { 
+                                        type: value as any,
+                                        name: getCourseNameByType(value) // 🆕 自动更新名称
+                                      });
                                     }}
                                   >
                                     <option value="class-meeting">班会</option>
@@ -2033,6 +2096,7 @@ export default function SchedulingRulesPage() {
                             onClick={() => {
                               const newCourse = {
                                 type: 'class-meeting' as const,
+                                name: getCourseNameByType('class-meeting'), // 自动获取名称
                                 dayOfWeek: 1,
                                 period: 1,
                                 weekType: 'all' as const,
@@ -2040,17 +2104,7 @@ export default function SchedulingRulesPage() {
                                 endWeek: 20,
                                 notes: ''
                               };
-                              const newCourses = [...(formData.courseArrangementRules.fixedTimeCourses?.courses || []), newCourse];
-                              setFormData(prev => ({
-                                ...prev,
-                                courseArrangementRules: {
-                                  ...prev.courseArrangementRules,
-                                  fixedTimeCourses: {
-                                    ...prev.courseArrangementRules.fixedTimeCourses,
-                                    courses: newCourses
-                                  }
-                                }
-                              }));
+                              updateFixedTimeCourses(courses => [...courses, newCourse]);
                             }}
                             className="w-full"
                           >
@@ -2070,16 +2124,18 @@ export default function SchedulingRulesPage() {
                             <Switch
                               id="fixedTimePriority"
                               checked={formData.courseArrangementRules.fixedTimeCourses?.priority || false}
-                              onCheckedChange={(checked) => setFormData(prev => ({
-                                ...prev,
-                                courseArrangementRules: {
-                                  ...prev.courseArrangementRules,
-                                  fixedTimeCourses: {
-                                    ...prev.courseArrangementRules.fixedTimeCourses,
-                                    priority: checked
+                              onCheckedChange={(checked) => {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  courseArrangementRules: {
+                                    ...prev.courseArrangementRules,
+                                    fixedTimeCourses: {
+                                      ...prev.courseArrangementRules.fixedTimeCourses,
+                                      priority: checked
+                                    }
                                   }
-                                }
-                              }))}
+                                }));
+                              }}
                             />
                             <Label htmlFor="fixedTimePriority">固定时间课程优先</Label>
                           </div>
@@ -2088,16 +2144,18 @@ export default function SchedulingRulesPage() {
                             <Switch
                               id="allowFixedTimeOverride"
                               checked={formData.courseArrangementRules.fixedTimeCourses?.allowOverride || false}
-                              onCheckedChange={(checked) => setFormData(prev => ({
-                                ...prev,
-                                courseArrangementRules: {
-                                  ...prev.courseArrangementRules,
-                                  fixedTimeCourses: {
-                                    ...prev.courseArrangementRules.fixedTimeCourses,
-                                    allowOverride: checked
+                              onCheckedChange={(checked) => {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  courseArrangementRules: {
+                                    ...prev.courseArrangementRules,
+                                    fixedTimeCourses: {
+                                      ...prev.courseArrangementRules.fixedTimeCourses,
+                                      allowOverride: checked
+                                    }
                                   }
-                                }
-                              }))}
+                                }));
+                              }}
                             />
                             <Label htmlFor="allowFixedTimeOverride">允许手动调整</Label>
                           </div>
@@ -2107,16 +2165,18 @@ export default function SchedulingRulesPage() {
                           <Label className="text-sm">冲突处理策略</Label>
                           <Select
                             value={formData.courseArrangementRules.fixedTimeCourses?.conflictStrategy || 'strict'}
-                            onValueChange={(value) => setFormData(prev => ({
-                              ...prev,
-                              courseArrangementRules: {
-                                ...prev.courseArrangementRules,
-                                fixedTimeCourses: {
-                                  ...prev.courseArrangementRules.fixedTimeCourses,
-                                  conflictStrategy: value as any
+                            onValueChange={(value) => {
+                              setFormData(prev => ({
+                                ...prev,
+                                courseArrangementRules: {
+                                  ...prev.courseArrangementRules,
+                                  fixedTimeCourses: {
+                                    ...prev.courseArrangementRules.fixedTimeCourses,
+                                    conflictStrategy: value as any
+                                  }
                                 }
-                              }
-                            }))}
+                              }));
+                            }}
                           >
                             <option value="strict">严格模式（不允许冲突）</option>
                             <option value="flexible">灵活模式（允许调整其他课程）</option>
@@ -3250,31 +3310,26 @@ export default function SchedulingRulesPage() {
                               <div className="grid gap-4 md:grid-cols-4">
                                 <div>
                                   <Label className="text-sm">课程类型</Label>
-                                  <Select
-                                    value={course.type}
-                                    onValueChange={(value) => {
-                                      const newCourses = [...(formData.courseArrangementRules.fixedTimeCourses?.courses || [])];
-                                      newCourses[index] = { ...newCourses[index], type: value as any };
-                                      setFormData(prev => ({
-                                        ...prev,
-                                        courseArrangementRules: {
-                                          ...prev.courseArrangementRules,
-                                          fixedTimeCourses: {
-                                            ...prev.courseArrangementRules.fixedTimeCourses,
-                                            courses: newCourses
-                                          }
-                                        }
-                                      }));
-                                    }}
-                                  >
-                                    <option value="class-meeting">班会</option>
-                                    <option value="flag-raising">升旗仪式</option>
-                                    <option value="eye-exercise">眼保健操</option>
-                                    <option value="morning-reading">晨读</option>
-                                    <option value="afternoon-reading">午读</option>
-                                    <option value="cleaning">大扫除</option>
-                                    <option value="other">其他</option>
-                                  </Select>
+                                  
+                                    <Select
+                                      value={course.type}
+                                      onValueChange={(value) => {
+                                        updateFixedTimeCourse(index, { 
+                                          type: value as any,
+                                          name: getCourseNameByType(value) // 🆕 自动更新名称
+                                        });
+                                      }}
+                                    >
+                                      <option value="class-meeting">班会</option>
+                                      <option value="flag-raising">升旗仪式</option>
+                                      <option value="eye-exercise">眼保健操</option>
+                                      <option value="morning-reading">晨读</option>
+                                      <option value="afternoon-reading">午读</option>
+                                      <option value="cleaning">大扫除</option>
+                                      <option value="other">其他</option>
+                                    </Select>
+                                  
+                                  
                                 </div>
                                 
                                 <div>
@@ -3465,6 +3520,7 @@ export default function SchedulingRulesPage() {
                             onClick={() => {
                               const newCourse = {
                                 type: 'class-meeting' as const,
+                                name: getCourseNameByType('class-meeting'), // �� 自动获取名称
                                 dayOfWeek: 1,
                                 period: 1,
                                 weekType: 'all' as const,
@@ -3472,17 +3528,7 @@ export default function SchedulingRulesPage() {
                                 endWeek: 20,
                                 notes: ''
                               };
-                              const newCourses = [...(formData.courseArrangementRules.fixedTimeCourses?.courses || []), newCourse];
-                              setFormData(prev => ({
-                                ...prev,
-                                courseArrangementRules: {
-                                  ...prev.courseArrangementRules,
-                                  fixedTimeCourses: {
-                                    ...prev.courseArrangementRules.fixedTimeCourses,
-                                    courses: newCourses
-                                  }
-                                }
-                              }));
+                              updateFixedTimeCourses(courses => [...courses, newCourse]);
                             }}
                             className="w-full"
                           >

@@ -606,6 +606,7 @@ export interface ICoreSubjectStrategy {
  */
 export interface FixedTimeCourse {
   type: 'class-meeting' | 'flag-raising' | 'eye-exercise' | 'morning-reading' | 'afternoon-reading' | 'cleaning' | 'other';
+  name: string; // 🆕 新增：课程名称，直接存储显示名称
   dayOfWeek: number;
   period: number;
   weekType: 'all' | 'odd' | 'even';
