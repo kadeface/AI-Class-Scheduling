@@ -636,30 +636,7 @@ export class K12SchedulingEngine {
     return null;
   }
 
-  /**
-   * 检查时间槽是否可用
-   */
-  private isTimeSlotAvailable(variable: ScheduleVariable, timeSlot: TimeSlot): boolean {
-    // 检查教师冲突
-    for (const assignment of Array.from(this.currentAssignments.values())) {
-      if (assignment.teacherId.toString() === variable.teacherId.toString() &&
-          assignment.timeSlot.dayOfWeek === timeSlot.dayOfWeek &&
-          assignment.timeSlot.period === timeSlot.period) {
-        return false;
-      }
-    }
 
-    // 检查班级冲突
-    for (const assignment of Array.from(this.currentAssignments.values())) {
-      if (assignment.classId.toString() === variable.classId.toString() &&
-          assignment.timeSlot.dayOfWeek === timeSlot.dayOfWeek &&
-          assignment.timeSlot.period === timeSlot.period) {
-        return false;
-      }
-    }
-
-    return true;
-  }
 
   /**
    * 生成最终排课结果
@@ -1449,7 +1426,7 @@ private isAssignmentFeasible(variable: ScheduleVariable, timeSlot: BaseTimeSlot)
   
   // 4. 检查核心课程分散度约束
   if (this.isCoreSubject(variable) && 
-    this.hasCoreSubjectDistributionConflict(variable, timeSlot.dayOfWeek)) {
+    this.hasCoreSubjectDistributionConflict(variable, timeSlot.dayOfWeek, timeSlot.period)) {
     return false;
   }  
   
@@ -1600,20 +1577,20 @@ private getSubjectAssignedHours(classId: mongoose.Types.ObjectId, subject: strin
 }
 
 
-private hasCoreSubjectDistributionConflict(variable: ScheduleVariable, dayOfWeek: number): boolean {
-  // 检查该科目在过去几天是否过于集中
-  const recentDays = [dayOfWeek - 1, dayOfWeek - 2, dayOfWeek - 3].filter(d => d > 0);
+private hasCoreSubjectDistributionConflict(variable: ScheduleVariable, dayOfWeek: number, period: number): boolean {
+  // 检查该科目在过去几天同一节次是否过于集中
+  const recentDays = [dayOfWeek - 1, dayOfWeek - 2].filter(d => d > 0);
   let consecutiveCount = 0;
   
   for (const day of recentDays) {
-    // 检查该天是否已有同科目课程
-    if (this.hasSubjectOnDay(variable.classId, variable.subject || '', day)) {
+    // 检查该天同一节次是否已有同科目课程
+    if (this.hasSubjectOnDayAndPeriod(variable.classId, variable.subject || '', day, period)) {
       consecutiveCount++;
     }
   }
   
-  // 核心课程不应连续3天以上在同一时间段
-  return consecutiveCount >= 3;
+  // 核心课程不应连续2天以上在同一节次
+  return consecutiveCount >= 2;
 }
 
 /**
@@ -1623,6 +1600,25 @@ private hasSubjectOnDay(classId: mongoose.Types.ObjectId, subject: string, dayOf
   for (const assignment of this.currentAssignments.values()) {
     if (assignment.classId.toString() === classId.toString() &&
         assignment.timeSlot.dayOfWeek === dayOfWeek) {
+      
+      // 获取课程信息以判断科目
+      const courseInfo = this.findCourseInTeachingPlans(assignment.courseId);
+      if (courseInfo && courseInfo.subject === subject) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * 检查指定班级在指定日期和节次是否已有指定科目课程
+ */
+private hasSubjectOnDayAndPeriod(classId: mongoose.Types.ObjectId, subject: string, dayOfWeek: number, period: number): boolean {
+  for (const assignment of this.currentAssignments.values()) {
+    if (assignment.classId.toString() === classId.toString() &&
+        assignment.timeSlot.dayOfWeek === dayOfWeek &&
+        assignment.timeSlot.period === period) {
       
       // 获取课程信息以判断科目
       const courseInfo = this.findCourseInTeachingPlans(assignment.courseId);
@@ -2073,7 +2069,7 @@ private getK12CoreSubjectGoldenTimeBonus(variable: ScheduleVariable, timeSlot: B
   let bonus = 0;
   
   // 上午黄金时段 (1-4节)
-  if (timeSlot.period >= 1 && timeSlot.period <= 4) {
+  if (timeSlot.period >= 1 && timeSlot.period <= 3) {
     bonus += 100;
     
     // 第一节和第二节为最佳时段
