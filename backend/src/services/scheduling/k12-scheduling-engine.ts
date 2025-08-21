@@ -15,6 +15,7 @@ import { K12ConstraintChecker } from './k12-constraint-checker';
 import { K12ScoreOptimizer } from './k12-score-optimizer';
 import { K12RoomAllocator } from './k12-room-allocator';
 import { Schedule } from '../../models/Schedule';
+import { PeriodTimeConfig } from '../../models/PeriodTimeConfig';
 
 
 // 🆕 新增：分离时间维度和班级维度的类型定义
@@ -59,6 +60,7 @@ export class K12SchedulingEngine {
   // 🔥 新增：排课配置信息
   private academicYear: string = '';
   private semester: string = '';
+  private periodTimeConfigs: any[] = []; // 动态课程时间配置
 
     // 🔥 新增：主引擎相关属性
   private rules: any; // 排课规则
@@ -152,6 +154,10 @@ export class K12SchedulingEngine {
     // 🔥 新增：保存排课配置
     this.academicYear = academicYear || '2025-2026';
     this.semester = semester || '1';
+    
+    // 🔥 新增：动态获取课程时间配置
+    console.log('🔍 [动态配置] 开始获取课程时间配置...');
+    await this.loadPeriodTimeConfigs();
 
     try {
       // 🔧 修复：现在调用新的分阶段排课方法
@@ -2060,7 +2066,7 @@ private getCourseCognitiveLoad(variable: ScheduleVariable): number {
 /**
  * 获取时间槽脑状态等级
  * 
- * 基于脑科学规律：
+ * 基于脑科学规律，动态适应不同的节次配置：
  * - 峰值状态(3)：逻辑思维或创造力最强时段
  * - 正常状态(2)：注意力一般，适合常规课程
  * - 低峰状态(1)：注意力下降，适合体力活动
@@ -2071,24 +2077,26 @@ private getCourseCognitiveLoad(variable: ScheduleVariable): number {
 private getTimeSlotBrainState(timeSlot: BaseTimeSlot): number {
   const { period } = timeSlot;
   
-  // 峰值状态：逻辑思维最强时段
-  if (period >= 1 && period <= 2) {
-    return 3;
-  }
-  
-  // 峰值状态：创造力较强时段
-  if (period >= 5 && period <= 6) {
-    return 3;
-  }
-  
-  // 正常状态：注意力一般时段
-  if (period === 3 || period === 4) {
-    return 2;
-  }
-  
-  // 低峰状态：注意力下降时段
-  if (period >= 7 && period <= 8) {
-    return 1;
+  // 使用动态配置判断上午/下午
+  if (this.isMorningPeriod(period)) {
+    // 上午节次：逻辑思维较强
+    if (period === 1 || period === 2) {
+      return 3; // 峰值状态：注意力最集中
+    } else if (period === 3) {
+      return 2; // 正常状态：注意力开始下降
+    }
+  } else if (this.isAfternoonPeriod(period)) {
+    // 下午节次：创造力较强
+    const totalPeriods = this.getTotalPeriods();
+    const afternoonStartPeriod = this.periodTimeConfigs.find(c => c.startTime >= '12:00')?.period || 4;
+    
+    if (period === afternoonStartPeriod || period === afternoonStartPeriod + 1) {
+      return 3; // 峰值状态：下午注意力恢复
+    } else if (period === totalPeriods - 1 || period === totalPeriods) {
+      return 1; // 低峰状态：注意力下降
+    } else {
+      return 2; // 正常状态
+    }
   }
   
   return 2; // 默认正常状态
@@ -2275,11 +2283,10 @@ private getBasicTimePreference(variable: ScheduleVariable, timeSlot: BaseTimeSlo
 /**
  * 基于脑科学的K12核心课程黄金时段奖励
  * 
- * 科学原理：
- * - 上午1-3节：逻辑思维峰值时段，适合数学、物理等高认知负荷课程
- * - 上午4节：注意力开始下降，适合中等认知负荷课程
- * - 下午5-6节：创造力峰值时段，适合语文、英语等语言类课程
- * - 下午7-8节：体力活动时段，适合体育、音乐等低认知负荷课程
+ * 科学原理：动态适应不同的节次配置
+ * - 上午节次：逻辑思维峰值时段，适合数学、物理等高认知负荷课程
+ * - 下午节次：创造力峰值时段，适合语文、英语等语言类课程
+ * - 支持灵活配置：如上午3节，下午4节等
  * 
  * @param variable 排课变量
  * @param timeSlot 时间槽
@@ -2291,69 +2298,50 @@ private getK12CoreSubjectGoldenTimeBonus(variable: ScheduleVariable, timeSlot: B
   let bonus = 0;
   const subject = variable.subject?.toLowerCase() || '';
   
-  // 基于脑科学的时间段分类
-  if (timeSlot.period >= 1 && timeSlot.period <= 3) {
-    // 上午峰值时段 (1-3节)：逻辑思维最强，注意力最集中
-    bonus += 120;
-    
-    // 第1-2节为最佳逻辑思维时段
+  // 使用动态配置判断上午/下午节次
+  if (this.isMorningPeriod(timeSlot.period)) {
+    // 上午节次：逻辑思维较强
     if (timeSlot.period === 1 || timeSlot.period === 2) {
+      // 第1-2节：最佳逻辑思维时段
+      bonus += 120;
       bonus += 60;
       
       // 数学、物理等逻辑思维课程特别适合
       if (subject.includes('数学') || subject.includes('物理') || subject.includes('化学')) {
         bonus += 40;
       }
-    }
-    
-    // 第3节：注意力开始下降，但仍适合核心课程
-    if (timeSlot.period === 3) {
+    } else if (timeSlot.period === 3) {
+      // 第3节：注意力开始下降，但仍适合核心课程
+      bonus += 100;
       bonus += 20;
     }
-  }
-  
-  // 上午过渡时段 (4节)：注意力下降，适合中等认知负荷课程
-  if (timeSlot.period === 4) {
-    bonus += 80;
+  } else if (this.isAfternoonPeriod(timeSlot.period)) {
+    // 下午节次：创造力较强
+    const totalPeriods = this.getTotalPeriods();
+    const afternoonStartPeriod = this.periodTimeConfigs.find(c => c.startTime >= '12:00')?.period || 4;
     
-    // 语文、英语等语言类课程适合此时段
-    if (subject.includes('语文') || subject.includes('英语')) {
-      bonus += 30;
-    }
-  }
-  
-  // 下午峰值时段 (5-6节)：创造力较强，适合语言和艺术类课程
-  if (timeSlot.period >= 5 && timeSlot.period <= 6) {
-    bonus += 100;
-    
-    // 第5节：下午注意力恢复，创造力提升
-    if (timeSlot.period === 5) {
+    if (timeSlot.period === afternoonStartPeriod || timeSlot.period === afternoonStartPeriod + 1) {
+      // 下午开始的前两节：注意力恢复，创造力提升
+      bonus += 100;
       bonus += 40;
       
-      // 语文、英语等课程特别适合
+      // 语文、英语等语言类课程特别适合
       if (subject.includes('语文') || subject.includes('英语')) {
         bonus += 30;
       }
-    }
-    
-    // 第6节：创造力持续，适合综合类课程
-    if (timeSlot.period === 6) {
+    } else if (timeSlot.period === totalPeriods - 1 || timeSlot.period === totalPeriods) {
+      // 下午最后两节：注意力下降，但可安排核心课程
+      bonus += 60;
+      
+      if (timeSlot.period === totalPeriods - 1) {
+        bonus += 20; // 倒数第二节
+      } else {
+        bonus += 10; // 最后一节
+      }
+    } else {
+      // 下午中间节次：正常状态
+      bonus += 80;
       bonus += 20;
-    }
-  }
-  
-  // 下午活动时段 (7-8节)：体力活动时段，核心课程适当降分但不完全排除
-  if (timeSlot.period >= 7 && timeSlot.period <= 8) {
-    bonus += 40; // 基础分，允许核心课程在此时段
-    
-    // 第7节：适合中等认知负荷课程
-    if (timeSlot.period === 7) {
-      bonus += 20;
-    }
-    
-    // 第8节：注意力最低，但可安排复习类课程
-    if (timeSlot.period === 8) {
-      bonus += 10;
     }
   }
   
@@ -2914,6 +2902,114 @@ private getCourseNameSync(courseId: mongoose.Types.ObjectId): string {
     }
     
     return false;
+  }
+
+  /**
+   * 🔥 新增：动态加载课程时间配置
+   * 
+   * 从数据库获取指定学年学期的课程时间配置，支持灵活的节次安排
+   * 如：上午3节，下午4节等不同配置
+   */
+  private async loadPeriodTimeConfigs(): Promise<void> {
+    try {
+      console.log(`   🔍 [动态配置] 查询 ${this.academicYear} 学年 ${this.semester} 学期的课程时间配置...`);
+      
+      const configs = await PeriodTimeConfig.findByAcademicPeriod(this.academicYear, this.semester);
+      
+      if (configs.length === 0) {
+        console.log(`   ⚠️ [动态配置] 未找到课程时间配置，使用默认配置`);
+        // 使用默认配置：上午3节，下午4节
+        this.periodTimeConfigs = this.getDefaultPeriodTimeConfigs();
+      } else {
+        this.periodTimeConfigs = configs;
+        console.log(`   ✅ [动态配置] 成功加载 ${configs.length} 个课程时间配置`);
+        
+        // 输出配置详情
+        for (const config of configs) {
+          console.log(`      📅 第${config.period}节: ${config.startTime} - ${config.endTime} (休息${config.breakTime}分钟)`);
+        }
+      }
+      
+      // 验证配置的合理性
+      this.validatePeriodTimeConfigs();
+      
+    } catch (error) {
+      console.error(`   ❌ [动态配置] 加载课程时间配置失败:`, error);
+      console.log(`   🔧 [动态配置] 使用默认配置继续排课`);
+      this.periodTimeConfigs = this.getDefaultPeriodTimeConfigs();
+    }
+  }
+  
+  /**
+   * 🔥 新增：获取默认课程时间配置
+   * 
+   * 默认配置：上午3节，下午4节
+   * 上午：08:00-08:45, 08:55-09:40, 09:50-10:35
+   * 下午：14:00-14:45, 14:55-15:40, 15:50-16:35, 16:45-17:30
+   */
+  private getDefaultPeriodTimeConfigs(): any[] {
+    return [
+      { period: 1, startTime: '08:00', endTime: '08:45', breakTime: 10, description: '上午第1节' },
+      { period: 2, startTime: '08:55', endTime: '09:40', breakTime: 10, description: '上午第2节' },
+      { period: 3, startTime: '09:50', endTime: '10:35', breakTime: 10, description: '上午第3节' },
+      { period: 4, startTime: '14:00', endTime: '14:45', breakTime: 10, description: '下午第1节' },
+      { period: 5, startTime: '14:55', endTime: '15:40', breakTime: 10, description: '下午第2节' },
+      { period: 6, startTime: '15:50', endTime: '16:35', breakTime: 10, description: '下午第3节' },
+      { period: 7, startTime: '16:45', endTime: '17:30', breakTime: 10, description: '下午第4节' }
+    ];
+  }
+  
+  /**
+   * 🔥 新增：验证课程时间配置的合理性
+   */
+  private validatePeriodTimeConfigs(): void {
+    if (this.periodTimeConfigs.length === 0) {
+      console.warn(`   ⚠️ [动态配置] 课程时间配置为空`);
+      return;
+    }
+    
+    // 检查节次连续性
+    const periods = this.periodTimeConfigs.map(config => config.period).sort((a, b) => a - b);
+    const expectedPeriods = Array.from({ length: this.periodTimeConfigs.length }, (_, i) => i + 1);
+    
+    if (JSON.stringify(periods) !== JSON.stringify(expectedPeriods)) {
+      console.warn(`   ⚠️ [动态配置] 节次不连续: 实际 ${periods.join(',')}, 期望 ${expectedPeriods.join(',')}`);
+    }
+    
+    // 检查时间合理性
+    for (const config of this.periodTimeConfigs) {
+      if (config.startTime >= config.endTime) {
+        console.warn(`   ⚠️ [动态配置] 第${config.period}节时间配置不合理: ${config.startTime} >= ${config.endTime}`);
+      }
+    }
+    
+    console.log(`   ✅ [动态配置] 课程时间配置验证完成`);
+  }
+  
+  /**
+   * 🔥 新增：获取当前配置的总节次数
+   */
+  private getTotalPeriods(): number {
+    return this.periodTimeConfigs.length;
+  }
+  
+  /**
+   * 🔥 新增：判断是否为上午节次
+   */
+  private isMorningPeriod(period: number): boolean {
+    const config = this.periodTimeConfigs.find(c => c.period === period);
+    if (!config) return false;
+    
+    // 通过开始时间判断：12:00之前为上午
+    const startHour = parseInt(config.startTime.split(':')[0]);
+    return startHour < 12;
+  }
+  
+  /**
+   * 🔥 新增：判断是否为下午节次
+   */
+  private isAfternoonPeriod(period: number): boolean {
+    return !this.isMorningPeriod(period);
   }
 
   /**
