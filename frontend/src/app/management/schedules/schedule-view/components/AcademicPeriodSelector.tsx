@@ -52,9 +52,22 @@ export function AcademicPeriodSelector({ value, onChange, className }: AcademicP
             setCurrentPeriod(data.data.currentPeriod || '');
             
             // 如果没有设置当前值，使用数据库中的当前活跃学期
-            if (!value.academicYear && !value.semester && data.data.currentPeriod) {
-              const [year, semester] = data.data.currentPeriod.split('-');
-              onChange({ academicYear: year, semester });
+            if (!value.academicYear && !value.semester && data.data.currentPeriod && data.data.periods.length > 0) {
+              // 从periods数组中找到匹配的学期信息
+              const currentPeriodInfo = data.data.periods.find(p => p.semester === data.data.currentPeriod);
+              if (currentPeriodInfo) {
+                onChange({ 
+                  academicYear: currentPeriodInfo.academicYear, 
+                  semester: currentPeriodInfo.semesterNumber 
+                });
+              } else {
+                // 如果找不到匹配的，使用第一个可用的学期
+                const firstPeriod = data.data.periods[0];
+                onChange({ 
+                  academicYear: firstPeriod.academicYear, 
+                  semester: firstPeriod.semesterNumber 
+                });
+              }
             }
           } else {
             setError(data.message || '获取学年学期失败');
@@ -101,6 +114,16 @@ export function AcademicPeriodSelector({ value, onChange, className }: AcademicP
    * 获取当前学年的可用学期
    */
   const getCurrentYearSemesters = () => {
+    if (!value.academicYear) {
+      // 如果没有选择学年，返回所有学期的去重列表
+      const allSemesters = [...new Set(periods.map(p => p.semesterNumber))];
+      return allSemesters.map(semesterNum => ({
+        semester: `${semesterNum}`,
+        academicYear: '',
+        semesterNumber: semesterNum,
+        displayName: `第${semesterNum}学期`
+      }));
+    }
     return periods.filter(p => p.academicYear === value.academicYear);
   };
 
@@ -144,6 +167,9 @@ export function AcademicPeriodSelector({ value, onChange, className }: AcademicP
         onChange={(e) => handleAcademicYearChange(e.target.value)}
         className="w-32 px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
+        {!value.academicYear && (
+          <option value="">请选择学年</option>
+        )}
         {academicYears.map((year) => (
           <option key={year} value={year}>
             {year}学年
@@ -157,6 +183,9 @@ export function AcademicPeriodSelector({ value, onChange, className }: AcademicP
         onChange={(e) => handleSemesterChange(e.target.value)}
         className="w-24 px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
+        {!value.semester && (
+          <option value="">请选择学期</option>
+        )}
         {getCurrentYearSemesters().map((period) => (
           <option key={period.semesterNumber} value={period.semesterNumber}>
             第{period.semesterNumber}学期

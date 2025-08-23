@@ -126,4 +126,154 @@
 4. 使用React.memo优化不必要的重渲染
 5. Tailwind CSS按需打包
 
-当编写代码时，请严格遵循以上规则，确保代码质量和项目一致性。 
+当编写代码时，请严格遵循以上规则，确保代码质量和项目一致性。
+
+## 代码格式化工具配置
+
+### 新项目初始化时的代码格式化设置
+
+#### 1. 安装格式化工具
+```bash
+# 安装Prettier (代码格式化)
+npm install --save-dev prettier
+
+# 安装ESLint (代码质量检查)
+npm install --save-dev eslint @typescript-eslint/parser @typescript-eslint/eslint-plugin
+
+# 安装Prettier ESLint集成
+npm install --save-dev eslint-config-prettier eslint-plugin-prettier
+```
+
+#### 2. 创建Prettier配置文件 (.prettierrc)
+```json
+{
+  "semi": true,
+  "trailingComma": "es5",
+  "singleQuote": true,
+  "printWidth": 80,
+  "tabWidth": 2,
+  "useTabs": false,
+  "bracketSpacing": true,
+  "bracketSameLine": false,
+  "arrowParens": "avoid",
+  "endOfLine": "lf"
+}
+```
+
+#### 3. 创建ESLint配置文件 (.eslintrc.js)
+```javascript
+module.exports = {
+  parser: '@typescript-eslint/parser',
+  extends: [
+    'eslint:recommended',
+    '@typescript-eslint/recommended',
+    'prettier'
+  ],
+  plugins: ['@typescript-eslint', 'prettier'],
+  rules: {
+    'prettier/prettier': 'error',
+    '@typescript-eslint/no-unused-vars': 'error',
+    '@typescript-eslint/explicit-function-return-type': 'warn',
+    '@typescript-eslint/no-explicit-any': 'warn'
+  },
+  env: {
+    node: true,
+    es6: true
+  }
+};
+```
+
+#### 4. 创建Cursor工作区设置 (.vscode/settings.json)
+```json
+{
+  "editor.formatOnSave": true,
+  "editor.formatOnPaste": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[html]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[css]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "typescript.preferences.importModuleSpecifier": "relative"
+}
+```
+
+#### 5. 创建package.json脚本
+```json
+{
+  "scripts": {
+    "format": "prettier --write \"**/*.{js,ts,jsx,tsx,json,html,css,md}\"",
+    "format:check": "prettier --check \"**/*.{js,ts,jsx,tsx,json,html,css,md}\"",
+    "lint": "eslint \"**/*.{js,ts,jsx,tsx}\" --fix",
+    "lint:check": "eslint \"**/*.{js,ts,jsx,tsx}\""
+  }
+}
+```
+
+#### 6. 创建.editorconfig文件
+```ini
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.{js,ts,jsx,tsx,json,html,css,md}]
+indent_size = 2
+
+[*.{py}]
+indent_size = 4
+
+[*.{yml,yaml}]
+indent_size = 2
+```
+
+### 使用说明
+
+#### 快捷键
+- **格式化代码**: `Shift + Alt + F` (Windows/Linux) 或 `Shift + Option + F` (macOS)
+- **格式化选中代码**: `Ctrl/Cmd + K, Ctrl/Cmd + F`
+
+#### 自动格式化
+- 保存时自动格式化 (已配置)
+- 粘贴时自动格式化 (已配置)
+- ESLint自动修复 (保存时)
+
+#### 命令行工具
+```bash
+# 格式化所有文件
+npm run format
+
+# 检查格式化状态
+npm run format:check
+
+# 修复ESLint问题
+npm run lint
+
+# 检查ESLint问题
+npm run lint:check
+```
+
+### 注意事项
+1. **新项目使用**: 这些配置专为新项目设计，避免在现有项目中直接应用
+2. **团队协作**: 确保团队成员都安装了相同的Cursor扩展
+3. **扩展安装**: 需要安装Prettier和ESLint扩展以获得最佳体验
+4. **配置调整**: 可根据项目需求调整Prettier和ESLint规则
+5. **Git集成**: 建议在pre-commit钩子中运行格式化检查 

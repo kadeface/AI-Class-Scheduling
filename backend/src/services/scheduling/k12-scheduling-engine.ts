@@ -7,14 +7,11 @@ import {
   K12CourseAssignment,
   ScheduleState,
   AlgorithmConfig,
-  ConstraintViolation,
-  ConflictInfo,
   DebugLevel
 } from './types';
 import { K12ConstraintChecker } from './k12-constraint-checker';
 import { K12ScoreOptimizer } from './k12-score-optimizer';
 import { K12RoomAllocator } from './k12-room-allocator';
-import { Schedule } from '../../models/Schedule';
 import { PeriodTimeConfig } from '../../models/PeriodTimeConfig';
 
 
