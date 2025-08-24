@@ -19,7 +19,8 @@ import {
   ScheduleFilters, 
   ScheduleViewData, 
   CourseSlot,
-  ApiResponse 
+  ApiResponse,
+  PeriodTimeConfig
 } from './types';
 import { Card } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -36,6 +37,7 @@ export default function ScheduleViewPage() {
   const [selectedTarget, setSelectedTarget] = useState<ScheduleOption>();
   const [availableTargets, setAvailableTargets] = useState<ScheduleOption[]>([]);
   const [scheduleData, setScheduleData] = useState<ScheduleViewData>();
+  const [periodTimeConfigs, setPeriodTimeConfigs] = useState<PeriodTimeConfig[]>([]);
   const [filters, setFilters] = useState<ScheduleFilters>({
     academicYear: '2025-2026',
     semester: '1'
@@ -44,7 +46,34 @@ export default function ScheduleViewPage() {
   // 加载状态
   const [isLoadingTargets, setIsLoadingTargets] = useState(false);
   const [isLoadingSchedule, setIsLoadingSchedule] = useState(false);
+  const [isLoadingTimeConfigs, setIsLoadingTimeConfigs] = useState(false);
   const [error, setError] = useState<string>();
+
+  /**
+   * 加载时间段配置
+   */
+  const loadPeriodTimeConfigs = useCallback(async (academicYear: string, semester: string) => {
+    setIsLoadingTimeConfigs(true);
+    try {
+      const params = new URLSearchParams({
+        academicYear,
+        semester
+      });
+
+      const response = await fetch(`/api/schedule-config/period-times?${params}`);
+      const data: ApiResponse<PeriodTimeConfig[]> = await response.json();
+
+      if (data.success && data.data) {
+        setPeriodTimeConfigs(data.data);
+      } else {
+        setPeriodTimeConfigs([]);
+      }
+    } catch (error) {
+      setPeriodTimeConfigs([]);
+    } finally {
+      setIsLoadingTimeConfigs(false);
+    }
+  }, []);
 
   /**
    * 加载可选目标列表
@@ -155,7 +184,8 @@ export default function ScheduleViewPage() {
       loadScheduleData(viewMode, selectedTarget._id, filters);
     }
     loadAvailableTargets(viewMode);
-  }, [viewMode, selectedTarget, filters, loadScheduleData, loadAvailableTargets]);
+    loadPeriodTimeConfigs(filters.academicYear, filters.semester);
+  }, [viewMode, selectedTarget, filters, loadScheduleData, loadAvailableTargets, loadPeriodTimeConfigs]);
 
   /**
    * 导出课表
@@ -189,10 +219,20 @@ export default function ScheduleViewPage() {
     // 可以显示更详细的悬停信息
   }, []);
 
+  // 效果钩子：页面初始化时加载时间段配置
+  useEffect(() => {
+    loadPeriodTimeConfigs(filters.academicYear, filters.semester);
+  }, []);
+
   // 效果钩子：视图模式变化时加载目标列表
   useEffect(() => {
     loadAvailableTargets(viewMode);
   }, [viewMode, loadAvailableTargets]);
+
+  // 效果钩子：筛选条件变化时重新加载时间段配置
+  useEffect(() => {
+    loadPeriodTimeConfigs(filters.academicYear, filters.semester);
+  }, [filters.academicYear, filters.semester, loadPeriodTimeConfigs]);
 
   // 效果钩子：目标或筛选条件变化时加载课表数据
   useEffect(() => {
@@ -212,7 +252,7 @@ export default function ScheduleViewPage() {
         availableTargets={availableTargets}
         filters={filters}
         onFiltersChange={handleFiltersChange}
-        isLoading={isLoadingTargets || isLoadingSchedule}
+        isLoading={isLoadingTargets || isLoadingSchedule || isLoadingTimeConfigs}
         lastUpdated={scheduleData?.metadata.lastUpdated ? new Date(scheduleData.metadata.lastUpdated) : undefined}
         onRefresh={handleRefresh}
         onExport={handleExport}
@@ -237,6 +277,26 @@ export default function ScheduleViewPage() {
           onChange={handleFiltersChange}
           className="justify-center"
         />
+        
+        {/* 时间段配置状态显示 */}
+        {periodTimeConfigs.length > 0 && (
+          <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="text-sm text-blue-800">
+              <span className="font-medium">当前时间段配置：</span>
+              {periodTimeConfigs.length} 个节次
+              {periodTimeConfigs.slice(0, 3).map(config => (
+                <span key={config._id} className="ml-2 px-2 py-1 bg-blue-100 rounded text-xs">
+                  {config.period}: {config.startTime}-{config.endTime}
+                </span>
+              ))}
+              {periodTimeConfigs.length > 3 && (
+                <span className="ml-2 text-xs text-blue-600">
+                  等 {periodTimeConfigs.length} 个节次
+                </span>
+              )}
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* 错误提示 */}
@@ -244,6 +304,22 @@ export default function ScheduleViewPage() {
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* 时间段配置加载状态提示 */}
+      {isLoadingTimeConfigs && (
+        <Alert>
+          <Clock className="h-4 w-4" />
+          <AlertDescription>正在加载时间段配置...</AlertDescription>
+        </Alert>
+      )}
+
+      {/* 时间段配置加载失败提示 */}
+      {!isLoadingTimeConfigs && periodTimeConfigs.length === 0 && (
+        <Alert variant="default">
+          <Clock className="h-4 w-4" />
+          <AlertDescription>使用默认时间段配置</AlertDescription>
         </Alert>
       )}
 
@@ -296,12 +372,13 @@ export default function ScheduleViewPage() {
 
       {/* 课表内容区域 */}
       <div className="min-h-[600px]">
-        {isLoadingSchedule ? (
+        {isLoadingSchedule || isLoadingTimeConfigs ? (
           <ScheduleGridSkeleton />
         ) : scheduleData ? (
           <ScheduleGrid
             weekSchedule={scheduleData.weekSchedule}
-            viewMode={viewMode} // 传递视图模式
+            periodTimeConfigs={periodTimeConfigs}
+            viewMode={viewMode}
             onCourseClick={handleCourseClick}
             onCourseHover={handleCourseHover}
           />

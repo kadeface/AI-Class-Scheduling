@@ -147,7 +147,7 @@ export interface ICoreSubjectStrategy {
  * 固定时间课程接口定义
  */
 export interface IFixedTimeCourse {
-  type: 'class-meeting' | 'flag-raising' | 'eye-exercise' | 'morning-reading' | 'afternoon-reading' | 'cleaning' | 'other';
+  type: string;                        // 🆕 支持动态科目和固定时间课程类型
   name: string;                         // 🆕 新增：课程名称，直接存储显示名称
   dayOfWeek: number;                    // 星期几 (1-7)
   period: number;                        // 第几节课 (1-12)
@@ -626,10 +626,8 @@ const CourseArrangementRulesSchema = new Schema<ICourseArrangementRules>({
           type: {
             type: String,
             required: [true, '课程类型不能为空'],
-            enum: {
-              values: ['class-meeting', 'flag-raising', 'eye-exercise', 'morning-reading', 'afternoon-reading', 'cleaning', 'other'],
-              message: '课程类型必须是有效的固定时间课程类型'
-            }
+            // 🆕 移除enum限制，支持动态科目和固定时间课程类型
+            message: '课程类型不能为空'
           },
           name: {
             type: String,

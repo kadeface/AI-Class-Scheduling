@@ -36,14 +36,12 @@ export function ScheduleGrid({
   // 处理时间段配置：优先使用动态配置，否则使用默认配置
   const periods = React.useMemo(() => {
     if (periodTimeConfigs && periodTimeConfigs.length > 0) {
-      // 使用动态配置，转换为组件需要的格式
       return periodTimeConfigs.map(config => ({
         value: config.period,
         label: `第${config.period}节`,
         time: `${config.startTime}-${config.endTime}`
       }));
     } else {
-      // 使用默认配置
       return TIME_CONFIG.DEFAULT_PERIODS;
     }
   }, [periodTimeConfigs]);
@@ -99,11 +97,6 @@ export function ScheduleGrid({
                 {/* 课程内容列 */}
                 {TIME_CONFIG.DAYS.map((day) => {
                   const courseSlot = weekSchedule[day.value]?.[period.value];
-                  
-                  // 调试日志
-                  if (courseSlot) {
-                    console.log(`Day ${day.value}, Period ${period.value}:`, courseSlot);
-                  }
                   
                   return (
                     <td

@@ -1332,9 +1332,17 @@ function validateRoomConstraints(constraints: any): string[] {
 function validateFixedTimeCourse(course: any): string[] {
   const errors: string[] = [];
 
-  // 验证课程类型
-  if (!['class-meeting', 'flag-raising', 'eye-exercise', 'morning-reading', 'afternoon-reading', 'cleaning', 'other'].includes(course.type)) {
-    errors.push('课程类型必须是有效的固定时间课程类型');
+  // 🆕 验证课程类型：支持动态科目和固定时间课程类型
+  const validFixedTypes = ['class-meeting', 'flag-raising', 'eye-exercise', 'morning-reading', 'afternoon-reading', 'cleaning', 'other'];
+  
+  if (!course.type || typeof course.type !== 'string') {
+    errors.push('课程类型不能为空且必须是字符串');
+  } else if (!validFixedTypes.includes(course.type)) {
+    // 如果不是预定义的固定类型，则应该是动态科目（非空字符串）
+    if (course.type.trim() === '') {
+      errors.push('课程类型不能为空');
+    }
+    // 动态科目不需要额外的类型验证，允许任何非空字符串
   }
 
   // 🆕 新增：验证课程名称

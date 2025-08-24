@@ -630,7 +630,7 @@ export interface ICoreSubjectStrategy {
  * 固定时间课程配置接口
  */
 export interface FixedTimeCourse {
-  type: 'class-meeting' | 'flag-raising' | 'eye-exercise' | 'morning-reading' | 'afternoon-reading' | 'cleaning' | 'other';
+  type: string; // 🆕 支持动态科目和固定时间课程类型
   name: string; // 🆕 新增：课程名称，直接存储显示名称
   dayOfWeek: number;
   period: number;

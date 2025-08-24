@@ -564,7 +564,7 @@ export interface RoomConstraintsRequest {
  * 固定时间课程接口定义 (API层)
  */
 export interface FixedTimeCourseRequest {
-  type: 'class-meeting' | 'flag-raising' | 'eye-exercise' | 'morning-reading' | 'afternoon-reading' | 'cleaning' | 'other';
+  type: string;                        // 🆕 支持动态科目和固定时间课程类型
   courseId: string;                     // 🆕 新增：课程ID，用于关联具体的课程信息
   dayOfWeek: number;                    // 星期几 (1-7)
   period: number;                        // 第几节课 (1-12)

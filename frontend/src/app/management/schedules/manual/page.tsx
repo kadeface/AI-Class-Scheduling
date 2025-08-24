@@ -213,6 +213,16 @@ export default function ManualSchedulePage() {
     return typeof clazz === 'object' ? clazz.name : clazz || '未知班级';
   };
 
+  // 本地辅助函数：获取年级文本
+  const getGradeText = (grade: number): string => {
+    const gradeMap: { [key: number]: string } = {
+      1: '一年级', 2: '二年级', 3: '三年级', 4: '四年级', 5: '五年级', 6: '六年级',
+      7: '初一', 8: '初二', 9: '初三',
+      10: '高一', 11: '高二', 12: '高三'
+    };
+    return gradeMap[grade] || `第${grade}年级`;
+  };
+
   // 时间配置
   const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五'];
   // 默认时间段配置，当无法获取动态配置时使用
@@ -348,34 +358,43 @@ export default function ManualSchedulePage() {
   };
 
   /**
-   * 获取筛选后的课程选项（基于教师学科）
+   * 获取筛选后的课程选项（基于年级和教师学科）
    */
   const getFilteredCourseOptions = () => {
-    // 如果没有选择教师，返回所有课程
-    if (!formData.teacherId) {
-      return safeMapToOptions(courses);
-    }
+    let filteredCourses = courses;
     
-    // 获取选中教师的学科
-    const selectedTeacher = teachers.find(t => t._id === formData.teacherId);
-    if (!selectedTeacher || !selectedTeacher.subjects || !Array.isArray(selectedTeacher.subjects)) {
-      return safeMapToOptions(courses);
-    }
-    
-    // 根据教师学科筛选课程
-    const filteredCourses = courses.filter(course => {
-      const courseName = course.name;
+    // 1. 首先按年级筛选
+    if (filters.selectedGrade) {
+      const gradeText = getGradeText(parseInt(filters.selectedGrade));
+      filteredCourses = courses.filter(course => {
+        const courseName = course.name;
+        // 检查课程名称是否包含对应年级
+        return courseName.includes(gradeText);
+      });
       
-      // 检查课程名称是否包含教师的任何学科
-      return selectedTeacher.subjects.some(subject => 
-        courseName.includes(subject)
-      );
-    });
+      console.log(`按年级筛选: ${gradeText}, 筛选后课程数: ${filteredCourses.length}`);
+    }
     
-    // 如果没有找到匹配学科的课程，返回所有课程并显示提示
+    // 2. 然后按教师学科筛选（如果选择了教师）
+    if (formData.teacherId) {
+      const selectedTeacher = teachers.find(t => t._id === formData.teacherId);
+      if (selectedTeacher && selectedTeacher.subjects && Array.isArray(selectedTeacher.subjects)) {
+        const beforeSubjectFilter = filteredCourses.length;
+        filteredCourses = filteredCourses.filter(course => {
+          const courseName = course.name;
+          return selectedTeacher.subjects.some(subject => 
+            courseName.includes(subject)
+          );
+        });
+        
+        console.log(`按教师学科筛选: ${selectedTeacher.subjects.join(',')}, 筛选前: ${beforeSubjectFilter}, 筛选后: ${filteredCourses.length}`);
+      }
+    }
+    
+    // 如果没有找到匹配的课程，返回空数组
     if (filteredCourses.length === 0) {
-      console.warn(`未找到教师${selectedTeacher.name}学科(${selectedTeacher.subjects.join(',')})的课程，显示所有课程`);
-      return safeMapToOptions(courses);
+      console.warn('未找到匹配的课程');
+      return [];
     }
     
     return safeMapToOptions(filteredCourses);
@@ -725,7 +744,17 @@ export default function ManualSchedulePage() {
    * 处理筛选条件变化
    */
   const handleFiltersChange = (newFilters: Partial<typeof filters>) => {
-    setFilters(prev => ({ ...prev, ...newFilters }));
+    setFilters(prev => {
+      const updatedFilters = { ...prev, ...newFilters };
+      
+      // 当年级变化时，清空课程选择，避免年级不匹配
+      if (newFilters.selectedGrade !== undefined && newFilters.selectedGrade !== prev.selectedGrade) {
+        setFormData(prevForm => ({ ...prevForm, courseId: '' }));
+        console.log(`年级变化: ${prev.selectedGrade} -> ${newFilters.selectedGrade}, 已清空课程选择`);
+      }
+      
+      return updatedFilters;
+    });
   };
 
   /**
@@ -1518,22 +1547,31 @@ export default function ManualSchedulePage() {
                   options={getFilteredCourseOptions()}
                 />
                 {/* 显示课程筛选提示 */}
-                {formData.teacherId && (
-                  <div className="text-xs text-blue-500 mt-1">
-                    已根据选中教师学科筛选课程
-                    {(() => {
-                      const selectedTeacher = teachers.find(t => t._id === formData.teacherId);
-                      const filteredCourses = courses.filter(course => {
-                        if (!selectedTeacher || !selectedTeacher.subjects) return true;
-                        const courseName = course.name;
-                        return selectedTeacher.subjects.some(subject => 
-                          courseName.includes(subject)
-                        );
-                      });
-                      return ` (显示 ${filteredCourses.length}/${courses.length} 门课程)`;
-                    })()}
-                  </div>
-                )}
+                <div className="text-xs text-blue-500 mt-1">
+                  {(() => {
+                    const selectedGrade = filters.selectedGrade;
+                    const selectedTeacher = teachers.find(t => t._id === formData.teacherId);
+                    
+                    let filterInfo = '';
+                    if (selectedGrade) {
+                      const gradeText = getGradeText(parseInt(selectedGrade));
+                      filterInfo += `年级筛选: ${gradeText}`;
+                    }
+                    
+                    if (selectedTeacher) {
+                      if (filterInfo) filterInfo += ', ';
+                      filterInfo += `教师学科: ${selectedTeacher.subjects?.join(', ') || '未知'}`;
+                    }
+                    
+                    if (filterInfo) {
+                      const filteredCount = getFilteredCourseOptions().length;
+                      const totalCount = courses.length;
+                      return `${filterInfo} (显示 ${filteredCount}/${totalCount} 门课程)`;
+                    }
+                    
+                    return `显示所有课程 (共 ${courses.length} 门)`;
+                  })()}
+                </div>
                 {/* 显示学科匹配提示 */}
                 {formData.teacherId && formData.courseId && (() => {
                   const selectedTeacher = teachers.find(t => t._id === formData.teacherId);
@@ -1635,7 +1673,7 @@ export default function ManualSchedulePage() {
             )}
           </CardTitle>
           <CardDescription>
-            网格视图：直观显示每周课程安排，支持快速编辑和临时调课
+            网格视图：直观显示每周课程安排，支持拖动调整课程位置
           </CardDescription>
         </CardHeader>
         <CardContent>

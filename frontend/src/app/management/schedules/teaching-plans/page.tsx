@@ -33,7 +33,9 @@ import {
   X,
   FileText,
   Zap,
-  AlertCircle
+  AlertCircle,
+  ChevronRight,
+  Info
 } from 'lucide-react';
 import { 
   TeachingPlan,
@@ -55,6 +57,522 @@ import {
 import { formatDateTime, cn } from '@/lib/utils';
 import { BatchTeachingPlanForm, BatchCourseConfig, BatchClassTeacherAssignment } from '@/types/schedule';
 import { generateCsv, downloadCsv } from '@/lib/csv';
+
+/**
+ * 可复用的教学计划表单组件
+ * 
+ * Args:
+ *   mode: 'create' | 'edit' - 表单模式
+ *   initialData: CreateTeachingPlanRequest - 初始数据（编辑模式）
+ *   onSubmit: (data: CreateTeachingPlanRequest) => void - 提交回调
+ *   onCancel: () => void - 取消回调
+ *   classes: Class[] - 班级列表
+ *   courses: Course[] - 课程列表
+ *   teachers: Teacher[] - 教师列表
+ *   fetchClassesForAcademicYear: (academicYear: string, semester: number) => void - 获取班级数据函数
+ * 
+ * Returns:
+ *   React.ReactElement: 教学计划表单组件
+ */
+interface TeachingPlanFormProps {
+  mode: 'create' | 'edit';
+  initialData?: CreateTeachingPlanRequest;
+  onSubmit: (data: CreateTeachingPlanRequest) => void;
+  onCancel: () => void;
+  classes: Class[];
+  courses: Course[];
+  teachers: Teacher[];
+  fetchClassesForAcademicYear: (academicYear: string, semester: number) => void;
+}
+
+const TeachingPlanForm: React.FC<TeachingPlanFormProps> = ({
+  mode,
+  initialData,
+  onSubmit,
+  onCancel,
+  classes,
+  courses,
+  teachers,
+  fetchClassesForAcademicYear
+}) => {
+  const [formData, setFormData] = useState<CreateTeachingPlanRequest>(
+    initialData || {
+      class: '',
+      academicYear: '',
+      semester: 1,
+      courseAssignments: [],
+      notes: '',
+    }
+  );
+
+  const [errors, setErrors] = useState<{[key: string]: string}>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 学年选项
+  const generateAcademicYears = () => {
+    const currentYear = new Date().getFullYear();
+    const years = [];
+    for (let i = -2; i <= 3; i++) {
+      const startYear = currentYear + i;
+      years.push(`${startYear}-${startYear + 1}`);
+    }
+    return years;
+  };
+
+  // 表单验证
+  const validateForm = (): boolean => {
+    const newErrors: {[key: string]: string} = {};
+    
+    if (!formData.academicYear) {
+      newErrors.academicYear = '请选择学年';
+    }
+    if (!formData.class) {
+      newErrors.class = '请选择班级';
+    }
+    if (formData.courseAssignments.length === 0) {
+      newErrors.courseAssignments = '请至少添加一门课程';
+    }
+
+    // 验证课程分配
+    formData.courseAssignments.forEach((assignment, index) => {
+      if (!assignment.course) {
+        newErrors[`course_${index}`] = '请选择课程';
+      }
+      if (!assignment.teacher) {
+        newErrors[`teacher_${index}`] = '请选择教师';
+      }
+      if (!assignment.weeklyHours || assignment.weeklyHours <= 0) {
+        newErrors[`weeklyHours_${index}`] = '课时必须大于0';
+      }
+    });
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // 计算表单完成度
+  const getFormCompletion = (): number => {
+    let completed = 0;
+    let total = 3; // 基本信息3项
+
+    if (formData.academicYear) completed++;
+    if (formData.class) completed++;
+    if (formData.courseAssignments.length > 0) completed++;
+
+    // 课程分配验证
+    if (formData.courseAssignments.length > 0) {
+      total += formData.courseAssignments.length * 3; // 每门课程3个必填项
+      formData.courseAssignments.forEach(assignment => {
+        if (assignment.course) completed++;
+        if (assignment.teacher) completed++;
+        if (assignment.weeklyHours && assignment.weeklyHours > 0) completed++;
+      });
+    }
+
+    return Math.round((completed / total) * 100);
+  };
+
+  // 处理提交
+  const handleSubmit = async () => {
+    if (!validateForm()) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      // 计算总周课时数
+      const totalWeeklyHours = formData.courseAssignments.reduce(
+        (sum, assignment) => sum + (assignment.weeklyHours || 0), 
+        0
+      );
+      
+      const payload = {
+        ...formData,
+        totalWeeklyHours
+      };
+      
+      await onSubmit(payload);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* 表单完成度指示器 */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <Info className="h-4 w-4 text-blue-600" />
+            <span className="text-sm font-medium text-blue-800">表单完成度</span>
+          </div>
+          <span className="text-sm font-bold text-blue-600">{getFormCompletion()}%</span>
+        </div>
+        <div className="w-full bg-blue-200 rounded-full h-2">
+          <div 
+            className="bg-gradient-to-r from-blue-500 to-indigo-500 h-2 rounded-full transition-all duration-300"
+            style={{ width: `${getFormCompletion()}%` }}
+          />
+        </div>
+      </div>
+
+      {/* 基本信息 */}
+      <Card className="border-l-4 border-l-blue-500">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Calendar className="h-5 w-5 text-blue-600" />
+            基本信息
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div>
+              <Label htmlFor="academicYear" className="flex items-center gap-1">
+                学年 <span className="text-red-500">*</span>
+              </Label>
+              <Select
+                value={formData.academicYear}
+                onValueChange={(value) => {
+                  setFormData(prev => ({ ...prev, academicYear: value, class: '' }));
+                  setErrors(prev => ({ ...prev, academicYear: '' }));
+                  if (value && formData.semester) {
+                    fetchClassesForAcademicYear(value, formData.semester);
+                  }
+                }}
+                className={cn(errors.academicYear && "border-red-500")}
+              >
+                <option value="">请选择学年</option>
+                {generateAcademicYears().map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </Select>
+              {errors.academicYear && (
+                <p className="text-sm text-red-500 mt-1">{errors.academicYear}</p>
+              )}
+            </div>
+            
+            <div>
+              <Label htmlFor="semester" className="flex items-center gap-1">
+                学期 <span className="text-red-500">*</span>
+              </Label>
+              <Select
+                value={formData.semester.toString()}
+                onValueChange={(value) => {
+                  const newSemester = parseInt(value);
+                  setFormData(prev => ({ ...prev, semester: newSemester, class: '' }));
+                  if (formData.academicYear && newSemester) {
+                    fetchClassesForAcademicYear(formData.academicYear, newSemester);
+                  }
+                }}
+              >
+                <option value="1">第一学期</option>
+                <option value="2">第二学期</option>
+              </Select>
+            </div>
+            
+            <div>
+              <Label htmlFor="class" className="flex items-center gap-1">
+                班级 <span className="text-red-500">*</span>
+              </Label>
+              <Select
+                value={formData.class}
+                onValueChange={(value) => {
+                  setFormData(prev => ({ ...prev, class: value }));
+                  setErrors(prev => ({ ...prev, class: '' }));
+                }}
+                disabled={!formData.academicYear || !formData.semester}
+                className={cn(errors.class && "border-red-500")}
+              >
+                <option value="">
+                  {!formData.academicYear || !formData.semester 
+                    ? '请先选择学年和学期' 
+                    : classes.length === 0 
+                      ? '该学年学期暂无班级数据'
+                      : '请选择班级'
+                  }
+                </option>
+                {classes.map((cls) => (
+                  <option key={cls._id} value={cls._id}>
+                    {cls.grade}年级{cls.name}班 ({cls.studentCount}人)
+                  </option>
+                ))}
+              </Select>
+              {errors.class && (
+                <p className="text-sm text-red-500 mt-1">{errors.class}</p>
+              )}
+              {formData.academicYear && formData.semester && (
+                <p className="text-xs text-gray-500 mt-1">
+                  显示 {formData.academicYear} 学年第{formData.semester}学期的班级
+                </p>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 课程安排 */}
+      <Card className="border-l-4 border-l-green-500">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-green-600" />
+              课程安排
+            </div>
+            <Button 
+              type="button"
+              onClick={() => {
+                setFormData(prev => ({
+                  ...prev,
+                  courseAssignments: [
+                    ...prev.courseAssignments,
+                    {
+                      course: '',
+                      teacher: '',
+                      weeklyHours: 2,
+                      requiresContinuous: false,
+                      continuousHours: 2,
+                      preferredTimeSlots: [],
+                      avoidTimeSlots: [],
+                      notes: ''
+                    }
+                  ]
+                }));
+                setErrors(prev => ({ ...prev, courseAssignments: '' }));
+              }}
+              className="gap-2 bg-green-600 hover:bg-green-700"
+            >
+              <Plus className="h-4 w-4" />
+              添加课程
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {errors.courseAssignments && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-600">{errors.courseAssignments}</p>
+            </div>
+          )}
+          
+          <div className="space-y-4">
+            {formData.courseAssignments.map((assignment, index) => (
+              <Card key={index} className="border border-gray-200 hover:border-green-300 transition-colors">
+                <CardHeader className="pb-3 bg-gradient-to-r from-green-50 to-emerald-50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 bg-green-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                        {index + 1}
+                      </div>
+                      <h4 className="font-medium text-green-800">课程 {index + 1}</h4>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setFormData(prev => ({
+                          ...prev,
+                          courseAssignments: prev.courseAssignments.filter((_, i) => i !== index)
+                        }));
+                      }}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div>
+                      <Label className="flex items-center gap-1">
+                        课程 <span className="text-red-500">*</span>
+                      </Label>
+                      <Select
+                        value={assignment.course}
+                        onValueChange={(value) => {
+                          const newAssignments = [...formData.courseAssignments];
+                          newAssignments[index].course = value;
+                          setFormData(prev => ({ ...prev, courseAssignments: newAssignments }));
+                          setErrors(prev => ({ ...prev, [`course_${index}`]: '' }));
+                        }}
+                        className={cn(errors[`course_${index}`] && "border-red-500")}
+                      >
+                        <option value="">请选择课程</option>
+                        {courses.map((course) => (
+                          <option key={course._id} value={course._id}>
+                            {course.name}
+                          </option>
+                        ))}
+                      </Select>
+                      {errors[`course_${index}`] && (
+                        <p className="text-sm text-red-500 mt-1">{errors[`course_${index}`]}</p>
+                      )}
+                    </div>
+                    
+                    <div>
+                      <Label className="flex items-center gap-1">
+                        授课教师 <span className="text-red-500">*</span>
+                      </Label>
+                      <Select
+                        value={assignment.teacher}
+                        onValueChange={(value) => {
+                          const newAssignments = [...formData.courseAssignments];
+                          newAssignments[index].teacher = value;
+                          setFormData(prev => ({ ...prev, courseAssignments: newAssignments }));
+                          setErrors(prev => ({ ...prev, [`teacher_${index}`]: '' }));
+                        }}
+                        className={cn(errors[`teacher_${index}`] && "border-red-500")}
+                      >
+                        <option value="">请选择教师</option>
+                        {teachers.map((teacher) => (
+                          <option key={teacher._id} value={teacher._id}>
+                            {teacher.name} - {teacher.subjects?.join(', ') || '未设置科目'}
+                          </option>
+                        ))}
+                      </Select>
+                      {errors[`teacher_${index}`] && (
+                        <p className="text-sm text-red-500 mt-1">{errors[`teacher_${index}`]}</p>
+                      )}
+                    </div>
+                    
+                    <div>
+                      <Label className="flex items-center gap-1">
+                        周课时 <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="30"
+                        value={assignment.weeklyHours}
+                        onChange={(e) => {
+                          const newAssignments = [...formData.courseAssignments];
+                          newAssignments[index].weeklyHours = parseInt(e.target.value) || 1;
+                          setFormData(prev => ({ ...prev, courseAssignments: newAssignments }));
+                          setErrors(prev => ({ ...prev, [`weeklyHours_${index}`]: '' }));
+                        }}
+                        className={cn(errors[`weeklyHours_${index}`] && "border-red-500")}
+                      />
+                      {errors[`weeklyHours_${index}`] && (
+                        <p className="text-sm text-red-500 mt-1">{errors[`weeklyHours_${index}`]}</p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4 space-y-3">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id={`continuous-${index}`}
+                        checked={assignment.requiresContinuous || false}
+                        onChange={(e) => {
+                          const newAssignments = [...formData.courseAssignments];
+                          newAssignments[index].requiresContinuous = e.target.checked;
+                          if (e.target.checked && (!newAssignments[index].continuousHours || newAssignments[index].continuousHours < 2)) {
+                            newAssignments[index].continuousHours = 2;
+                          }
+                          setFormData(prev => ({ ...prev, courseAssignments: newAssignments }));
+                        }}
+                        className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                      />
+                      <Label htmlFor={`continuous-${index}`} className="text-sm font-medium">
+                        需要连续排课
+                      </Label>
+                    </div>
+                    
+                    {assignment.requiresContinuous && (
+                      <div className="ml-6 flex items-center gap-2">
+                        <Label className="text-sm">连续课时数</Label>
+                        <Input
+                          type="number"
+                          min="2"
+                          max="4"
+                          value={assignment.continuousHours || 2}
+                          onChange={(e) => {
+                            const newAssignments = [...formData.courseAssignments];
+                            newAssignments[index].continuousHours = parseInt(e.target.value) || 2;
+                            setFormData(prev => ({ ...prev, courseAssignments: newAssignments }));
+                          }}
+                          className="w-20"
+                        />
+                      </div>
+                    )}
+                    
+                    <div>
+                      <Label className="text-sm text-gray-600">备注</Label>
+                      <Input
+                        placeholder="课程安排备注"
+                        value={assignment.notes || ''}
+                        onChange={(e) => {
+                          const newAssignments = [...formData.courseAssignments];
+                          newAssignments[index].notes = e.target.value;
+                          setFormData(prev => ({ ...prev, courseAssignments: newAssignments }));
+                        }}
+                        className="text-sm"
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+            
+            {formData.courseAssignments.length === 0 && (
+              <div className="text-center py-12 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg">
+                <BookOpen className="h-16 w-16 mx-auto mb-4 opacity-30" />
+                <p className="text-lg font-medium mb-2">暂无课程安排</p>
+                <p className="text-sm">点击"添加课程"开始配置课程信息</p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 备注 */}
+      <Card className="border-l-4 border-l-purple-500">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <FileText className="h-5 w-5 text-purple-600" />
+            备注信息
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Textarea
+            placeholder="教学计划备注（可选）"
+            rows={3}
+            value={formData.notes || ''}
+            onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+            className="resize-none"
+          />
+        </CardContent>
+      </Card>
+
+      {/* 操作按钮 */}
+      <div className="flex justify-end gap-3 pt-4 border-t">
+        <Button 
+          variant="outline" 
+          onClick={onCancel}
+          disabled={isSubmitting}
+        >
+          取消
+        </Button>
+        <Button 
+          onClick={handleSubmit}
+          disabled={!formData.class || !formData.academicYear || formData.courseAssignments.length === 0 || isSubmitting}
+          className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+        >
+          {isSubmitting ? (
+            <div className="flex items-center gap-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              {mode === 'create' ? '创建中...' : '保存中...'}
+            </div>
+          ) : (
+            mode === 'create' ? '创建教学计划' : '保存修改'
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+};
 
 /**
  * 教学计划管理页面组件
@@ -101,25 +619,7 @@ export default function TeachingPlansPage() {
   const [filteredCoursesByGrade, setFilteredCoursesByGrade] = useState<{ [grade: string]: Course[] }>({});
   const [coursesLoading, setCoursesLoading] = useState(false);
 
-  // 学年选项
-  const generateAcademicYears = () => {
-    const currentYear = new Date().getFullYear();
-    const years = [];
-    for (let i = -2; i <= 3; i++) {
-      const startYear = currentYear + i;
-      years.push(`${startYear}-${startYear + 1}`);
-    }
-    return years;
-  };
-
-  // 表单数据
-  const [formData, setFormData] = useState<CreateTeachingPlanRequest>({
-    class: '',
-    academicYear: '',
-    semester: 1,
-    courseAssignments: [],
-    notes: '',
-  });
+  // 表单数据 - 已移至TeachingPlanForm组件中
 
   // 审批意见
   const [approvalComments, setApprovalComments] = useState('');
@@ -353,14 +853,6 @@ export default function TeachingPlansPage() {
     const currentYear = new Date().getFullYear();
     const defaultAcademicYear = `${currentYear}-${currentYear + 1}`;
     
-    setFormData({
-      class: '',
-      academicYear: defaultAcademicYear,
-      semester: 1,
-      courseAssignments: [],
-      notes: '',
-    });
-    
     setDialogState(prev => ({ ...prev, create: true }));
     
     // 自动加载默认学年学期的班级数据
@@ -372,22 +864,6 @@ export default function TeachingPlansPage() {
    */
   const openEditDialog = (plan: TeachingPlan) => {
     setSelectedPlan(plan);
-    setFormData({
-      class: plan.class._id,
-      academicYear: plan.academicYear,
-      semester: plan.semester,
-      courseAssignments: plan.courseAssignments.map(ca => ({
-        course: ca.course._id,
-        teacher: ca.teacher._id,
-        weeklyHours: ca.weeklyHours,
-        requiresContinuous: ca.requiresContinuous,
-        continuousHours: ca.continuousHours,
-        preferredTimeSlots: ca.preferredTimeSlots,
-        avoidTimeSlots: ca.avoidTimeSlots,
-        notes: ca.notes,
-      })),
-      notes: plan.notes,
-    });
     setDialogState(prev => ({ ...prev, edit: true }));
   };
 
@@ -424,22 +900,11 @@ export default function TeachingPlansPage() {
   /**
    * 创建教学计划
    */
-  const handleCreate = async () => {
+  const handleCreate = async (data: CreateTeachingPlanRequest) => {
     try {
-      // 计算总周课时数
-      const totalWeeklyHours = formData.courseAssignments.reduce(
-        (sum, assignment) => sum + (assignment.weeklyHours || 0), 
-        0
-      );
+      console.log('创建教学计划数据:', data);
       
-      const payload = {
-        ...formData,
-        totalWeeklyHours
-      };
-      
-      console.log('创建教学计划数据:', payload);
-      
-      const response = await teachingPlanApi.create(payload);
+      const response = await teachingPlanApi.create(data);
       if (response.success) {
         alert('教学计划创建成功！');
         closeDialogs();
@@ -456,11 +921,11 @@ export default function TeachingPlansPage() {
   /**
    * 更新教学计划
    */
-  const handleUpdate = async () => {
+  const handleUpdate = async (data: CreateTeachingPlanRequest) => {
     if (!selectedPlan) return;
     
     try {
-      const response = await teachingPlanApi.update(selectedPlan._id, formData);
+      const response = await teachingPlanApi.update(selectedPlan._id, data);
       if (response.success) {
         closeDialogs();
         fetchTeachingPlans();
@@ -786,285 +1251,15 @@ export default function TeachingPlansPage() {
             <DialogTitle>新建教学计划</DialogTitle>
           </DialogHeader>
           
-          <div className="space-y-6">
-            {/* 基本信息 */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">基本信息</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div>
-                    <Label htmlFor="academicYear">学年 *</Label>
-                    <Select
-                      value={formData.academicYear}
-                      onValueChange={(value) => {
-                        setFormData(prev => ({ ...prev, academicYear: value, class: '' }));
-                        // 当学年和学期都有值时，获取对应的班级列表
-                        if (value && formData.semester) {
-                          fetchClassesForAcademicYear(value, formData.semester);
-                        }
-                      }}
-                    >
-                      <option value="">请选择学年</option>
-                      {generateAcademicYears().map((year) => (
-                        <option key={year} value={year}>
-                          {year}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
-                  
-                  <div>
-                    <Label htmlFor="semester">学期 *</Label>
-                    <Select
-                      value={formData.semester.toString()}
-                      onValueChange={(value) => {
-                        const newSemester = parseInt(value);
-                        setFormData(prev => ({ ...prev, semester: newSemester, class: '' }));
-                        // 当学年和学期都有值时，获取对应的班级列表
-                        if (formData.academicYear && newSemester) {
-                          fetchClassesForAcademicYear(formData.academicYear, newSemester);
-                        }
-                      }}
-                    >
-                      <option value="1">第一学期</option>
-                      <option value="2">第二学期</option>
-                    </Select>
-                  </div>
-                  
-                  <div>
-                    <Label htmlFor="class">班级 *</Label>
-                    <Select
-                      value={formData.class}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, class: value }))}
-                      disabled={!formData.academicYear || !formData.semester}
-                    >
-                      <option value="">
-                        {!formData.academicYear || !formData.semester 
-                          ? '请先选择学年和学期' 
-                          : classes.length === 0 
-                            ? '该学年学期暂无班级数据'
-                            : '请选择班级'
-                        }
-                      </option>
-                      {classes.map((cls) => (
-                        <option key={cls._id} value={cls._id}>
-                          {cls.grade}年级{cls.name}班 ({cls.studentCount}人)
-                        </option>
-                      ))}
-                    </Select>
-                    {formData.academicYear && formData.semester && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        显示 {formData.academicYear} 学年第{formData.semester}学期的班级
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* 课程安排 */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center justify-between">
-                  课程安排
-                  <Button 
-                    type="button"
-                    onClick={() => {
-                      setFormData(prev => ({
-                        ...prev,
-                        courseAssignments: [
-                          ...prev.courseAssignments,
-                          {
-                            course: '',
-                            teacher: '',
-                            weeklyHours: 2,
-                            requiresContinuous: false,
-                            continuousHours: 2,
-                            preferredTimeSlots: [],
-                            avoidTimeSlots: [],
-                            notes: ''
-                          }
-                        ]
-                      }));
-                    }}
-                    className="gap-2"
-                  >
-                    <Plus className="h-4 w-4" />
-                    添加课程
-                  </Button>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {formData.courseAssignments.map((assignment, index) => (
-                    <Card key={index} className="border-l-4 border-l-blue-500">
-                      <CardHeader className="pb-3">
-                        <div className="flex items-center justify-between">
-                          <h4 className="font-medium">课程 {index + 1}</h4>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setFormData(prev => ({
-                                ...prev,
-                                courseAssignments: prev.courseAssignments.filter((_, i) => i !== index)
-                              }));
-                            }}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="grid gap-4 md:grid-cols-3">
-                          <div>
-                            <Label>课程 *</Label>
-                            <Select
-                              value={assignment.course}
-                              onValueChange={(value) => {
-                                const newAssignments = [...formData.courseAssignments];
-                                newAssignments[index].course = value;
-                                setFormData(prev => ({ ...prev, courseAssignments: newAssignments }));
-                              }}
-                            >
-                              <option value="">请选择课程</option>
-                              {courses.map((course) => (
-                                <option key={course._id} value={course._id}>
-                                  {course.name}
-                                </option>
-                              ))}
-                            </Select>
-                          </div>
-                          
-                          <div>
-                            <Label>授课教师 *</Label>
-                            <Select
-                              value={assignment.teacher}
-                              onValueChange={(value) => {
-                                const newAssignments = [...formData.courseAssignments];
-                                newAssignments[index].teacher = value;
-                                setFormData(prev => ({ ...prev, courseAssignments: newAssignments }));
-                              }}
-                            >
-                              <option value="">请选择教师</option>
-                              {teachers.map((teacher) => (
-                                <option key={teacher._id} value={teacher._id}>
-                                  {teacher.name} - {teacher.subjects?.join(', ') || '未设置科目'}
-                                </option>
-                              ))}
-                            </Select>
-                          </div>
-                          
-                          <div>
-                            <Label>周课时 *</Label>
-                            <Input
-                              type="number"
-                              min="1"
-                              max="30"
-                              value={assignment.weeklyHours}
-                              onChange={(e) => {
-                                const newAssignments = [...formData.courseAssignments];
-                                newAssignments[index].weeklyHours = parseInt(e.target.value) || 1;
-                                setFormData(prev => ({ ...prev, courseAssignments: newAssignments }));
-                              }}
-                            />
-                          </div>
-                        </div>
-                        
-                        <div className="mt-4 space-y-2">
-                          <div className="flex items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              id={`continuous-${index}`}
-                              checked={assignment.requiresContinuous || false}
-                              onChange={(e) => {
-                                const newAssignments = [...formData.courseAssignments];
-                                newAssignments[index].requiresContinuous = e.target.checked;
-                                // 当勾选连续排课时，自动设置连续课时数为2
-                                if (e.target.checked && (!newAssignments[index].continuousHours || newAssignments[index].continuousHours < 2)) {
-                                  newAssignments[index].continuousHours = 2;
-                                }
-                                setFormData(prev => ({ ...prev, courseAssignments: newAssignments }));
-                              }}
-                            />
-                            <Label htmlFor={`continuous-${index}`}>需要连续排课</Label>
-                          </div>
-                          
-                          {assignment.requiresContinuous && (
-                            <div className="ml-6">
-                              <Label>连续课时数</Label>
-                              <Input
-                                type="number"
-                                min="2"
-                                max="4"
-                                value={assignment.continuousHours || 2}
-                                onChange={(e) => {
-                                  const newAssignments = [...formData.courseAssignments];
-                                  newAssignments[index].continuousHours = parseInt(e.target.value) || 2;
-                                  setFormData(prev => ({ ...prev, courseAssignments: newAssignments }));
-                                }}
-                                className="w-24"
-                              />
-                            </div>
-                          )}
-                          
-                          <div>
-                            <Label>备注</Label>
-                            <Input
-                              placeholder="课程安排备注"
-                              value={assignment.notes || ''}
-                              onChange={(e) => {
-                                const newAssignments = [...formData.courseAssignments];
-                                newAssignments[index].notes = e.target.value;
-                                setFormData(prev => ({ ...prev, courseAssignments: newAssignments }));
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                  
-                  {formData.courseAssignments.length === 0 && (
-                    <div className="text-center py-8 text-gray-500">
-                      <BookOpen className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                      <p>暂无课程安排，点击"添加课程"开始配置</p>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* 备注 */}
-            <div>
-              <Label htmlFor="notes">备注</Label>
-              <Textarea
-                id="notes"
-                placeholder="教学计划备注"
-                rows={3}
-                value={formData.notes || ''}
-                onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => setDialogState(prev => ({ ...prev, create: false }))}
-            >
-              取消
-            </Button>
-            <Button 
-              onClick={handleCreate}
-              disabled={!formData.class || !formData.academicYear || formData.courseAssignments.length === 0}
-            >
-              创建教学计划
-            </Button>
-          </DialogFooter>
+          <TeachingPlanForm
+            mode="create"
+            onSubmit={handleCreate}
+            onCancel={() => setDialogState(prev => ({ ...prev, create: false }))}
+            classes={classes}
+            courses={courses}
+            teachers={teachers}
+            fetchClassesForAcademicYear={fetchClassesForAcademicYear}
+          />
         </DialogContent>
       </Dialog>
 
@@ -1139,263 +1334,31 @@ export default function TeachingPlansPage() {
           <DialogHeader>
             <DialogTitle>编辑教学计划</DialogTitle>
           </DialogHeader>
-          <div className="space-y-6">
-            {/* 基本信息 */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">基本信息</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div>
-                    <Label htmlFor="academicYear">学年 *</Label>
-                    <Select
-                      value={formData.academicYear}
-                      onValueChange={(value) => {
-                        setFormData(prev => ({ ...prev, academicYear: value, class: '' }));
-                        if (value && formData.semester) {
-                          fetchClassesForAcademicYear(value, formData.semester);
-                        }
-                      }}
-                    >
-                      <option value="">请选择学年</option>
-                      {generateAcademicYears().map((year) => (
-                        <option key={year} value={year}>
-                          {year}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="semester">学期 *</Label>
-                    <Select
-                      value={formData.semester.toString()}
-                      onValueChange={(value) => {
-                        const newSemester = parseInt(value);
-                        setFormData(prev => ({ ...prev, semester: newSemester, class: '' }));
-                        if (formData.academicYear && newSemester) {
-                          fetchClassesForAcademicYear(formData.academicYear, newSemester);
-                        }
-                      }}
-                    >
-                      <option value="1">第一学期</option>
-                      <option value="2">第二学期</option>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="class">班级 *</Label>
-                    <Select
-                      value={formData.class}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, class: value }))}
-                      disabled={!formData.academicYear || !formData.semester}
-                    >
-                      <option value="">
-                        {!formData.academicYear || !formData.semester 
-                          ? '请先选择学年和学期' 
-                          : classes.length === 0 
-                            ? '该学年学期暂无班级数据'
-                            : '请选择班级'
-                        }
-                      </option>
-                      {classes.map((cls) => (
-                        <option key={cls._id} value={cls._id}>
-                          {cls.grade}年级{cls.name}班 ({cls.studentCount}人)
-                        </option>
-                      ))}
-                    </Select>
-                    {formData.academicYear && formData.semester && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        显示 {formData.academicYear} 学年第{formData.semester}学期的班级
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* 课程安排 */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center justify-between">
-                  课程安排
-                  <Button 
-                    type="button"
-                    onClick={() => {
-                      setFormData(prev => ({
-                        ...prev,
-                        courseAssignments: [
-                          ...prev.courseAssignments,
-                          {
-                            course: '',
-                            teacher: '',
-                            weeklyHours: 2,
-                            requiresContinuous: false,
-                            continuousHours: 2,
-                            preferredTimeSlots: [],
-                            avoidTimeSlots: [],
-                            notes: ''
-                          }
-                        ]
-                      }));
-                    }}
-                    className="gap-2"
-                  >
-                    <Plus className="h-4 w-4" />
-                    添加课程
-                  </Button>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {formData.courseAssignments.map((assignment, index) => (
-                    <Card key={index} className="border-l-4 border-l-blue-500">
-                      <CardHeader className="pb-3">
-                        <div className="flex items-center justify-between">
-                          <h4 className="font-medium">课程 {index + 1}</h4>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setFormData(prev => ({
-                                ...prev,
-                                courseAssignments: prev.courseAssignments.filter((_, i) => i !== index)
-                              }));
-                            }}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="grid gap-4 md:grid-cols-3">
-                          <div>
-                            <Label>课程 *</Label>
-                            <Select
-                              value={assignment.course}
-                              onValueChange={(value) => {
-                                const newAssignments = [...formData.courseAssignments];
-                                newAssignments[index].course = value;
-                                setFormData(prev => ({ ...prev, courseAssignments: newAssignments }));
-                              }}
-                            >
-                              <option value="">请选择课程</option>
-                              {courses.map((course) => (
-                                <option key={course._id} value={course._id}>
-                                  {course.name}
-                                </option>
-                              ))}
-                            </Select>
-                          </div>
-                          <div>
-                            <Label>授课教师 *</Label>
-                            <Select
-                              value={assignment.teacher}
-                              onValueChange={(value) => {
-                                const newAssignments = [...formData.courseAssignments];
-                                newAssignments[index].teacher = value;
-                                setFormData(prev => ({ ...prev, courseAssignments: newAssignments }));
-                              }}
-                            >
-                              <option value="">请选择教师</option>
-                              {teachers.map((teacher) => (
-                                <option key={teacher._id} value={teacher._id}>
-                                  {teacher.name} - {teacher.subjects?.join(', ') || '未设置科目'}
-                                </option>
-                              ))}
-                            </Select>
-                          </div>
-                          <div>
-                            <Label>周课时 *</Label>
-                            <Input
-                              type="number"
-                              min="1"
-                              max="30"
-                              value={assignment.weeklyHours}
-                              onChange={(e) => {
-                                const newAssignments = [...formData.courseAssignments];
-                                newAssignments[index].weeklyHours = parseInt(e.target.value) || 1;
-                                setFormData(prev => ({ ...prev, courseAssignments: newAssignments }));
-                              }}
-                            />
-                          </div>
-                        </div>
-                        <div className="mt-4 space-y-2">
-                          <div className="flex items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              id={`continuous-edit-${index}`}
-                              checked={assignment.requiresContinuous || false}
-                              onChange={(e) => {
-                                const newAssignments = [...formData.courseAssignments];
-                                newAssignments[index].requiresContinuous = e.target.checked;
-                                if (e.target.checked && (!newAssignments[index].continuousHours || newAssignments[index].continuousHours < 2)) {
-                                  newAssignments[index].continuousHours = 2;
-                                }
-                                setFormData(prev => ({ ...prev, courseAssignments: newAssignments }));
-                              }}
-                            />
-                            <Label htmlFor={`continuous-edit-${index}`}>需要连续排课</Label>
-                          </div>
-                          {assignment.requiresContinuous && (
-                            <div className="ml-6">
-                              <Label>连续课时数</Label>
-                              <Input
-                                type="number"
-                                min="2"
-                                max="4"
-                                value={assignment.continuousHours || 2}
-                                onChange={(e) => {
-                                  const newAssignments = [...formData.courseAssignments];
-                                  newAssignments[index].continuousHours = parseInt(e.target.value) || 2;
-                                  setFormData(prev => ({ ...prev, courseAssignments: newAssignments }));
-                                }}
-                                className="w-24"
-                              />
-                            </div>
-                          )}
-                          <div>
-                            <Label>备注</Label>
-                            <Input
-                              placeholder="课程安排备注"
-                              value={assignment.notes || ''}
-                              onChange={(e) => {
-                                const newAssignments = [...formData.courseAssignments];
-                                newAssignments[index].notes = e.target.value;
-                                setFormData(prev => ({ ...prev, courseAssignments: newAssignments }));
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                  {formData.courseAssignments.length === 0 && (
-                    <div className="text-center py-8 text-gray-500">
-                      <BookOpen className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                      <p>暂无课程安排，点击"添加课程"开始配置</p>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* 备注 */}
-            <div>
-              <Label htmlFor="notes-edit">备注</Label>
-              <Textarea
-                id="notes-edit"
-                placeholder="教学计划备注"
-                rows={3}
-                value={formData.notes || ''}
-                onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={closeDialogs}>取消</Button>
-            <Button onClick={handleUpdate}>保存修改</Button>
-          </DialogFooter>
+          <TeachingPlanForm
+            mode="edit"
+            initialData={selectedPlan ? {
+              class: selectedPlan.class._id,
+              academicYear: selectedPlan.academicYear,
+              semester: selectedPlan.semester,
+              courseAssignments: selectedPlan.courseAssignments.map(ca => ({
+                course: ca.course._id,
+                teacher: ca.teacher._id,
+                weeklyHours: ca.weeklyHours,
+                requiresContinuous: ca.requiresContinuous,
+                continuousHours: ca.continuousHours,
+                preferredTimeSlots: ca.preferredTimeSlots,
+                avoidTimeSlots: ca.avoidTimeSlots,
+                notes: ca.notes,
+              })),
+              notes: selectedPlan.notes,
+            } : undefined}
+            onSubmit={handleUpdate}
+            onCancel={closeDialogs}
+            classes={classes}
+            courses={courses}
+            teachers={teachers}
+            fetchClassesForAcademicYear={fetchClassesForAcademicYear}
+          />
         </DialogContent>
       </Dialog>
 

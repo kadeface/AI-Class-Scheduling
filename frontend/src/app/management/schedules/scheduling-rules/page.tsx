@@ -166,8 +166,13 @@ export default function SchedulingRulesPage() {
    *   string: 课程名称
    */
   const getCourseNameByType = (courseType: string): string => {
+    // 🆕 添加调试日志
+    console.log('getCourseNameByType 被调用，参数:', courseType);
+    console.log('availableSubjects:', availableSubjects);
+    
     // 🆕 如果是动态科目，直接返回科目名称
     if (availableSubjects.includes(courseType)) {
+      console.log('识别为动态科目:', courseType);
       return courseType;
     }
     
@@ -182,7 +187,9 @@ export default function SchedulingRulesPage() {
       'other': '其他'
     };
     
-    return courseTypeMap[courseType] || courseType;
+    const result = courseTypeMap[courseType] || courseType;
+    console.log('返回课程名称:', result);
+    return result;
   };
 
   // 状态管理
