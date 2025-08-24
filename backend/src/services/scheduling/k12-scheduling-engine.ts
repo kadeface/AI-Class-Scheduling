@@ -194,21 +194,18 @@ export class K12SchedulingEngine {
   private async executeStagedScheduling(): Promise<K12ScheduleResult> {
     console.log('🎯 [分阶段排课] 开始执行分阶段排课策略...');
     
-    // 🔧 修复：重构课程分类逻辑
-    // 从"按教学计划分类"改为"按课程分配分类"
+    // 🆕 优化：智能课程分类和评分排序
     const coreSubjects = ['语文', '数学', '英语']; // 核心课程科目列表
-    const coreSubjectAssignments: Array<{plan: any, assignment: any}> = [];
-    const electiveSubjectAssignments: Array<{plan: any, assignment: any}> = [];
-    const fixedTimeAssignments: Array<{plan: any, assignment: any}> = []; // 🆕 固定时间课程（班会等）
-    console.log('🔍 [课程分类] 开始分类课程分配...');
+    const allAssignments: Array<{plan: any, assignment: any, type: string, priority: number}> = [];
+    const fixedTimeAssignments: Array<{plan: any, assignment: any}> = []; // 固定时间课程（班会等）
     
-    // 遍历所有教学计划，按课程分配分类
+    console.log('🔍 [课程分类] 开始智能分类和评分课程分配...');
+    
+    // 遍历所有教学计划，计算每个课程分配的优先级
     for (const plan of this.teachingPlans) {
       if (!plan.courseAssignments || plan.courseAssignments.length === 0) {
         continue;
       }
-      
-      //console.log(`   📋 处理教学计划: 班级 ${plan.class?.name || plan.class}, 课程分配数量: ${plan.courseAssignments.length}`);
       
       for (const assignment of plan.courseAssignments) {
         const course = assignment.course;
@@ -217,24 +214,39 @@ export class K12SchedulingEngine {
           continue;
         }
         
-        //console.log(`      📚 课程分配: ${course.name} (${course.subject}), 每周课时: ${assignment.weeklyHours}`);
-        
-        // 🔧 修复：排除固定时间课程，避免参与流动课程排课
-
-        
-        // 课程分类逻辑
-        if (course.subject === '班会' || course.name === '班会') {
+        // 固定时间课程单独处理
+        if (assignment.isFixedTime && assignment.fixedTimeSlot) {
           fixedTimeAssignments.push({ plan, assignment });
-          //console.log(`         🔒 标记为固定时间课程: ${course.subject}`);
-        } else if (coreSubjects.includes(course.subject)) {
-          coreSubjectAssignments.push({ plan, assignment });
-          //console.log(`         ✅ 标记为核心课程: ${course.subject}`);
-        } else {
-          electiveSubjectAssignments.push({ plan, assignment });
-         //console.log(`         ✅ 标记为副科课程: ${course.subject}`);
+          console.log(`         🔒 标记为固定时间课程: ${course.subject} - 周${assignment.fixedTimeSlot.dayOfWeek}第${assignment.fixedTimeSlot.period}节`);
+          continue;
         }
-              }
-            }
+        
+        // 🆕 新增：计算课程优先级
+        const courseType = coreSubjects.includes(course.subject) ? 'core' : 'elective';
+        const priority = this.calculateCoursePriority(plan, assignment, courseType);
+        
+        allAssignments.push({ 
+          plan, 
+          assignment, 
+          type: courseType, 
+          priority 
+        });
+        
+        console.log(`         📊 课程评分: ${course.subject} (${courseType}) - 优先级: ${priority}`);
+      }
+    }
+    
+    // 🆕 新增：按优先级排序，核心课程自然排在前面
+    allAssignments.sort((a, b) => b.priority - a.priority);
+    
+    // 分离核心课程和副科课程（已按优先级排序）
+    const coreSubjectAssignments = allAssignments
+      .filter(item => item.type === 'core')
+      .map(item => ({ plan: item.plan, assignment: item.assignment }));
+    
+    const electiveSubjectAssignments = allAssignments
+      .filter(item => item.type === 'elective')
+      .map(item => ({ plan: item.plan, assignment: item.assignment }));
     
     console.log(`📊 [课程分类结果]`);
     console.log(`   - 核心课程分配: ${coreSubjectAssignments.length} 个`);
@@ -2126,42 +2138,40 @@ private getTimeSlotBrainState(timeSlot: BaseTimeSlot): number {
   return 2; // 默认正常状态
 }
 
-/**
- * K12特有的时间段偏好评分
- * 
- * 基于科学用脑理论，综合考虑：
- * 1. 认知负荷与脑状态匹配度
- * 2. 学习节奏优化
- * 3. 科目分散度
- * 4. 基础时间偏好
- * 
- * @param variable 排课变量
- * @param timeSlot 时间槽
- * @returns 科学用脑评分
- */
-private getK12TimeSlotPreference(variable: ScheduleVariable, timeSlot: BaseTimeSlot): number {
-  let score = 0;
+  /**
+   * 🆕 优化：统一的K12时间段偏好评分系统
+   * 
+   * 基于科学用脑理论，综合考虑：
+   * 1. 认知负荷与脑状态匹配度
+   * 2. 课程类型优先级（核心课程 > 副科课程）
+   * 3. 学习节奏优化
+   * 4. 科目分散度
+   * 5. 科目时间约束优先级
+   * 
+   * @param variable 排课变量
+   * @param timeSlot 时间槽
+   * @returns 科学用脑评分
+   */
+  private getK12TimeSlotPreference(variable: ScheduleVariable, timeSlot: BaseTimeSlot): number {
+    let score = 0;
 
-  // 1. 认知负荷与脑状态匹配度 (20%) - 科学因素
-  score += this.getCognitiveLoadBrainStateMatch(variable, timeSlot) * 0.20;
-  
-  // 2. K12核心课程黄金时段奖励 (15%)
-  score += this.getK12CoreSubjectGoldenTimeBonus(variable, timeSlot) * 0.15;
-  
-  // 3. 学习节奏优化评分 (10%)
-  score += this.getLearningRhythmScore(variable, timeSlot) * 0.10;
-  
-  // 4. 科目分散度评分 (5%)
-  score += this.getSubjectDistributionScore(variable, timeSlot) * 0.05;
-  
-  // 5. 基础时间偏好 (0%) - 被科目时间约束覆盖
-  // score += this.getBasicTimePreference(variable, timeSlot) * 0.00;
+    // 1. 认知负荷与脑状态匹配度 (20%) - 科学因素
+    score += this.getCognitiveLoadBrainStateMatch(variable, timeSlot) * 0.20;
+    
+    // 2. 🆕 新增：课程类型优先级评分 (25%) - 核心课程优先
+    score += this.getCourseTypePriorityScore(variable, timeSlot) * 0.25;
+    
+    // 3. 学习节奏优化评分 (10%)
+    score += this.getLearningRhythmScore(variable, timeSlot) * 0.10;
+    
+    // 4. 科目分散度评分 (5%)
+    score += this.getSubjectDistributionScore(variable, timeSlot) * 0.05;
+    
+    // 5. 🆕 新增：科目时间约束优先级 (40%) - 绝对优先级
+    score += this.getSubjectTimeConstraintPriority(variable, timeSlot) * 0.40;
 
-  // 6. 🆕 新增：科目时间约束优先级 (50%) - 绝对优先级
-  score += this.getSubjectTimeConstraintPriority(variable, timeSlot) * 0.50;
-
-  return score;
-}
+    return score;
+  }
 
 /**
  * 认知负荷与脑状态匹配度评分
@@ -2307,19 +2317,62 @@ private getBasicTimePreference(variable: ScheduleVariable, timeSlot: BaseTimeSlo
   return score;
 }
 
-/**
- * 基于脑科学的K12核心课程黄金时段奖励
- * 
- * 科学原理：动态适应不同的节次配置
- * - 上午节次：逻辑思维峰值时段，适合数学、物理等高认知负荷课程
- * - 下午节次：创造力峰值时段，适合语文、英语等语言类课程
- * - 支持灵活配置：如上午3节，下午4节等
- * 
- * @param variable 排课变量
- * @param timeSlot 时间槽
- * @returns 科学用脑评分奖励
- */
-private getK12CoreSubjectGoldenTimeBonus(variable: ScheduleVariable, timeSlot: BaseTimeSlot): number {
+  /**
+   * 🆕 新增：课程类型优先级评分
+   * 
+   * 根据课程类型给予不同的优先级评分：
+   * - 核心课程（语文、数学、英语）：高优先级，适合优质时间段
+   * - 副科课程（音体美、信息技术）：中等优先级，填充剩余时间段
+   * 
+   * @param variable 排课变量
+   * @param timeSlot 时间槽
+   * @returns 课程类型优先级评分
+   */
+  private getCourseTypePriorityScore(variable: ScheduleVariable, timeSlot: BaseTimeSlot): number {
+    if (!this.isCoreSubject(variable)) {
+      return 60; // 副科课程基础分
+    }
+    
+    // 核心课程根据时间段质量评分
+    let score = 100; // 核心课程基础分
+    
+    // 上午节次：逻辑思维较强，适合核心课程
+    if (this.isMorningPeriod(timeSlot.period)) {
+      if (timeSlot.period === 1 || timeSlot.period === 2) {
+        score += 80; // 第1-2节：最佳逻辑思维时段
+      } else if (timeSlot.period === 3) {
+        score += 60; // 第3节：注意力开始下降，但仍适合核心课程
+      }
+    } else if (this.isAfternoonPeriod(timeSlot.period)) {
+      // 下午节次：创造力较强
+      const totalPeriods = this.getTotalPeriods();
+      const afternoonStartPeriod = this.periodTimeConfigs.find(c => c.startTime >= '12:00')?.period || 4;
+      
+      if (timeSlot.period === afternoonStartPeriod || timeSlot.period === afternoonStartPeriod + 1) {
+        score += 70; // 下午开始的前两节：注意力恢复
+      } else if (timeSlot.period === totalPeriods - 1 || timeSlot.period === totalPeriods) {
+        score += 40; // 下午最后两节：注意力下降，但可安排核心课程
+      } else {
+        score += 60; // 下午中间节次：正常状态
+      }
+    }
+    
+    return score;
+  }
+
+  /**
+   * 基于脑科学的K12核心课程黄金时段奖励
+   * 
+   * 科学原理：动态适应不同的节次配置
+   * - 上午节次：逻辑思维峰值时段，适合数学、物理等高认知负荷课程
+   * - 下午节次：创造力峰值时段，适合语文、英语等语言类课程
+   * - 支持灵活配置：如上午3节，下午4节等
+   * 
+   * @param variable 排课变量
+   * @param timeSlot 时间槽
+   * @returns 科学用脑评分奖励
+   */
+  private getK12CoreSubjectGoldenTimeBonus(variable: ScheduleVariable, timeSlot: BaseTimeSlot): number {
   if (!this.isCoreSubject(variable)) return 0;
   
   let bonus = 0;
@@ -2438,8 +2491,8 @@ private getCourseNameSync(courseId: mongoose.Types.ObjectId): string {
 }
 
   /**
-   * 🆕 新增：处理固定时间课程
-   * 在扩展时间槽之前执行，确保固定时间课程优先占用时间槽
+   * 🆕 优化：处理固定时间课程
+   * 支持多种配置方式：教学计划配置 + 排课规则配置
    * 
    * Args:
    *   schedulingRules: 排课规则数组
@@ -2450,33 +2503,38 @@ private getCourseNameSync(courseId: mongoose.Types.ObjectId): string {
   private async processFixedTimeCourses(schedulingRules: any[]): Promise<Map<string, CourseAssignment>> {
     const fixedTimeAssignments = new Map<string, CourseAssignment>();
     
-    console.log('🔍 [固定时间课程] 开始从教学计划中读取固定时间课程...');
+    console.log('🔍 [固定时间课程] 开始识别固定时间课程...');
     
-    // 🆕 新增：从教学计划中读取固定时间课程
-    for (const plan of this.teachingPlans) {
-      if (plan.courseAssignments && plan.courseAssignments.length > 0) {
-        for (const assignment of plan.courseAssignments) {
-          // 检查是否为固定时间课程
-          if (assignment.isFixedTime && assignment.fixedTimeSlot) {
-            console.log(`🔒 [固定时间课程] 发现固定时间课程: 班级${plan.class}, 课程${assignment.course}, 时间${assignment.fixedTimeSlot.dayOfWeek}第${assignment.fixedTimeSlot.period}节`);
-            
-            const fixedAssignment = this.createFixedTimeAssignmentFromTeachingPlan(plan, assignment);
-            if (fixedAssignment) {
-              fixedTimeAssignments.set(fixedAssignment.variableId, fixedAssignment);
-              
-              // 将固定时间课程添加到当前分配中
-              this.currentAssignments.set(fixedAssignment.variableId, fixedAssignment);
-            }
-          }
-        }
+    // 1. 从教学计划中读取固定时间课程
+    const teachingPlanFixedCourses = this.extractFixedCoursesFromTeachingPlans();
+    console.log(`   📋 从教学计划识别到 ${teachingPlanFixedCourses.length} 个固定时间课程`);
+    
+    // 2. 从排课规则中读取固定时间课程
+    const ruleFixedCourses = this.extractFixedCoursesFromSchedulingRules(schedulingRules);
+    console.log(`   📋 从排课规则识别到 ${ruleFixedCourses.length} 个固定时间课程`);
+    
+    // 3. 合并所有固定时间课程
+    const allFixedCourses = [...teachingPlanFixedCourses, ...ruleFixedCourses];
+    console.log(`   📊 总共识别到 ${allFixedCourses.length} 个固定时间课程`);
+    
+    // 4. 创建固定时间课程分配
+    for (const fixedCourse of allFixedCourses) {
+      const fixedAssignment = this.createFixedTimeAssignmentFromConfig(fixedCourse);
+      if (fixedAssignment) {
+        fixedTimeAssignments.set(fixedAssignment.variableId, fixedAssignment);
+        
+        // 将固定时间课程添加到当前分配中
+        this.currentAssignments.set(fixedAssignment.variableId, fixedAssignment);
+        
+        console.log(`   ✅ 成功创建固定时间课程: ${fixedAssignment.variableId}`);
       }
     }
     
-    // 🔧 修复：注释掉从排课规则读取的重复逻辑，避免重复创建固定课程
-    // 现在只从教学计划中读取固定时间课程，避免重复处理
-    console.log('🔧 [固定时间课程] 跳过排课规则中的固定课程配置，避免重复处理');
-    
     console.log(`🔒 [固定时间课程] 成功处理 ${fixedTimeAssignments.size} 个固定时间课程分配`);
+    
+    // 5. 输出详细的固定课程信息
+    this.logFixedTimeCoursesDetails(fixedTimeAssignments);
+    
     return fixedTimeAssignments;
   }
 
@@ -2844,19 +2902,19 @@ private getCourseNameSync(courseId: mongoose.Types.ObjectId): string {
     
     console.log(`   🔍 [时间槽扩展] 找到 ${classes.size} 个班级`);
     
-    // 🆕 修复：直接从排课规则中读取固定时间课程配置，而不是依赖 fixedTimeAssignments
-    const fixedTimeCoursesConfig = this.getFixedTimeCoursesConfig();
-    console.log(`   🔍 [时间槽扩展] 固定时间课程配置:`, fixedTimeCoursesConfig);
+    // 🆕 修复：从教学计划中读取固定时间课程配置，确保所有固定课程都被正确识别
+    const fixedTimeCoursesFromPlans = this.getFixedTimeCoursesFromTeachingPlans();
+    console.log(`   🔍 [时间槽扩展] 从教学计划读取的固定时间课程:`, fixedTimeCoursesFromPlans);
     
     // 为每个班级创建对应的时间段
     for (const baseSlot of baseTimeSlots) {
       for (const [classId, classInfo] of classes) {
-        // 🆕 修复：直接检查排课规则中的固定时间课程配置
-        const isOccupiedByFixedCourse = this.isTimeSlotOccupiedByFixedCourseFromConfig(
+        // 🆕 修复：检查教学计划中的固定时间课程配置
+        const isOccupiedByFixedCourse = this.isTimeSlotOccupiedByFixedCourseFromPlans(
           classId, 
           baseSlot.dayOfWeek, 
           baseSlot.period, 
-          fixedTimeCoursesConfig
+          fixedTimeCoursesFromPlans
         );
         
         const classTimeSlot: ClassTimeSlot = {
@@ -2867,11 +2925,17 @@ private getCourseNameSync(courseId: mongoose.Types.ObjectId): string {
             endTime: baseSlot.endTime || ''
           },
           classId: new mongoose.Types.ObjectId(classId),
-          isAvailable: !isOccupiedByFixedCourse, // 被固定时间课程占用的时间段不可用
+          // 🆕 优化：动态判断时间段可用性
+          isAvailable: !isOccupiedByFixedCourse, // 固定课程时间段不可用
           className: classInfo.name || `班级${classId}`,
-          // 🆕 新增：记录占用信息
+          // 🆕 记录固定课程占用信息，用于后续保护和调试
           occupiedBy: isOccupiedByFixedCourse ? 'fixed-course' : null
         };
+        
+        // 🆕 新增：详细记录固定课程时间段信息
+        if (isOccupiedByFixedCourse) {
+          console.log(`      🔒 [时间段保护] 标记时间段不可用: 班级${classInfo.name}, 周${baseSlot.dayOfWeek}第${baseSlot.period}节`);
+        }
         
         classTimeSlots.push(classTimeSlot);
       }
@@ -2896,6 +2960,43 @@ private getCourseNameSync(courseId: mongoose.Types.ObjectId): string {
       }
     }
     return null;
+  }
+
+  /**
+   * 🆕 新增：从教学计划中获取固定时间课程配置
+   * 
+   * Returns:
+   *   Map<string, Array<{dayOfWeek: number, period: number, subject: string}>>: 班级ID到固定时间课程的映射
+   */
+  private getFixedTimeCoursesFromTeachingPlans(): Map<string, Array<{dayOfWeek: number, period: number, subject: string}>> {
+    const fixedTimeCourses = new Map<string, Array<{dayOfWeek: number, period: number, subject: string}>>();
+    
+    for (const plan of this.teachingPlans) {
+      if (!plan.courseAssignments || plan.courseAssignments.length === 0) {
+        continue;
+      }
+      
+      const classId = plan.class._id.toString();
+      const classFixedCourses: Array<{dayOfWeek: number, period: number, subject: string}> = [];
+      
+      for (const assignment of plan.courseAssignments) {
+        if (assignment.isFixedTime && assignment.fixedTimeSlot) {
+          const course = assignment.course;
+          classFixedCourses.push({
+            dayOfWeek: assignment.fixedTimeSlot.dayOfWeek,
+            period: assignment.fixedTimeSlot.period,
+            subject: course.subject || course.name || '未知科目'
+          });
+        }
+      }
+      
+      if (classFixedCourses.length > 0) {
+        fixedTimeCourses.set(classId, classFixedCourses);
+        console.log(`      🔒 [固定时间课程] 班级 ${plan.class.name}: ${classFixedCourses.length} 个固定时间课程`);
+      }
+    }
+    
+    return fixedTimeCourses;
   }
 
   /**
@@ -2940,6 +3041,40 @@ private getCourseNameSync(courseId: mongoose.Types.ObjectId): string {
     for (const fixedCourse of fixedTimeCoursesConfig.courses) {
       if (fixedCourse.dayOfWeek === dayOfWeek && fixedCourse.period === period) {
         console.log(`      🔒 [固定时间课程] 时间段被占用: 周${dayOfWeek}第${period}节, 课程类型: ${fixedCourse.type}`);
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  /**
+   * 🆕 新增：根据教学计划配置检查时间段是否被固定时间课程占用
+   * 
+   * Args:
+   *   classId: 班级ID
+   *   dayOfWeek: 星期几
+   *   period: 节次
+   *   fixedTimeCoursesFromPlans: 从教学计划读取的固定时间课程配置
+   * 
+   * Returns:
+   *   boolean: 是否被占用
+   */
+  private isTimeSlotOccupiedByFixedCourseFromPlans(
+    classId: string, 
+    dayOfWeek: number, 
+    period: number, 
+    fixedTimeCoursesFromPlans: Map<string, Array<{dayOfWeek: number, period: number, subject: string}>>
+  ): boolean {
+    const classFixedCourses = fixedTimeCoursesFromPlans.get(classId);
+    if (!classFixedCourses) {
+      return false;
+    }
+    
+    // 检查该班级的固定时间课程
+    for (const fixedCourse of classFixedCourses) {
+      if (fixedCourse.dayOfWeek === dayOfWeek && fixedCourse.period === period) {
+        console.log(`      🔒 [固定时间课程] 时间段被占用: 班级${classId} 周${dayOfWeek}第${period}节, 课程: ${fixedCourse.subject}`);
         return true;
       }
     }
@@ -3139,13 +3274,20 @@ private getCourseNameSync(courseId: mongoose.Types.ObjectId): string {
           continue;
         }
         
-        // 确定插入位置（班会课程：周一第一节）
+        // 🆕 修复：使用教学计划中配置的固定时间段，而不是硬编码
+        if (!assignment.fixedTimeSlot) {
+          console.log(`      ⚠️ [固定时间课程] 缺少固定时间段配置: ${plan.class.name} ${course.subject}`);
+          continue;
+        }
+        
         const timeSlot = {
-          dayOfWeek: 1,  // 周一
-          period: 1,     // 第一节
-          startTime: this.getTimeSlotStartTime(1),
-          endTime: this.getTimeSlotEndTime(1)
+          dayOfWeek: assignment.fixedTimeSlot.dayOfWeek,
+          period: assignment.fixedTimeSlot.period,
+          startTime: this.getTimeSlotStartTime(assignment.fixedTimeSlot.period),
+          endTime: this.getTimeSlotEndTime(assignment.fixedTimeSlot.period)
         };
+        
+        console.log(`      🔍 [固定时间课程] 准备插入: ${plan.class.name} ${course.subject} - 周${timeSlot.dayOfWeek}第${timeSlot.period}节`);
         
         // 检查该时间段是否已被占用
         const isTimeSlotAvailable = !this.isTimeSlotOccupiedByFixedCourse(
@@ -3155,7 +3297,7 @@ private getCourseNameSync(courseId: mongoose.Types.ObjectId): string {
           new Map() // 传入空的Map，因为我们还没有创建固定时间课程
         );
         if (!isTimeSlotAvailable) {
-          console.log(`      ⚠️ [固定时间课程] 时间段被占用，跳过: ${plan.class.name} 班会`);
+          console.log(`      ⚠️ [固定时间课程] 时间段被占用，跳过: ${plan.class.name} ${course.subject}`);
           continue;
         }
         
@@ -3164,22 +3306,22 @@ private getCourseNameSync(courseId: mongoose.Types.ObjectId): string {
         
         // 创建固定时间课程分配
         const fixedAssignment: CourseAssignment = {
-          variableId: `fixed_${plan.class._id}_班会_${timeSlot.dayOfWeek}_${timeSlot.period}`,
+          variableId: `fixed_${plan.class._id}_${course.subject}_${timeSlot.dayOfWeek}_${timeSlot.period}`,
           classId: plan.class._id,
           courseId: course._id,
           teacherId: teacher._id,
           roomId: room ? room._id : null,
           timeSlot: timeSlot,
           isFixed: true,
-          weekType: 'all',
-          startWeek: 1,
-          endWeek: 20
+          weekType: assignment.fixedTimeSlot.weekType || 'all',
+          startWeek: assignment.fixedTimeSlot.startWeek || 1,
+          endWeek: assignment.fixedTimeSlot.endWeek || 20
         };
         
         // 直接插入到当前分配中
         this.currentAssignments.set(fixedAssignment.variableId, fixedAssignment);
         
-        console.log(`      ✅ [固定时间课程] 成功插入: ${plan.class.name} 班会 - 周${timeSlot.dayOfWeek}第${timeSlot.period}节`);
+        console.log(`      ✅ [固定时间课程] 成功插入: ${plan.class.name} ${course.subject} - 周${timeSlot.dayOfWeek}第${timeSlot.period}节`);
         insertedCount++;
         
       } catch (error) {
@@ -3643,5 +3785,397 @@ private getCourseNameSync(courseId: mongoose.Types.ObjectId): string {
     }
 
     return false; // 不满足科目时间约束要求
+  }
+
+  /**
+   * 🆕 新增：从教学计划中提取固定时间课程配置
+   * 
+   * Returns:
+   *   Array<{plan: any, assignment: any, type: string}>: 固定时间课程配置数组
+   */
+  private extractFixedCoursesFromTeachingPlans(): Array<{plan: any, assignment: any, type: string}> {
+    const fixedCourses: Array<{plan: any, assignment: any, type: string}> = [];
+    
+    for (const plan of this.teachingPlans) {
+      if (!plan.courseAssignments || plan.courseAssignments.length === 0) {
+        continue;
+      }
+      
+      for (const assignment of plan.courseAssignments) {
+        if (assignment.isFixedTime && assignment.fixedTimeSlot) {
+          const course = assignment.course;
+          console.log(`      🔒 [固定时间课程] 发现教学计划固定课程: 班级${plan.class.name}, 课程${course.subject}, 时间周${assignment.fixedTimeSlot.dayOfWeek}第${assignment.fixedTimeSlot.period}节`);
+          
+          fixedCourses.push({
+            plan,
+            assignment,
+            type: 'teaching-plan'
+          });
+        }
+      }
+    }
+    
+    return fixedCourses;
+  }
+
+  /**
+   * 🆕 新增：从排课规则中提取固定时间课程配置
+   * 
+   * Args:
+   *   schedulingRules: 排课规则数组
+   * 
+   * Returns:
+   *   Array<{plan: any, assignment: any, type: string}>: 固定时间课程配置数组
+   */
+  private extractFixedCoursesFromSchedulingRules(schedulingRules: any[]): Array<{plan: any, assignment: any, type: string}> {
+    const fixedCourses: Array<{plan: any, assignment: any, type: string}> = [];
+    
+    for (const rules of schedulingRules) {
+      if (rules.courseArrangementRules?.fixedTimeCourses?.enabled) {
+        const fixedTimeConfig = rules.courseArrangementRules.fixedTimeCourses;
+        
+        if (fixedTimeConfig.courses && Array.isArray(fixedTimeConfig.courses)) {
+          for (const fixedCourse of fixedTimeConfig.courses) {
+            console.log(`      🔒 [固定时间课程] 发现排课规则固定课程: ${fixedCourse.name}, 时间周${fixedCourse.dayOfWeek}第${fixedCourse.period}节`);
+            
+            // 为每个班级创建固定课程配置
+            for (const plan of this.teachingPlans) {
+              // 🆕 修复：使用真实的课程和教师ID，避免数据库验证错误
+              // 从教学计划中找到对应的真实课程和教师
+              const realCourse = plan.courseAssignments?.find((ca: any) => 
+                ca.course?.subject === fixedCourse.name
+              )?.course;
+              
+              const realTeacher = plan.courseAssignments?.find((ca: any) => 
+                ca.course?.subject === fixedCourse.name
+              )?.teacher;
+              
+              // 如果找不到真实数据，使用班级ID作为备用（确保是有效的ObjectId）
+              const courseId = realCourse?._id || plan.class._id;
+              const teacherId = realTeacher?._id || plan.class._id;
+              
+              const mockAssignment = {
+                course: { 
+                  _id: courseId, 
+                  subject: fixedCourse.name, 
+                  name: fixedCourse.name 
+                },
+                teacher: { _id: teacherId },
+                fixedTimeSlot: {
+                  dayOfWeek: fixedCourse.dayOfWeek,
+                  period: fixedCourse.period,
+                  weekType: fixedCourse.weekType || 'all',
+                  startWeek: fixedCourse.startWeek || 1,
+                  endWeek: fixedCourse.endWeek || 20
+                }
+              };
+              
+              console.log(`      🔧 [固定课程] 班级 ${plan.class.name} 使用真实ID: 课程=${courseId}, 教师=${teacherId}`);
+              
+              fixedCourses.push({
+                plan,
+                assignment: mockAssignment,
+                type: 'scheduling-rule'
+              });
+            }
+          }
+        }
+      }
+    }
+    
+    return fixedCourses;
+  }
+
+  /**
+   * 🆕 新增：从配置创建固定时间课程分配
+   * 
+   * Args:
+   *   fixedCourse: 固定时间课程配置
+   * 
+   * Returns:
+   *   CourseAssignment | null: 固定时间课程分配对象
+   */
+  private createFixedTimeAssignmentFromConfig(fixedCourse: {plan: any, assignment: any, type: string}): CourseAssignment | null {
+    try {
+      const { plan, assignment, type } = fixedCourse;
+      
+      if (type === 'teaching-plan') {
+        return this.createFixedTimeAssignmentFromTeachingPlan(plan, assignment);
+      } else if (type === 'scheduling-rule') {
+        return this.createFixedTimeAssignmentFromRule(plan, assignment);
+      }
+      
+      return null;
+    } catch (error) {
+      console.error(`❌ [固定时间课程] 从配置创建分配失败:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * 🆕 新增：从排课规则创建固定时间课程分配
+   * 
+   * Args:
+   *   plan: 教学计划
+   *   assignment: 课程分配
+   * 
+   * Returns:
+   *   CourseAssignment | null: 固定时间课程分配对象
+   */
+  private createFixedTimeAssignmentFromRule(plan: any, assignment: any): CourseAssignment | null {
+    try {
+      const course = assignment.course;
+      const teacher = assignment.teacher;
+      
+      // 查找对应的教室（优先使用班级固定教室）
+      const room = this.findRoomForFixedCourse('class-meeting', plan.class);
+      
+      const fixedAssignment: CourseAssignment = {
+        variableId: `fixed_rule_${plan.class._id}_${course.subject}_${assignment.fixedTimeSlot.dayOfWeek}_${assignment.fixedTimeSlot.period}`,
+        classId: plan.class._id,
+        courseId: course._id,
+        teacherId: teacher._id,
+        roomId: room ? room._id : null,
+        timeSlot: {
+          dayOfWeek: assignment.fixedTimeSlot.dayOfWeek,
+          period: assignment.fixedTimeSlot.period,
+          startTime: this.getTimeSlotStartTime(assignment.fixedTimeSlot.period),
+          endTime: this.getTimeSlotEndTime(assignment.fixedTimeSlot.period)
+        },
+        isFixed: true,
+        weekType: assignment.fixedTimeSlot.weekType || 'all',
+        startWeek: assignment.fixedTimeSlot.startWeek || 1,
+        endWeek: assignment.fixedTimeSlot.endWeek || 20
+      };
+      
+      return fixedAssignment;
+      
+    } catch (error) {
+      console.error(`❌ [固定时间课程] 从排课规则创建分配失败:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * 🆕 新增：计算课程优先级
+   * 
+   * 综合考虑多个因素计算课程的排课优先级：
+   * 1. 课程类型（核心课程 > 副科课程）
+   * 2. 课时数量（课时越多优先级越高）
+   * 3. 教师重要性
+   * 4. 班级重要性
+   * 
+   * @param plan: 教学计划
+   * @param assignment: 课程分配
+   * @param courseType: 课程类型
+   * @returns 优先级分数
+   */
+  private calculateCoursePriority(plan: any, assignment: any, courseType: string): number {
+    let priority = 0;
+    
+    // 1. 课程类型基础分
+    if (courseType === 'core') {
+      priority += 100; // 核心课程基础分
+    } else {
+      priority += 50;  // 副科课程基础分
+    }
+    
+    // 2. 课时数量权重
+    const weeklyHours = assignment.weeklyHours || 1;
+    priority += weeklyHours * 10; // 每课时加10分
+    
+    // 3. 科目重要性权重
+    const subject = assignment.course.subject;
+    if (subject === '语文') priority += 30;      // 语文最重要
+    else if (subject === '数学') priority += 25; // 数学次之
+    else if (subject === '英语') priority += 20; // 英语再次之
+    else if (courseType === 'core') priority += 15; // 其他核心课程
+    else priority += 5; // 副科课程
+    
+    // 4. 班级重要性权重（可以根据班级等级调整）
+    const className = plan.class.name || '';
+    if (className.includes('重点班') || className.includes('实验班')) {
+      priority += 20; // 重点班级优先
+    } else if (className.includes('普通班')) {
+      priority += 10; // 普通班级
+    }
+    
+    // 5. 教师重要性权重（可以根据教师职称调整）
+    const teacher = assignment.teacher;
+    if (teacher && teacher.title) {
+      if (teacher.title.includes('特级') || teacher.title.includes('高级')) {
+        priority += 15; // 高级教师优先
+      } else if (teacher.title.includes('中级')) {
+        priority += 10; // 中级教师
+      }
+    }
+    
+    return priority;
+  }
+
+  /**
+   * 🆕 新增：输出固定时间课程详细信息
+   * 
+   * Args:
+   *   fixedTimeAssignments: 固定时间课程分配映射
+   */
+  private logFixedTimeCoursesDetails(fixedTimeAssignments: Map<string, CourseAssignment>): void {
+    if (fixedTimeAssignments.size === 0) {
+      console.log('   📊 [固定时间课程详情] 没有固定时间课程');
+      return;
+    }
+    
+    console.log('\n   📊 [固定时间课程详情] 固定时间课程列表:');
+    console.log('   ' + '='.repeat(60));
+    
+    for (const [id, assignment] of fixedTimeAssignments.entries()) {
+      const courseInfo = this.findCourseInTeachingPlans(assignment.courseId);
+      const subject = courseInfo ? courseInfo.subject : '未知科目';
+      
+      console.log(`   🔒 ${subject}: 班级${assignment.classId}, 周${assignment.timeSlot.dayOfWeek}第${assignment.timeSlot.period}节`);
+      console.log(`      - 分配ID: ${id}`);
+      console.log(`      - 教师ID: ${assignment.teacherId}`);
+      console.log(`      - 教室ID: ${assignment.roomId || '未分配'}`);
+      console.log(`      - 周次类型: ${assignment.weekType || 'all'}`);
+      console.log(`      - 时间范围: 第${assignment.startWeek || 1}周 - 第${assignment.endWeek || 20}周`);
+    }
+    
+    console.log('   ' + '='.repeat(60));
+  }
+
+  /**
+   * 🆕 新增：基于优先级的智能排课方法
+   * 
+   * 统一处理核心课程和副科课程，按优先级排序进行排课
+   * 这样可以确保高优先级课程获得更好的时间段
+   * 
+   * @param allAssignments 所有待排课程（已按优先级排序）
+   * @returns 排课结果统计
+   */
+  private async smartScheduleByPriority(
+    allAssignments: Array<{plan: any, assignment: any}>
+  ): Promise<{coreCount: number, electiveCount: number}> {
+    console.log(`   🎯 [智能排课] 开始基于优先级的智能排课...`);
+    console.log(`   📊 待排课程总数: ${allAssignments.length}`);
+    
+    let coreCount = 0;
+    let electiveCount = 0;
+    
+    // 按优先级顺序排课
+    for (let i = 0; i < allAssignments.length; i++) {
+      const { plan, assignment } = allAssignments[i];
+      const course = assignment.course;
+      const courseType = this.isCoreSubject({ subject: course.subject } as any) ? 'core' : 'elective';
+      
+      console.log(`   📚 [${i + 1}/${allAssignments.length}] 排课: ${course.subject} (${courseType})`);
+      
+      try {
+        // 创建排课变量
+        const variable = this.createScheduleVariable(plan, assignment);
+        
+        // 查找可用时间槽（使用评分机制）
+        const timeSlot = this.findBestTimeSlotByScore(variable);
+        if (!timeSlot) {
+          console.log(`      ⚠️ 没有找到合适的时间槽，跳过`);
+          continue;
+        }
+        
+        // 分配课室
+        const room = this.roomAllocator.getRoomAssignment(
+          course, 
+          plan.class._id, 
+          this.rooms, 
+          this.teachingPlans.map(p => p.class)
+        );
+        
+        if (!room) {
+          console.log(`      ⚠️ 无法分配课室，跳过`);
+          continue;
+        }
+        
+        // 检查约束
+        const constraintCheck = this.constraintChecker.checkConstraints(
+          variable, 
+          timeSlot, 
+          room, 
+          this.currentAssignments
+        );
+        
+        if (!constraintCheck) {
+          console.log(`      ⚠️ 违反约束，跳过`);
+          continue;
+        }
+        
+        // 创建课程分配
+        const courseAssignment: CourseAssignment = {
+          variableId: variable.id,
+          classId: variable.classId,
+          courseId: variable.courseId,
+          teacherId: variable.teacherId,
+          roomId: room._id,
+          timeSlot: timeSlot,
+          isFixed: false
+        };
+        
+        // 保存分配
+        this.currentAssignments.set(variable.id, courseAssignment);
+        
+        // 统计结果
+        if (courseType === 'core') {
+          coreCount++;
+          console.log(`      ✅ 核心课程排课成功: ${course.subject} -> 周${timeSlot.dayOfWeek}第${timeSlot.period}节`);
+        } else {
+          electiveCount++;
+          console.log(`      ✅ 副科课程排课成功: ${course.subject} -> 周${timeSlot.dayOfWeek}第${timeSlot.period}节`);
+        }
+        
+      } catch (error) {
+        console.error(`      ❌ 排课失败:`, error);
+      }
+    }
+    
+    console.log(`   📊 [智能排课完成] 核心课程: ${coreCount}, 副科课程: ${electiveCount}`);
+    return { coreCount, electiveCount };
+  }
+
+  /**
+   * 🆕 新增：基于评分查找最佳时间槽
+   * 
+   * 使用统一的评分机制为课程找到最佳的时间槽
+   * 
+   * @param variable 排课变量
+   * @returns 最佳时间槽
+   */
+  private findBestTimeSlotByScore(variable: ScheduleVariable): BaseTimeSlot | null {
+    // 获取该班级的所有可用时间槽
+    const availableTimeSlots = this.classTimeSlots.filter(cts => 
+      cts.classId.toString() === variable.classId.toString() && 
+      cts.isAvailable
+    );
+    
+    if (availableTimeSlots.length === 0) {
+      return null;
+    }
+    
+    // 计算每个时间槽的评分
+    const scoredTimeSlots = availableTimeSlots.map(cts => ({
+      timeSlot: cts.baseTimeSlot,
+      score: this.getK12TimeSlotPreference(variable, cts.baseTimeSlot)
+    }));
+    
+    // 按评分排序，选择最高分的时间槽
+    scoredTimeSlots.sort((a, b) => b.score - a.score);
+    
+    // 选择前3个最高分的时间槽进行可行性检查
+    for (let i = 0; i < Math.min(3, scoredTimeSlots.length); i++) {
+      const { timeSlot, score } = scoredTimeSlots[i];
+      
+      if (this.isAssignmentFeasible(variable, timeSlot)) {
+        console.log(`      🎯 选择时间槽: 周${timeSlot.dayOfWeek}第${timeSlot.period}节 (评分: ${score})`);
+        return timeSlot;
+      }
+    }
+    
+    return null;
   }
 }
