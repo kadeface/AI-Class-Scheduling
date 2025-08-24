@@ -199,6 +199,9 @@ export default function ManualSchedulePage() {
   // 拖拽状态
   const [pendingDragOperations, setPendingDragOperations] = useState<DragOperation[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  
+  // 拖拽说明折叠状态
+  const [showDragInstructions, setShowDragInstructions] = useState(false);
 
   // 本地辅助函数：获取教师ID
   const getTeacherId = (teacher: any): string => {
@@ -1331,12 +1334,12 @@ export default function ManualSchedulePage() {
 
   return (
     <DndProvider backend={HTML5Backend}>
-      <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">手动排课</h1>
-          <p className="text-gray-600">手动创建和编辑课程安排，支持临时调课</p>
-        </div>
+      <div className="p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">手动排课</h1>
+            <p className="text-gray-600">手动创建和编辑课程安排，支持临时调课</p>
+          </div>
         <div className="flex items-center gap-3">
           <Button variant="outline" onClick={() => loadPeriodTimes()}>
             <RefreshCw className="h-4 w-4 mr-2" />
@@ -1349,59 +1352,26 @@ export default function ManualSchedulePage() {
         </div>
       </div>
 
-      {/* 拖拽操作说明 */}
-      <Card className="border-blue-200 bg-blue-50">
-        <CardHeader>
-          <CardTitle className="text-lg text-blue-800">拖拽操作说明</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            <div className="text-sm text-blue-700">
-              <strong>如何使用拖拽功能：</strong>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-green-400 rounded-full"></div>
-                  <span>绿色高亮：可以放置课程</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-red-400 rounded-full"></div>
-                  <span>红色高亮：无法放置（有冲突）</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-blue-400 rounded-full"></div>
-                  <span>蓝色高亮：正在拖拽中</span>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div>• 拖拽课程卡片到目标时间位置</div>
-                <div>• 只检测教师时间冲突（教师不能同时在多个班级上课）</div>
-                <div>• 允许同一时间安排多门课程（不检查时间位置冲突）</div>
-                <div>• 专注于教师分配问题，简化排课流程</div>
-                <div>• 拖拽成功后需要提交到数据库</div>
-                <div>• 支持撤销操作恢复原始状态</div>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+
 
       {/* 拖拽操作控制 */}
       {pendingDragOperations.length > 0 && (
         <Card className="border-orange-200 bg-orange-50">
-          <CardHeader>
-            <CardTitle className="text-lg text-orange-800">待提交的拖拽操作</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="text-sm text-orange-700">
-                您有 <strong>{pendingDragOperations.length}</strong> 个拖拽操作等待提交到数据库
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="text-sm text-orange-700">
+                  您有 <strong>{pendingDragOperations.length}</strong> 个拖拽操作等待提交
+                </div>
+                <div className="text-xs text-orange-600">
+                  提示：拖拽操作只是预览效果，需要提交才会真正保存
+                </div>
               </div>
               <div className="flex gap-2">
                 <Button 
                   onClick={submitDragOperations} 
                   disabled={loading}
+                  size="sm"
                   className="bg-orange-600 hover:bg-orange-700"
                 >
                   <Save className="h-4 w-4 mr-2" />
@@ -1410,13 +1380,11 @@ export default function ManualSchedulePage() {
                 <Button 
                   variant="outline" 
                   onClick={undoDragOperations}
+                  size="sm"
                   className="border-orange-300 text-orange-700 hover:bg-orange-100"
                 >
                   撤销所有操作
                 </Button>
-              </div>
-              <div className="text-xs text-orange-600">
-                提示：拖拽操作只是预览效果，需要点击"提交到数据库"按钮才会真正保存
               </div>
             </div>
           </CardContent>
@@ -1425,28 +1393,28 @@ export default function ManualSchedulePage() {
 
       {/* 筛选条件 */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">筛选条件</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <AcademicPeriodSelector
-            value={filters}
-            onChange={handleFiltersChange}
-            className="justify-start"
-          />
-          
-          {/* 年级和班级筛选器 */}
-          <div className="border-t pt-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <CardContent className="p-4">
+          <div className="space-y-3">
+            {/* 第一行：学年学期选择器 */}
+            <div className="flex items-center gap-4">
+              <AcademicPeriodSelector
+                value={filters}
+                onChange={handleFiltersChange}
+                className="justify-start"
+              />
+            </div>
+            
+            {/* 第二行：年级班级选择器和搜索框 */}
+            <div className="flex items-center gap-4">
               {/* 年级筛选器 */}
-              <div>
-                <Label className="text-sm font-medium mb-2 block">选择年级</Label>
+              <div className="flex items-center gap-2">
+                <Label className="text-sm font-medium whitespace-nowrap">年级:</Label>
                 <Select
                   value={filters.selectedGrade}
                   onValueChange={(value) => {
                     handleFiltersChange({ selectedGrade: value, selectedClassId: '' });
                   }}
-                  placeholder="请选择年级"
+                  placeholder="选择年级"
                   options={[
                     { value: '', label: '全部年级' },
                     { value: '1', label: '一年级' },
@@ -1466,30 +1434,30 @@ export default function ManualSchedulePage() {
               </div>
               
               {/* 班级筛选器 */}
-              <div>
-                <Label className="text-sm font-medium mb-2 block">选择班级</Label>
+              <div className="flex items-center gap-2">
+                <Label className="text-sm font-medium whitespace-nowrap">班级:</Label>
                 <Select
                   value={filters.selectedClassId}
                   onValueChange={(value) => handleFiltersChange({ selectedClassId: value })}
-                  placeholder="请选择要查看的班级"
+                  placeholder="选择班级"
                   options={getFilteredClassOptions()}
+                />
+              </div>
+              
+              {/* 搜索框 */}
+              <div className="flex items-center gap-2 ml-auto">
+                <Label className="text-sm font-medium whitespace-nowrap">搜索:</Label>
+                <Input
+                  placeholder="班级、课程、教师或教室..."
+                  value={filters.searchTerm}
+                  onChange={(e) => handleFiltersChange({ searchTerm: e.target.value })}
+                  className="w-64"
                 />
               </div>
             </div>
             
-            <div className="mt-4 text-sm text-gray-500">
+            <div className="text-xs text-gray-500">
               选择年级和班级后，将显示该班级的完整课表
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-4">
-            <div className="flex-1">
-              <Input
-                placeholder="搜索班级、课程、教师或教室..."
-                value={filters.searchTerm}
-                onChange={(e) => handleFiltersChange({ searchTerm: e.target.value })}
-                className="max-w-md"
-              />
             </div>
           </div>
         </CardContent>
@@ -1523,22 +1491,23 @@ export default function ManualSchedulePage() {
       {/* 新建/编辑对话框 */}
       {(isCreating || editingSchedule) && (
         <Card>
-          <CardHeader>
-            <CardTitle>
-              {isCreating ? '新建课程安排' : '编辑课程安排'}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>班级</Label>
-                <Select 
-                  value={formData.classId} 
-                  onValueChange={(value) => handleFormChange('classId', value)}
-                  placeholder="选择班级"
-                  options={safeMapToOptions(classes)}
-                />
-              </div>
+          <CardContent className="p-4">
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold">
+                {isCreating ? '新建课程安排' : '编辑课程安排'}
+              </h3>
+            </div>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>班级</Label>
+                  <Select 
+                    value={formData.classId} 
+                    onValueChange={(value) => handleFormChange('classId', value)}
+                    placeholder="选择班级"
+                    options={safeMapToOptions(classes)}
+                  />
+                </div>
 
               <div>
                 <Label>课程</Label>
@@ -1646,7 +1615,8 @@ export default function ManualSchedulePage() {
                 取消
               </Button>
             </div>
-          </CardContent>
+          </div>
+        </CardContent>
         </Card>
       )}
 
@@ -1669,22 +1639,62 @@ export default function ManualSchedulePage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {/* 调试信息 */}
-          <div className="mb-4 p-3 bg-gray-50 rounded-lg text-sm">
-            <div>总课程数: <strong>{schedules.length}</strong></div>
-            <div>筛选后课程数: <strong>{filteredSchedules.length}</strong></div>
-            <div>时间配置数量: <strong>{periodTimes.length}</strong></div>
-            <div>已选择年级: <strong>{filters.selectedGrade || '全部'}</strong></div>
-            <div>已选择班级: <strong>{filters.selectedClassId ? classes.find(c => c._id === filters.selectedClassId)?.name || '未知' : '未选择'}</strong></div>
+          {filteredSchedules.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              暂无课程安排
+            </div>
+          ) : (
+            renderScheduleGrid()
+          )}
+        </CardContent>
+      </Card>
+
+      {/* 拖拽操作说明 - 放在课表下方，可折叠 */}
+      <Card className="border-blue-200 bg-blue-50">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowDragInstructions(!showDragInstructions)}>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+              <span className="text-sm font-medium text-blue-800">拖拽操作说明</span>
+            </div>
+            <div className={`transform transition-transform ${showDragInstructions ? 'rotate-180' : ''}`}>
+              <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
           </div>
           
-                              {filteredSchedules.length === 0 ? (
-                      <div className="text-center py-8 text-muted-foreground">
-                        暂无课程安排
-                      </div>
-                    ) : (
-                      renderScheduleGrid()
-                    )}
+          {showDragInstructions && (
+            <div className="mt-3 pt-3 border-t border-blue-200 space-y-3">
+              <div className="text-sm text-blue-700">
+                <strong>如何使用拖拽功能：</strong>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-green-400 rounded-full"></div>
+                    <span>绿色高亮：可以放置课程</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-red-400 rounded-full"></div>
+                    <span>红色高亮：无法放置（有冲突）</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-blue-400 rounded-full"></div>
+                    <span>蓝色高亮：正在拖拽中</span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div>• 拖拽课程卡片到目标时间位置</div>
+                  <div>• 只检测教师时间冲突（教师不能同时在多个班级上课）</div>
+                  <div>• 允许同一时间安排多门课程（不检查时间位置冲突）</div>
+                  <div>• 专注于教师分配问题，简化排课流程</div>
+                  <div>• 拖拽成功后需要提交到数据库</div>
+                  <div>• 支持撤销操作恢复原始状态</div>
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

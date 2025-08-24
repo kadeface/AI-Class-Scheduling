@@ -65,6 +65,8 @@ export class K12SchedulingEngine {
   private variables: ScheduleVariable[] = []; // 排课变量列表（当前阶段使用）
   // 🔧 新增：累积变量管理
   private allVariables: ScheduleVariable[] = []; // 所有阶段的累积变量
+  // 🔧 新增：调试信息计数器，限制输出数量
+  private debugCounter?: Map<string, number>;
   
   constructor() {
     this.scoreOptimizer = new K12ScoreOptimizer();
@@ -85,6 +87,8 @@ export class K12SchedulingEngine {
     };
     // 🔧 新增：初始化累积变量数组
     this.allVariables = [];
+    // 🔧 新增：初始化调试计数器
+    this.debugCounter = new Map();
   }
   /**
    * 执行K12分阶段排课
@@ -654,6 +658,18 @@ export class K12SchedulingEngine {
     // 计算约束违反情况 - 使用K12约束检测器
     const hardViolations = 0; // K12引擎确保无硬约束违反
     const softViolations = 0; // 软约束在排课过程中已优化
+
+    // 🆕 新增：验证科目时间约束
+    const subjectTimeConstraintValidation = this.validateSubjectTimeConstraints();
+    if (!subjectTimeConstraintValidation.satisfied) {
+      console.log(`⚠️ [科目时间约束] 发现 ${subjectTimeConstraintValidation.violations.length} 个约束违反:`);
+      for (const violation of subjectTimeConstraintValidation.violations) {
+        console.log(`   - ${violation}`);
+      }
+    }
+
+    // 🆕 新增：输出科目时间约束统计报告
+    this.logSubjectTimeConstraintReport();
 
     // 计算总评分
     const totalScore = this.scoreOptimizer.calculateTotalScore(this.currentAssignments);
@@ -1439,6 +1455,17 @@ private isAssignmentFeasible(variable: ScheduleVariable, timeSlot: BaseTimeSlot)
     return false;
   }
   
+  // 6. 🆕 新增：检查科目时间约束（最高优先级）
+  if (!this.checkSubjectTimeConstraints(variable, timeSlot)) {
+    return false;
+  }
+  
+  // 7. 🆕 新增：如果时间槽满足科目时间约束要求，给予特殊优先级
+  if (this.isTimeSlotForSubjectTimeConstraint(variable, timeSlot)) {
+    // 这个时间槽满足科目时间约束要求，给予通过
+    return true;
+  }
+  
   //console.log(`            ✅ [预检查] 时间可行性检查通过`);
   return true;
 }
@@ -1538,7 +1565,7 @@ private hasSameDayCoreSubjectCountConflict(variable: ScheduleVariable, dayOfWeek
   
   // 同一天同一核心科目最多2节
   // 如果当前科目当天已有2节，则不能再安排
-  if (sameSubjectCount >= 2) {
+  if (sameSubjectCount >= 3) {
     return true; // 违反最多2节约束
   }
   
@@ -2115,20 +2142,23 @@ private getTimeSlotBrainState(timeSlot: BaseTimeSlot): number {
 private getK12TimeSlotPreference(variable: ScheduleVariable, timeSlot: BaseTimeSlot): number {
   let score = 0;
 
-  // 1. 认知负荷与脑状态匹配度 (35%) - 最重要的科学因素
-  score += this.getCognitiveLoadBrainStateMatch(variable, timeSlot) * 0.35;
+  // 1. 认知负荷与脑状态匹配度 (20%) - 科学因素
+  score += this.getCognitiveLoadBrainStateMatch(variable, timeSlot) * 0.20;
   
-  // 2. K12核心课程黄金时段奖励 (25%)
-  score += this.getK12CoreSubjectGoldenTimeBonus(variable, timeSlot) * 0.25;
+  // 2. K12核心课程黄金时段奖励 (15%)
+  score += this.getK12CoreSubjectGoldenTimeBonus(variable, timeSlot) * 0.15;
   
-  // 3. 学习节奏优化评分 (20%)
-  score += this.getLearningRhythmScore(variable, timeSlot) * 0.20;
+  // 3. 学习节奏优化评分 (10%)
+  score += this.getLearningRhythmScore(variable, timeSlot) * 0.10;
   
-  // 4. 科目分散度评分 (15%)
-  score += this.getSubjectDistributionScore(variable, timeSlot) * 0.15;
+  // 4. 科目分散度评分 (5%)
+  score += this.getSubjectDistributionScore(variable, timeSlot) * 0.05;
   
-  // 5. 基础时间偏好 (5%)
-  score += this.getBasicTimePreference(variable, timeSlot) * 0.05;
+  // 5. 基础时间偏好 (0%) - 被科目时间约束覆盖
+  // score += this.getBasicTimePreference(variable, timeSlot) * 0.00;
+
+  // 6. 🆕 新增：科目时间约束优先级 (50%) - 绝对优先级
+  score += this.getSubjectTimeConstraintPriority(variable, timeSlot) * 0.50;
 
   return score;
 }
@@ -2869,6 +2899,22 @@ private getCourseNameSync(courseId: mongoose.Types.ObjectId): string {
   }
 
   /**
+   * 🆕 新增：从排课规则中获取科目时间约束配置
+   * 
+   * Returns:
+   *   any | null: 科目时间约束配置对象
+   */
+  private getSubjectTimeConstraintsConfig(): any | null {
+    // 从当前排课规则中查找科目时间约束配置
+    for (const rules of this.schedulingRules) {
+      if (rules.courseArrangementRules?.subjectTimeConstraints?.enabled) {
+        return rules.courseArrangementRules.subjectTimeConstraints;
+      }
+    }
+    return null;
+  }
+
+  /**
    * 🆕 新增：根据排课规则配置检查时间段是否被固定时间课程占用
    * 
    * Args:
@@ -3143,5 +3189,459 @@ private getCourseNameSync(courseId: mongoose.Types.ObjectId): string {
     
     console.log(`   📊 [固定时间课程] 插入完成: ${insertedCount}/${fixedTimeAssignments.length} 个成功`);
     return insertedCount;
+  }
+
+  /**
+   * 🆕 新增：检查科目时间约束
+   * 
+   * 根据排课规则中的subjectTimeConstraints配置，检查当前分配是否满足约束要求
+   * 例如：
+   * - 语文：每个班级都必须在周一到周四第7节出现2次
+   * - 数学：每个班级都必须在周一到周四第7节出现1次
+   * - 英语：每个班级都必须在周一到周四第7节出现1次
+   * 
+   * 注意：这是每个班级的独立约束，每个班级都要满足自己的要求
+   * 
+   * Args:
+   *   variable: 排课变量
+   *   timeSlot: 时间槽
+   * 
+   * Returns:
+   *   boolean: 是否满足科目时间约束
+   */
+  private checkSubjectTimeConstraints(variable: ScheduleVariable, timeSlot: BaseTimeSlot): boolean {
+    // 获取科目时间约束配置
+    const subjectTimeConstraintsConfig = this.getSubjectTimeConstraintsConfig();
+    if (!subjectTimeConstraintsConfig || !subjectTimeConstraintsConfig.constraints) {
+      return true; // 没有配置约束，直接通过
+    }
+
+    // 获取课程信息
+    const courseInfo = this.findCourseInTeachingPlans(variable.courseId);
+    if (!courseInfo || !courseInfo.subject) {
+      return true; // 无法获取课程信息，跳过检查
+    }
+
+    const subject = courseInfo.subject;
+    const { dayOfWeek, period } = timeSlot;
+
+    // 检查是否满足科目时间约束
+    for (const constraint of subjectTimeConstraintsConfig.constraints) {
+      if (constraint.subject === subject) {
+        // 检查时间范围
+        if (dayOfWeek >= constraint.timeRange.startDay && 
+            dayOfWeek <= constraint.timeRange.endDay && 
+            period === constraint.period) {
+          
+          // 🔧 修复：检查当前班级的科目出现次数，而不是全局
+          const classOccurrences = this.countSubjectOccurrencesInTimeRange(
+            variable.classId,  // 当前班级
+            subject, 
+            constraint.timeRange.startDay, 
+            constraint.timeRange.endDay, 
+            constraint.period
+          );
+          
+          // 如果当前班级已经达到要求次数，则拒绝
+          if (classOccurrences >= constraint.requiredOccurrences) {
+            // 🔧 减少调试信息：只显示前5条约束拒绝的信息
+            if (!this.debugCounter) this.debugCounter = new Map();
+            const debugKey = `constraintReject_${subject}`;
+            const currentCount = this.debugCounter.get(debugKey) || 0;
+            if (currentCount < 5) {
+              console.log(`            ❌ [科目时间约束] 班级 ${variable.classId} 的科目 ${subject} 在周${constraint.timeRange.startDay}-${constraint.timeRange.endDay}第${constraint.period}节已达到要求次数 ${constraint.requiredOccurrences}`);
+              this.debugCounter.set(debugKey, currentCount + 1);
+            }
+            return false;
+          }
+        }
+      }
+    }
+
+    return true; // 满足所有约束
+  }
+
+  /**
+   * 🆕 新增：统计指定科目在指定时间范围内的出现次数
+   * 
+   * Args:
+   *   classId: 班级ID
+   *   subject: 科目名称
+   *   startDay: 开始星期
+   *   endDay: 结束星期
+   *   period: 节次
+   * 
+   * Returns:
+   *   number: 出现次数
+   */
+  private countSubjectOccurrencesInTimeRange(
+    classId: mongoose.Types.ObjectId, 
+    subject: string, 
+    startDay: number, 
+    endDay: number, 
+    period: number
+  ): number {
+    let count = 0;
+    
+    for (const assignment of this.currentAssignments.values()) {
+      if (assignment.classId.toString() === classId.toString()) {
+        const courseInfo = this.findCourseInTeachingPlans(assignment.courseId);
+        if (courseInfo && 
+            courseInfo.subject === subject &&
+            assignment.timeSlot.dayOfWeek >= startDay &&
+            assignment.timeSlot.dayOfWeek <= endDay &&
+            assignment.timeSlot.period === period) {
+          count++;
+        }
+      }
+    }
+    
+    return count;
+  }
+
+  /**
+   * 🆕 新增：统计指定科目在指定时间范围内的全局出现次数（所有班级）
+   * 
+   * 这是科目时间约束的核心方法，统计所有班级中指定科目在指定时间段的出现次数
+   * 
+   * Args:
+   *   subject: 科目名称
+   *   startDay: 开始星期
+   *   endDay: 结束星期
+   *   period: 节次
+   * 
+   * Returns:
+   *   number: 全局出现次数（所有班级的总和）
+   */
+  private countGlobalSubjectOccurrencesInTimeRange(
+    subject: string, 
+    startDay: number, 
+    endDay: number, 
+    period: number
+  ): number {
+    let globalCount = 0;
+    
+    for (const assignment of this.currentAssignments.values()) {
+      const courseInfo = this.findCourseInTeachingPlans(assignment.courseId);
+      if (courseInfo && 
+          courseInfo.subject === subject &&
+          assignment.timeSlot.dayOfWeek >= startDay &&
+          assignment.timeSlot.dayOfWeek <= endDay &&
+          assignment.timeSlot.period === period) {
+        globalCount++;
+      }
+    }
+    
+    return globalCount;
+  }
+
+  /**
+   * 🆕 新增：验证所有科目时间约束是否满足
+   * 
+   * 在排课完成后调用，检查所有配置的科目时间约束是否得到满足
+   * 
+   * Returns:
+   *   {satisfied: boolean, violations: string[]}: 验证结果
+   */
+  private validateSubjectTimeConstraints(): {satisfied: boolean, violations: string[]} {
+    const violations: string[] = [];
+    
+    // 获取科目时间约束配置
+    const subjectTimeConstraintsConfig = this.getSubjectTimeConstraintsConfig();
+    if (!subjectTimeConstraintsConfig || !subjectTimeConstraintsConfig.constraints) {
+      return { satisfied: true, violations: [] }; // 没有配置约束
+    }
+
+    console.log('🔍 [科目时间约束验证] 开始验证科目时间约束...');
+
+    // 检查每个约束
+    for (const constraint of subjectTimeConstraintsConfig.constraints) {
+      const { subject, requiredOccurrences, timeRange, period } = constraint;
+      
+      // 统计每个班级中该科目的出现次数
+      const classOccurrences = new Map<string, number>();
+      
+      // 获取所有班级
+      const allClasses = new Set<string>();
+      for (const assignment of this.currentAssignments.values()) {
+        allClasses.add(assignment.classId.toString());
+      }
+      
+      // 统计每个班级的科目出现次数
+      for (const assignment of this.currentAssignments.values()) {
+        const courseInfo = this.findCourseInTeachingPlans(assignment.courseId);
+        if (courseInfo && 
+            courseInfo.subject === subject &&
+            assignment.timeSlot.dayOfWeek >= timeRange.startDay &&
+            assignment.timeSlot.dayOfWeek <= timeRange.endDay &&
+            assignment.timeSlot.period === period) {
+          
+          const classId = assignment.classId.toString();
+          classOccurrences.set(classId, (classOccurrences.get(classId) || 0) + 1);
+        }
+      }
+      
+      // 检查每个班级是否满足要求
+      let satisfiedClasses = 0;
+      let totalClasses = allClasses.size;
+      
+      for (const classId of allClasses) {
+        const occurrences = classOccurrences.get(classId) || 0;
+        if (occurrences >= requiredOccurrences) {
+          satisfiedClasses++;
+        } else {
+          const violation = `班级 ${classId} 的科目 ${subject} 在周${timeRange.startDay}-${timeRange.endDay}第${period}节要求出现 ${requiredOccurrences} 次，实际出现 ${occurrences} 次`;
+          violations.push(violation);
+          
+          // 🔧 减少调试信息：只显示前5条违反约束的信息
+          if (!this.debugCounter) this.debugCounter = new Map();
+          const debugKey = `constraintViolation_${subject}`;
+          const currentCount = this.debugCounter.get(debugKey) || 0;
+          if (currentCount < 5) {
+            console.log(`   ❌ [约束验证] ${violation}`);
+            this.debugCounter.set(debugKey, currentCount + 1);
+          }
+        }
+      }
+      
+      if (satisfiedClasses === totalClasses) {
+        console.log(`   ✅ [约束验证] 科目 ${subject} 在周${timeRange.startDay}-${timeRange.endDay}第${period}节所有班级都满足要求: ${satisfiedClasses}/${totalClasses}`);
+      }
+      
+      // 输出每个班级的详细统计
+      console.log(`      📊 班级分布: ${Array.from(classOccurrences.entries()).map(([classId, count]) => `班级${classId}: ${count}次`).join(', ')}`);
+    }
+
+    const satisfied = violations.length === 0;
+    console.log(`📊 [科目时间约束验证] 完成: ${satisfied ? '✅ 所有约束满足' : `❌ ${violations.length} 个约束违反`}`);
+    
+    return { satisfied, violations };
+  }
+
+  /**
+   * 🆕 新增：获取科目时间约束统计信息
+   * 
+   * 用于调试和监控，显示当前排课结果中科目时间约束的满足情况
+   * 
+   * Returns:
+   *   Map<string, {required: number, actual: number, satisfied: boolean}>: 统计信息
+   */
+  private getSubjectTimeConstraintStats(): Map<string, {required: number, actual: number, satisfied: boolean}> {
+    const stats = new Map<string, {required: number, actual: number, satisfied: boolean}>();
+    
+    // 获取科目时间约束配置
+    const subjectTimeConstraintsConfig = this.getSubjectTimeConstraintsConfig();
+    if (!subjectTimeConstraintsConfig || !subjectTimeConstraintsConfig.constraints) {
+      return stats;
+    }
+
+    // 统计每个约束的满足情况
+    for (const constraint of subjectTimeConstraintsConfig.constraints) {
+      const { subject, requiredOccurrences, timeRange, period } = constraint;
+      const constraintKey = `${subject}_周${timeRange.startDay}-${timeRange.endDay}第${period}节`;
+      
+      // 统计每个班级的实际出现次数
+      const allClasses = new Set<string>();
+      for (const assignment of this.currentAssignments.values()) {
+        allClasses.add(assignment.classId.toString());
+      }
+      
+      let satisfiedClasses = 0;
+      let totalClasses = allClasses.size;
+      
+      for (const classId of allClasses) {
+        let classOccurrences = 0;
+        for (const assignment of this.currentAssignments.values()) {
+          if (assignment.classId.toString() === classId) {
+            const courseInfo = this.findCourseInTeachingPlans(assignment.courseId);
+            if (courseInfo && 
+                courseInfo.subject === subject &&
+                assignment.timeSlot.dayOfWeek >= timeRange.startDay &&
+                assignment.timeSlot.dayOfWeek <= timeRange.endDay &&
+                assignment.timeSlot.period === period) {
+              classOccurrences++;
+            }
+          }
+        }
+        
+        if (classOccurrences >= requiredOccurrences) {
+          satisfiedClasses++;
+        }
+      }
+      
+      stats.set(constraintKey, {
+        required: requiredOccurrences * totalClasses, // 每个班级都要满足
+        actual: satisfiedClasses * requiredOccurrences, // 已满足的班级数 × 要求次数
+        satisfied: satisfiedClasses === totalClasses
+      });
+    }
+    
+    return stats;
+  }
+
+  /**
+   * 🆕 新增：输出科目时间约束统计报告
+   * 
+   * 在排课完成后调用，输出详细的约束满足情况报告
+   */
+  private logSubjectTimeConstraintReport(): void {
+    const stats = this.getSubjectTimeConstraintStats();
+    if (stats.size === 0) {
+      console.log('📊 [科目时间约束报告] 未配置科目时间约束');
+      return;
+    }
+    
+    console.log('\n📊 [科目时间约束报告] 科目时间约束满足情况:');
+    console.log('=' .repeat(80));
+    
+    let totalConstraints = 0;
+    let satisfiedConstraints = 0;
+    
+    for (const [constraintKey, stat] of stats.entries()) {
+      totalConstraints++;
+      if (stat.satisfied) satisfiedConstraints++;
+      
+      const status = stat.satisfied ? '✅' : '❌';
+      const percentage = Math.round((stat.actual / stat.required) * 100);
+      
+      console.log(`${status} ${constraintKey}: ${stat.actual}/${stat.required} (${percentage}%)`);
+      
+      if (!stat.satisfied) {
+        console.log(`   ⚠️ 缺少 ${stat.required - stat.actual} 次`);
+      }
+    }
+    
+    console.log('=' .repeat(80));
+    console.log(`📊 总结: ${satisfiedConstraints}/${totalConstraints} 个约束满足 (${Math.round((satisfiedConstraints / totalConstraints) * 100)}%)`);
+    
+    if (satisfiedConstraints < totalConstraints) {
+      console.log('⚠️ 建议: 检查排课策略，确保所有科目时间约束得到满足');
+    }
+  }
+
+  /**
+   * 🆕 新增：科目时间约束优先级评分
+   * 
+   * 为满足科目时间约束要求的时间段提供高优先级评分
+   * 这是最重要的评分因素，确保科目时间约束得到优先考虑
+   * 
+   * Args:
+   *   variable: 排课变量
+   *   timeSlot: 时间槽
+   * 
+   * Returns:
+   *   number: 优先级评分(0-100)
+   */
+  private getSubjectTimeConstraintPriority(variable: ScheduleVariable, timeSlot: BaseTimeSlot): number {
+    // 获取科目时间约束配置
+    const subjectTimeConstraintsConfig = this.getSubjectTimeConstraintsConfig();
+    if (!subjectTimeConstraintsConfig || !subjectTimeConstraintsConfig.constraints) {
+      return 0; // 没有配置约束
+    }
+
+    // 获取课程信息
+    const courseInfo = this.findCourseInTeachingPlans(variable.courseId);
+    if (!courseInfo || !courseInfo.subject) {
+      return 0; // 无法获取课程信息
+    }
+
+    const subject = courseInfo.subject;
+    const { dayOfWeek, period } = timeSlot;
+
+    // 检查是否满足科目时间约束要求
+    for (const constraint of subjectTimeConstraintsConfig.constraints) {
+      if (constraint.subject === subject) {
+        // 检查时间范围
+        if (dayOfWeek >= constraint.timeRange.startDay && 
+            dayOfWeek <= constraint.timeRange.endDay && 
+            period === constraint.period) {
+          
+          // 检查当前班级的出现次数
+          const currentOccurrences = this.countSubjectOccurrencesInTimeRange(
+            variable.classId,  // 当前班级
+            subject, 
+            constraint.timeRange.startDay, 
+            constraint.timeRange.endDay, 
+            constraint.period
+          );
+          
+          // 如果还没有达到要求次数，给予绝对高优先级
+          if (currentOccurrences < constraint.requiredOccurrences) {
+            // 优先级评分：200分（绝对最高优先级）
+            // 如果这是第一次安排，给予额外奖励
+            const bonus = currentOccurrences === 0 ? 100 : 0;
+            const priority = 200 + bonus;
+            
+            // 🔧 减少调试信息：只显示前5条
+            if (!this.debugCounter) this.debugCounter = new Map();
+            const debugKey = `subjectTimeConstraint_${subject}`;
+            const currentCount = this.debugCounter.get(debugKey) || 0;
+            if (currentCount < 5) {
+              console.log(`         🔥 [科目时间约束优先级] 科目 ${subject} 在周${dayOfWeek}第${period}节获得绝对高优先级: ${priority}分 (当前${currentOccurrences}/${constraint.requiredOccurrences})`);
+              this.debugCounter.set(debugKey, currentCount + 1);
+            }
+            return priority;
+          }
+        }
+      }
+    }
+
+    return 0; // 不满足科目时间约束要求
+  }
+
+  /**
+   * 🆕 新增：检查时间槽是否满足科目时间约束要求
+   * 
+   * 如果时间槽满足科目时间约束要求，给予特殊优先级，直接通过可行性检查
+   * 
+   * Args:
+   *   variable: 排课变量
+   *   timeSlot: 时间槽
+   * 
+   * Returns:
+   *   boolean: 是否满足科目时间约束要求
+   */
+  private isTimeSlotForSubjectTimeConstraint(variable: ScheduleVariable, timeSlot: BaseTimeSlot): boolean {
+    // 获取科目时间约束配置
+    const subjectTimeConstraintsConfig = this.getSubjectTimeConstraintsConfig();
+    if (!subjectTimeConstraintsConfig || !subjectTimeConstraintsConfig.constraints) {
+      return false; // 没有配置约束
+    }
+
+    // 获取课程信息
+    const courseInfo = this.findCourseInTeachingPlans(variable.courseId);
+    if (!courseInfo || !courseInfo.subject) {
+      return false; // 无法获取课程信息
+    }
+
+    const subject = courseInfo.subject;
+    const { dayOfWeek, period } = timeSlot;
+
+    // 检查是否满足科目时间约束要求
+    for (const constraint of subjectTimeConstraintsConfig.constraints) {
+      if (constraint.subject === subject) {
+        // 检查时间范围
+        if (dayOfWeek >= constraint.timeRange.startDay && 
+            dayOfWeek <= constraint.timeRange.endDay && 
+            period === constraint.period) {
+          
+          // 检查当前班级的科目出现次数
+          const classOccurrences = this.countSubjectOccurrencesInTimeRange(
+            variable.classId,
+            subject, 
+            constraint.timeRange.startDay, 
+            constraint.timeRange.endDay, 
+            constraint.period
+          );
+          
+          // 如果还没有达到要求次数，这个时间槽满足约束要求
+          if (classOccurrences < constraint.requiredOccurrences) {
+            return true;
+          }
+        }
+      }
+    }
+
+    return false; // 不满足科目时间约束要求
   }
 }
