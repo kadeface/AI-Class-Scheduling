@@ -326,3 +326,38 @@ export async function getAllActiveCalendars(req: Request, res: Response): Promis
     });
   }
 }
+
+/**
+ * 获取所有可用的节次配置
+ * 
+ * @param req Express请求对象
+ * @param res Express响应对象
+ */
+export async function getAllPeriods(req: Request, res: Response): Promise<void> {
+  try {
+    console.log('获取所有可用的节次配置...');
+
+    // 获取所有活跃的节次配置
+    const allPeriods = await PeriodTimeConfig.find({ isActive: true })
+      .sort({ academicYear: 1, semester: 1, period: 1 });
+
+    // 提取唯一的节次号
+    const uniquePeriods = [...new Set(allPeriods.map(config => config.period))].sort((a, b) => a - b);
+
+    console.log(`找到 ${uniquePeriods.length} 个可用节次:`, uniquePeriods);
+
+    res.json({
+      success: true,
+      data: uniquePeriods,
+      message: `成功获取 ${uniquePeriods.length} 个可用节次`
+    });
+
+  } catch (error) {
+    console.error('获取所有节次配置失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取所有节次配置失败',
+      error: process.env.NODE_ENV === 'development' ? (error as Error).message : undefined
+    });
+  }
+}

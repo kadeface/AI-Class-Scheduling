@@ -178,7 +178,9 @@ export class K12ConstraintChecker {
    */
   private checkRoomConflict(variable: any, timeSlot: any, room: any, currentAssignments: Map<string, any>): boolean {
     for (const assignment of Array.from(currentAssignments.values())) {
-      if (assignment.roomId.toString() === room._id.toString() &&
+      // 🚨 修复：检查 roomId 是否存在，避免空指针错误
+      if (assignment.roomId && room && room._id &&
+          assignment.roomId.toString() === room._id.toString() &&
           assignment.timeSlot.dayOfWeek === timeSlot.dayOfWeek &&
           assignment.timeSlot.period === timeSlot.period) {
         console.log(`                  ❌ 课室冲突: 课室 ${room._id} 在时间槽 ${timeSlot.dayOfWeek}-${timeSlot.period} 已被占用`);

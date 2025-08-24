@@ -97,6 +97,34 @@ export interface ISubjectSpecificRules {
 }
 
 /**
+ * 🆕 科目时间约束配置接口定义
+ * 
+ * 定义特定科目必须在特定时间段出现的约束条件
+ */
+export interface ISubjectTimeConstraintsConfig {
+  enabled: boolean;                     // 是否启用科目时间约束
+  constraints: ISubjectTimeConstraint[]; // 科目时间约束列表
+}
+
+/**
+ * 🆕 科目时间约束接口定义
+ * 
+ * 定义单个科目的时间约束条件
+ */
+export interface ISubjectTimeConstraint {
+  subject: string;                      // 科目名称
+  requiredOccurrences: number;          // 要求出现的次数
+  timeRange: {                          // 时间范围
+    startDay: number;                   // 开始星期（1-7）
+    endDay: number;                     // 结束星期（1-7）
+  };
+  period: number;                       // 节次
+  weekType: 'all' | 'odd' | 'even';    // 周次类型（全周/单周/双周）
+  priority: number;                     // 优先级（1-10）
+  description?: string;                 // 描述（可选）
+}
+
+/**
  * 核心课程策略接口定义
  * 
  * 定义核心课程的分布和约束策略
@@ -163,6 +191,9 @@ export interface ICourseArrangementRules {
   
   // 新增：固定时间课程配置
   fixedTimeCourses?: IFixedTimeCoursesConfig; // 固定时间课程配置
+  
+  // 🆕 新增：科目时间约束配置
+  subjectTimeConstraints?: ISubjectTimeConstraintsConfig; // 科目时间约束配置
 }
 
 /**
@@ -671,6 +702,74 @@ const CourseArrangementRulesSchema = new Schema<ICourseArrangementRules>({
       priority: false,
       allowOverride: false,
       conflictStrategy: 'strict'
+    })
+  },
+  
+  // 🆕 新增：科目时间约束配置
+  subjectTimeConstraints: {
+    type: new Schema<ISubjectTimeConstraintsConfig>({
+      enabled: {
+        type: Boolean,
+        default: false
+      },
+      constraints: {
+        type: [new Schema<ISubjectTimeConstraint>({
+          subject: {
+            type: String,
+            required: [true, '科目名称不能为空']
+          },
+          requiredOccurrences: {
+            type: Number,
+            required: [true, '要求出现次数不能为空'],
+            min: [1, '要求出现次数至少为1'],
+            max: [10, '要求出现次数不能超过10'],
+            default: 1
+          },
+          timeRange: {
+            startDay: {
+              type: Number,
+              required: [true, '开始星期不能为空'],
+              min: [1, '开始星期必须在1-7之间'],
+              max: [7, '开始星期必须在1-7之间']
+            },
+            endDay: {
+              type: Number,
+              required: [true, '结束星期不能为空'],
+              min: [1, '结束星期必须在1-7之间'],
+              max: [7, '结束星期必须在1-7之间']
+            }
+          },
+          period: {
+            type: Number,
+            required: [true, '节次不能为空'],
+            min: [1, '节次必须从1开始'],
+            max: [12, '节次不能超过12']
+          },
+          weekType: {
+            type: String,
+            enum: {
+              values: ['all', 'odd', 'even'],
+              message: '周次类型必须是有效的类型'
+            },
+            default: 'all'
+          },
+          priority: {
+            type: Number,
+            min: [1, '优先级至少为1'],
+            max: [10, '优先级不能超过10'],
+            default: 1
+          },
+          description: {
+            type: String,
+            default: ''
+          }
+        }, { _id: false })],
+        default: []
+      }
+    }, { _id: false }),
+    default: () => ({
+      enabled: false,
+      constraints: []
     })
   }
 }, { _id: false });

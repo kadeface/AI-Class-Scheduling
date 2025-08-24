@@ -744,38 +744,144 @@ export class SchedulingService {
     console.log(`   - 上午节次: ${timeRules.morningPeriods.join(', ')}`);
     console.log(`   - 下午节次: ${timeRules.afternoonPeriods.join(', ')}`);
     
+    try {
+      // 🎯 修复：从数据库获取真实的时间配置
+      const { PeriodTimeConfig } = await import('../../models/PeriodTimeConfig');
+      
+      console.log(`   🔍 从数据库获取 ${academicYear} 学年 ${semester} 学期的时间配置...`);
+      
+      // 获取该学年学期的所有时间配置
+      const periodConfigs = await PeriodTimeConfig.find({
+        academicYear: academicYear,
+        semester: semester.toString(),
+        isActive: true
+      }).sort({ period: 1 });
+      
+      if (periodConfigs.length === 0) {
+        console.log(`   ⚠️ 数据库中没有找到时间配置，使用默认配置`);
+        return this.generateDefaultTimeSlots(timeRules);
+      }
+      
+      console.log(`   ✅ 找到 ${periodConfigs.length} 个时间配置`);
+      
+      const timeSlots: TimeSlot[] = [];
+      
+      // 根据数据库配置生成时间槽
+      for (const day of timeRules.workingDays) {
+        for (let period = 1; period <= timeRules.dailyPeriods; period++) {
+          // 检查是否为禁用时间段
+          const isForbidden = timeRules.forbiddenSlots?.some(slot => 
+            slot.dayOfWeek === day && slot.periods.includes(period)
+          );
+          
+          if (isForbidden) {
+            console.log(`   ⚠️ 跳过禁用时间段: 周${day}第${period}节`);
+            continue;
+          }
+          
+          // 🎯 修复：从数据库配置获取真实时间
+          const periodConfig = periodConfigs.find(config => config.period === period);
+          
+          if (periodConfig) {
+            timeSlots.push({
+              dayOfWeek: day,
+              period: period,
+              startTime: periodConfig.startTime,
+              endTime: periodConfig.endTime
+            });
+            
+            if (period === 7) {
+              console.log(`   🕐 第${period}节时间: ${periodConfig.startTime} - ${periodConfig.endTime}`);
+            }
+          } else {
+            console.log(`   ⚠️ 第${period}节没有时间配置，使用默认时间`);
+            // 使用默认时间作为备选
+            const defaultTime = this.getDefaultTimeForPeriod(period);
+            timeSlots.push({
+              dayOfWeek: day,
+              period: period,
+              startTime: defaultTime.startTime,
+              endTime: defaultTime.endTime
+            });
+          }
+        }
+      }
+      
+      console.log(`✅ [时间槽生成] 成功生成 ${timeSlots.length} 个时间槽（基于数据库配置）`);
+      return timeSlots;
+      
+    } catch (error) {
+      console.error('   ❌ 从数据库获取时间配置失败，使用默认配置:', error);
+      return this.generateDefaultTimeSlots(timeRules);
+    }
+  }
+
+  /**
+   * 生成默认时间槽（当数据库配置不可用时）
+   * 
+   * Args:
+   *   timeRules: 时间规则配置
+   * 
+   * Returns:
+   *   TimeSlot[]: 默认时间槽列表
+   */
+  private generateDefaultTimeSlots(timeRules: any): TimeSlot[] {
+    console.log('   🔧 使用默认时间配置生成时间槽...');
+    
     const timeSlots: TimeSlot[] = [];
     
-    // 根据规则配置生成时间槽
     for (const day of timeRules.workingDays) {
       for (let period = 1; period <= timeRules.dailyPeriods; period++) {
         // 检查是否为禁用时间段
-        const isForbidden = timeRules.forbiddenSlots?.some(slot => 
+        const isForbidden = timeRules.forbiddenSlots?.some((slot: any) => 
           slot.dayOfWeek === day && slot.periods.includes(period)
         );
         
         if (isForbidden) {
-          console.log(`   ⚠️ 跳过禁用时间段: 周${day}第${period}节`);
           continue;
         }
         
-        // 计算开始和结束时间
-        const startHour = 8 + Math.floor((period - 1) / 2);
-        const startMinute = (period - 1) % 2 === 0 ? 0 : 30;
-        const endHour = startHour + Math.floor(timeRules.periodDuration / 60);
-        const endMinute = (timeRules.periodDuration % 60 + startMinute) % 60;
+        // 使用默认时间计算
+        const defaultTime = this.getDefaultTimeForPeriod(period);
         
         timeSlots.push({
           dayOfWeek: day,
           period: period,
-          startTime: `${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}`,
-          endTime: `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`
+          startTime: defaultTime.startTime,
+          endTime: defaultTime.endTime
         });
       }
     }
     
-    console.log(`✅ [时间槽生成] 成功生成 ${timeSlots.length} 个时间槽`);
+    console.log(`   ✅ 默认时间槽生成完成: ${timeSlots.length} 个`);
     return timeSlots;
+  }
+
+  /**
+   * 获取指定节次的默认时间
+   * 
+   * Args:
+   *   period: 节次号
+   * 
+   * Returns:
+   *   {startTime: string, endTime: string}: 默认时间
+   */
+  private getDefaultTimeForPeriod(period: number): {startTime: string, endTime: string} {
+    // 标准的学校时间安排
+    const defaultTimes: {[key: number]: {startTime: string, endTime: string}} = {
+      1: { startTime: '08:00', endTime: '08:40' },
+      2: { startTime: '08:50', endTime: '09:30' },
+      3: { startTime: '09:40', endTime: '10:20' },
+      4: { startTime: '10:30', endTime: '11:10' },
+      5: { startTime: '11:20', endTime: '12:00' },
+      6: { startTime: '14:00', endTime: '14:40' },
+      7: { startTime: '14:50', endTime: '15:30' }, // 🎯 修复：第7节应该是下午2:50-3:30
+      8: { startTime: '15:40', endTime: '16:20' },
+      9: { startTime: '16:30', endTime: '17:10' },
+      10: { startTime: '17:20', endTime: '18:00' }
+    };
+    
+    return defaultTimes[period] || { startTime: '00:00', endTime: '00:40' };
   }
 
   /**

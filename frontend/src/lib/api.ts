@@ -10,6 +10,31 @@ import subjects from './subjects.json';
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
 /**
+ * 科目时间约束接口定义
+ * 用于配置特定科目必须在特定时间段出现的约束条件
+ */
+export interface SubjectTimeConstraint {
+  subject: string;                    // 科目名称（如：语文、数学、英语）
+  requiredOccurrences: number;        // 必须出现的次数
+  timeRange: {
+    startDay: number;                 // 开始星期（1=周一，2=周二，...）
+    endDay: number;                   // 结束星期（4=周四，5=周五，...）
+  };
+  period: number;                     // 节次（7=第7节，8=第8节，...）
+  weekType: 'all' | 'odd' | 'even';  // 周次类型：全周、单周、双周
+  priority: number;                   // 优先级（数字越小优先级越高）
+  description?: string;               // 约束描述（可选）
+}
+
+/**
+ * 科目时间约束配置接口
+ */
+export interface SubjectTimeConstraintsConfig {
+  enabled: boolean;                   // 是否启用科目时间约束
+  constraints: SubjectTimeConstraint[]; // 约束条件列表
+}
+
+/**
  * 统一API响应类型
  */
 export interface ApiResponse<T = any> {
@@ -642,6 +667,9 @@ export interface CourseArrangementRules {
   
   // 新增：固定时间课程配置
   fixedTimeCourses?: FixedTimeCoursesConfig;
+  
+  // 🆕 新增：科目时间约束配置
+  subjectTimeConstraints?: SubjectTimeConstraintsConfig;
 }
 
 /**
@@ -990,3 +1018,21 @@ export function formatSchoolType(schoolType: string): string {
   const type = SCHOOL_TYPES.find(t => t.value === schoolType);
   return type?.label || schoolType;
 }
+
+/**
+ * 课程时间配置API
+ */
+export const scheduleConfigApi = {
+  // 获取指定学年学期的课程时间配置
+  getPeriodTimes: (academicYear: string, semester: string) =>
+    apiRequest<any>(`/schedule-config/period-times?academicYear=${academicYear}&semester=${semester}`),
+  
+  // 获取所有可用的节次配置
+  getAllPeriods: () => apiRequest<any>('/schedule-config/periods'),
+  
+  // 创建或更新课程时间配置
+  upsertPeriodTime: (data: any) => apiRequest<any>('/schedule-config/period-times', { method: 'POST', body: data }),
+  
+  // 删除课程时间配置
+  deletePeriodTime: (id: string) => apiRequest<void>(`/schedule-config/period-times/${id}`, { method: 'DELETE' })
+};

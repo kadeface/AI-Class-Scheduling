@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { WeekSchedule, CourseSlot, TIME_CONFIG } from '../types';
+import { WeekSchedule, CourseSlot, TIME_CONFIG, PeriodTimeConfig } from '../types';
 import { ScheduleCard, EmptyScheduleCard } from './ScheduleCard';
 import { cn } from '@/lib/utils';
 
@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
  */
 interface ScheduleGridProps {
   weekSchedule: WeekSchedule;
+  periodTimeConfigs?: PeriodTimeConfig[]; // 添加动态时间段配置
   viewMode?: 'class' | 'teacher' | 'room'; // 添加视图模式
   className?: string;
   onCourseClick?: (courseSlot: CourseSlot) => void;
@@ -26,11 +27,27 @@ interface ScheduleGridProps {
  */
 export function ScheduleGrid({
   weekSchedule,
+  periodTimeConfigs,
   viewMode = 'class', // 默认值
   className,
   onCourseClick,
   onCourseHover
 }: ScheduleGridProps) {
+  // 处理时间段配置：优先使用动态配置，否则使用默认配置
+  const periods = React.useMemo(() => {
+    if (periodTimeConfigs && periodTimeConfigs.length > 0) {
+      // 使用动态配置，转换为组件需要的格式
+      return periodTimeConfigs.map(config => ({
+        value: config.period,
+        label: `第${config.period}节`,
+        time: `${config.startTime}-${config.endTime}`
+      }));
+    } else {
+      // 使用默认配置
+      return TIME_CONFIG.DEFAULT_PERIODS;
+    }
+  }, [periodTimeConfigs]);
+
   return (
     <div className={cn('bg-white rounded-lg shadow-lg overflow-hidden', className)}>
       {/* 课表表格 */}
@@ -65,7 +82,7 @@ export function ScheduleGrid({
 
           {/* 表体 */}
           <tbody>
-            {TIME_CONFIG.PERIODS.map((period) => (
+            {periods.map((period) => (
               <tr key={period.value} className="border-b border-gray-200">
                 {/* 时间信息列 */}
                 <td className="w-24 p-4 bg-gray-50 border-r border-gray-200">

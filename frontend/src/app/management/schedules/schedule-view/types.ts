@@ -97,6 +97,21 @@ export const SUBJECT_COLORS: Record<string, string> = {
 };
 
 /**
+ * 时间段配置接口
+ */
+export interface PeriodTimeConfig {
+  _id: string;
+  period: number;
+  startTime: string;
+  endTime: string;
+  breakTime?: number;
+  isActive: boolean;
+  academicYear: string;
+  semester: string;
+  description?: string;
+}
+
+/**
  * 时间配置
  */
 export const TIME_CONFIG = {
@@ -107,7 +122,8 @@ export const TIME_CONFIG = {
     { value: 4, label: '周四', short: '四' },
     { value: 5, label: '周五', short: '五' }
   ],
-  PERIODS: [
+  // 默认时间段配置，当无法获取动态配置时使用
+  DEFAULT_PERIODS: [
     { value: 1, label: '第1节', time: '08:00-08:45' },
     { value: 2, label: '第2节', time: '08:55-09:40' },
     { value: 3, label: '第3节', time: '10:00-10:45' },

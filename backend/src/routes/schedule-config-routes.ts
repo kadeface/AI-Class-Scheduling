@@ -11,7 +11,8 @@ import {
   deletePeriodTime,
   getSemesterCalendar,
   upsertSemesterCalendar,
-  getAllActiveCalendars
+  getAllActiveCalendars,
+  getAllPeriods
 } from '../controllers/schedule-config-controller';
 
 const router = Router();
@@ -47,5 +48,9 @@ router.post('/semester-calendar', upsertSemesterCalendar);
 // 获取所有活跃的学期日历
 // GET /api/schedule-config/semester-calendars
 router.get('/semester-calendars', getAllActiveCalendars);
+
+// 🆕 新增：获取所有可用的节次配置
+// GET /api/schedule-config/periods
+router.get('/periods', getAllPeriods);
 
 export default router;

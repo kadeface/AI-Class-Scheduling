@@ -37,7 +37,8 @@ import {
   ScheduleFilters, 
   ScheduleViewData, 
   CourseSlot,
-  ApiResponse 
+  ApiResponse,
+  PeriodTimeConfig
 } from '../schedule-view/types';
 
 // Simple inline Progress component to avoid module resolution issues
@@ -116,6 +117,10 @@ export default function IntegratedSchedulePage() {
   }>>([]);
   const [selectedRulesId, setSelectedRulesId] = useState<string>('');
   const [isLoadingRules, setIsLoadingRules] = useState(false);
+  
+  // 时间段配置状态
+  const [periodTimeConfigs, setPeriodTimeConfigs] = useState<PeriodTimeConfig[]>([]);
+  const [isLoadingPeriodTimes, setIsLoadingPeriodTimes] = useState(false);
   
   const [filters, setFilters] = useState<ScheduleFilters>({
     academicYear: '', // 初始为空，等待动态加载
@@ -355,6 +360,39 @@ export default function IntegratedSchedulePage() {
   }, [filters.academicYear, filters.semester]);
 
   /**
+   * 加载时间段配置
+   */
+  const loadPeriodTimeConfigs = useCallback(async () => {
+    if (!filters.academicYear || !filters.semester) return;
+    
+    setIsLoadingPeriodTimes(true);
+    setError(undefined);
+
+    try {
+      const response = await fetch(`http://localhost:3001/api/schedule-config/period-times?academicYear=${filters.academicYear}&semester=${filters.semester}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data: ApiResponse<PeriodTimeConfig[]> = await response.json();
+
+      if (data.success && data.data) {
+        // 按节次排序
+        const sortedConfigs = data.data.sort((a, b) => a.period - b.period);
+        setPeriodTimeConfigs(sortedConfigs);
+        console.log(`✅ 成功加载 ${sortedConfigs.length} 个时间段配置:`, sortedConfigs);
+      } else {
+        throw new Error(data.message || '加载时间段配置失败');
+      }
+    } catch (error) {
+      console.error('加载时间段配置失败:', error);
+      setError('无法加载时间段配置，将使用默认配置');
+      setPeriodTimeConfigs([]);
+    } finally {
+      setIsLoadingPeriodTimes(false);
+    }
+  }, [filters.academicYear, filters.semester]);
+
+  /**
    * 启动一键排课任务
    */
   const startScheduling = useCallback(async () => {
@@ -515,8 +553,9 @@ export default function IntegratedSchedulePage() {
   useEffect(() => {
     if (filters.academicYear && filters.semester) {
       loadAvailableSchedulingRules();
+      loadPeriodTimeConfigs(); // 加载时间段配置
     }
-  }, [filters.academicYear, filters.semester, loadAvailableSchedulingRules]);
+  }, [filters.academicYear, filters.semester, loadAvailableSchedulingRules, loadPeriodTimeConfigs]);
 
   // 效果钩子：目标或筛选条件变化时加载课表数据
   useEffect(() => {
@@ -865,6 +904,20 @@ export default function IntegratedSchedulePage() {
             >
               <RefreshCw className={`h-4 w-4 ${isLoadingSchedule ? 'animate-spin' : ''}`} />
             </Button>
+
+            <Separator orientation="vertical" className="h-6 hidden sm:block" />
+
+            {/* 时间段配置状态显示 */}
+            <div className="flex items-center gap-2 min-w-0">
+              <label className="text-sm font-medium whitespace-nowrap">时间段:</label>
+              {isLoadingPeriodTimes ? (
+                <div className="w-20 h-9 bg-muted animate-pulse rounded-md" />
+              ) : (
+                <Badge variant="outline" className="text-xs">
+                  {periodTimeConfigs.length > 0 ? `${periodTimeConfigs.length}个时段` : '默认配置'}
+                </Badge>
+              )}
+            </div>
           </div>
 
           {/* 课表内容 */}
@@ -874,6 +927,7 @@ export default function IntegratedSchedulePage() {
             ) : scheduleData ? (
               <ScheduleGrid
                 weekSchedule={scheduleData.weekSchedule}
+                periodTimeConfigs={periodTimeConfigs}
                 onCourseClick={() => {}}
                 onCourseHover={() => {}}
               />

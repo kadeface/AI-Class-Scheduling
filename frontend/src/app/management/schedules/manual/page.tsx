@@ -212,7 +212,8 @@ export default function ManualSchedulePage() {
 
   // 时间配置
   const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五'];
-  const PERIODS = [1, 2, 3, 4, 5, 6, 7, 8];
+  // 默认时间段配置，当无法获取动态配置时使用
+  const DEFAULT_PERIODS = [1, 2, 3, 4, 5, 6, 7, 8];
 
   /**
    * 页面初始化
@@ -1125,27 +1126,27 @@ export default function ManualSchedulePage() {
     const [{ isOver, canDrop }, drop] = useDrop({
       accept: 'course',
       drop: async (item: DragItem) => {
-        const success = await handleCourseDrag(item, dayIndex + 1, periodIndex + 1);
-        if (success) {
-          setIsDragging(false);
-          setDragPreview({ isOver: false, canDrop: false });
-        }
+          const success = await handleCourseDrag(item, dayIndex + 1, periodIndex + 1);
+          if (success) {
+            setIsDragging(false);
+            setDragPreview({ isOver: false, canDrop: false });
+          }
       },
       canDrop: (item: DragItem) => {
-        // 不能拖拽到自己原来的位置
-        return !(item.dayOfWeek === dayIndex + 1 && item.period === periodIndex + 1);
+          // 不能拖拽到自己原来的位置
+          return !(item.dayOfWeek === dayIndex + 1 && item.period === periodIndex + 1);
       },
       hover: async (item: DragItem) => {
-        // 找到被拖拽的课程信息
-        const draggedSchedule = schedules.find(schedule => schedule._id === item.scheduleId);
-        
-        // 悬停时检查冲突并更新预览状态（包括教师时间冲突）
-        const conflictResult = await checkDropTargetConflict(dayIndex + 1, periodIndex + 1, item.scheduleId, draggedSchedule);
-        setDragPreview({
-          isOver: true,
-          canDrop: !conflictResult.hasConflict,
-          conflictInfo: conflictResult.conflictInfo
-        });
+          // 找到被拖拽的课程信息
+          const draggedSchedule = schedules.find(schedule => schedule._id === item.scheduleId);
+          
+          // 悬停时检查冲突并更新预览状态（包括教师时间冲突）
+          const conflictResult = await checkDropTargetConflict(dayIndex + 1, periodIndex + 1, item.scheduleId, draggedSchedule);
+          setDragPreview({
+            isOver: true,
+            canDrop: !conflictResult.hasConflict,
+            conflictInfo: conflictResult.conflictInfo
+          });
       },
       collect: (monitor) => ({
         isOver: monitor.isOver(),
@@ -1217,14 +1218,15 @@ export default function ManualSchedulePage() {
     }
 
     // 构建班级课表网格数据
-    const gridData: (ScheduleItem | null)[][] = Array(8).fill(null).map(() => Array(5).fill(null));
+    const maxPeriods = periodTimes.length > 0 ? Math.max(...periodTimes.map(p => p.period)) : 8;
+    const gridData: (ScheduleItem | null)[][] = Array(maxPeriods).fill(null).map(() => Array(5).fill(null));
     
     // 填充网格数据
     filteredSchedules.forEach(schedule => {
       const dayIndex = (schedule.dayOfWeek || 1) - 1;
       const periodIndex = (schedule.period || 1) - 1;
       console.log(`课程 ${getCourseName(schedule.course)}: 星期${schedule.dayOfWeek}, 第${schedule.period}节, 索引[${periodIndex}][${dayIndex}]`);
-      if (dayIndex >= 0 && dayIndex < 5 && periodIndex >= 0 && periodIndex < 8) {
+      if (dayIndex >= 0 && dayIndex < 5 && periodIndex >= 0 && periodIndex < maxPeriods) {
         gridData[periodIndex][dayIndex] = schedule;
       }
     });
@@ -1276,7 +1278,7 @@ export default function ManualSchedulePage() {
 
               {/* 表体 */}
               <tbody>
-                {Array.from({ length: 8 }, (_, periodIndex) => (
+                {Array.from({ length: maxPeriods }, (_, periodIndex) => (
                   <tr key={periodIndex} className="border-b border-gray-200">
                     {/* 时间信息列 */}
                     <td className="w-24 p-4 bg-gray-50 border-r border-gray-200">
@@ -1630,7 +1632,7 @@ export default function ManualSchedulePage() {
                   value={formData.period} 
                   onValueChange={(value) => handleFormChange('period', value)}
                   placeholder="选择节次"
-                  options={PERIODS.map(period => ({ value: period.toString(), label: `第${period}节` }))}
+                  options={periodTimes.length > 0 ? periodTimes.map(p => ({ value: p.period.toString(), label: `第${p.period}节` })) : DEFAULT_PERIODS.map(period => ({ value: period.toString(), label: `第${period}节` }))}
                 />
               </div>
             </div>

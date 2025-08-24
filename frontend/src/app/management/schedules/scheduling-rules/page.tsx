@@ -51,7 +51,8 @@ import {
   DEFAULT_CORE_SUBJECT_STRATEGY,
   getRecommendedCoreSubjects,
   CORE_SUBJECT_DISTRIBUTION_MODES,
-  courseApi
+  courseApi,
+  scheduleConfigApi
 } from '@/lib/api';
 import { formatDateTime, cn } from '@/lib/utils';
 
@@ -98,6 +99,64 @@ export default function SchedulingRulesPage() {
   };
 
   /**
+   * 🆕 获取可用的课程科目列表（去重）
+   * 
+   * Returns:
+   *   Promise<void>: 异步获取课程科目
+   */
+  const fetchAvailableSubjects = async () => {
+    try {
+      setSubjectsLoading(true);
+      const response = await courseApi.getList({ limit: 1000, isActive: true });
+      
+      if (response.success && response.data) {
+        // 提取所有课程的科目，去重并排序
+        const subjects = [...new Set(response.data.items.map(course => course.subject))].sort();
+        setAvailableSubjects(subjects);
+        console.log('获取到可用科目:', subjects);
+      } else {
+        console.warn('获取课程科目失败:', response);
+        setAvailableSubjects([]);
+      }
+    } catch (error) {
+      console.error('获取课程科目失败:', error);
+      setAvailableSubjects([]);
+    } finally {
+      setSubjectsLoading(false);
+    }
+  };
+
+  /**
+   * 🆕 获取可用的节次配置列表
+   * 
+   * Returns:
+   *   Promise<void>: 异步获取节次配置
+   */
+  const fetchAvailablePeriods = async () => {
+    try {
+      setPeriodsLoading(true);
+      const response = await scheduleConfigApi.getAllPeriods();
+      
+      if (response.success && response.data) {
+        // 提取所有可用的节次，去重并排序
+        const periods = [...new Set(response.data as number[])].sort((a, b) => a - b);
+        setAvailablePeriods(periods);
+        console.log('获取到可用节次:', periods);
+      } else {
+        console.warn('获取节次配置失败:', response);
+        // 如果获取失败，使用默认节次
+        setAvailablePeriods([1, 2, 3, 4, 5, 6, 7, 8]);
+      }
+    } catch (error) {
+      console.error('获取节次配置失败:', error);
+      // 使用默认节次作为后备
+      setAvailablePeriods([1, 2, 3, 4, 5, 6, 7, 8]);
+    } finally {
+      setPeriodsLoading(false);
+    }
+  };
+
+  /**
    * 根据课程类型获取对应的课程名称
    * 
    * Args:
@@ -107,6 +166,12 @@ export default function SchedulingRulesPage() {
    *   string: 课程名称
    */
   const getCourseNameByType = (courseType: string): string => {
+    // 🆕 如果是动态科目，直接返回科目名称
+    if (availableSubjects.includes(courseType)) {
+      return courseType;
+    }
+    
+    // 保留一些特殊课程类型的映射
     const courseTypeMap: { [key: string]: string } = {
       'class-meeting': '班会',
       'flag-raising': '升旗仪式',
@@ -128,6 +193,28 @@ export default function SchedulingRulesPage() {
     pageSize: 10,
     total: 0,
   });
+
+  // 🆕 新增：课程科目状态管理
+  const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
+  const [subjectsLoading, setSubjectsLoading] = useState(false);
+
+  // 🆕 新增：节次配置状态管理
+  const [availablePeriods, setAvailablePeriods] = useState<number[]>([]);
+  const [periodsLoading, setPeriodsLoading] = useState(false);
+
+  // 🆕 新增：科目时间约束状态管理
+  const [subjectTimeConstraints, setSubjectTimeConstraints] = useState<Array<{
+    subject: string;
+    requiredOccurrences: number;
+    timeRange: {
+      startDay: number;
+      endDay: number;
+    };
+    period: number;
+    weekType: 'all' | 'odd' | 'even';
+    priority: number;
+    description?: string;
+  }>>([]);
 
   // 搜索和筛选状态
   const [searchParams, setSearchParams] = useState<SchedulingRulesQueryParams>({
@@ -288,6 +375,10 @@ export default function SchedulingRulesPage() {
    */
   useEffect(() => {
     fetchSchedulingRules();
+    // 🆕 获取可用课程科目
+    fetchAvailableSubjects();
+    // 🆕 获取可用节次配置
+    fetchAvailablePeriods();
   }, [pagination.current, pagination.pageSize]);
 
   /**
@@ -1880,7 +1971,7 @@ export default function SchedulingRulesPage() {
 
                   {formData.courseArrangementRules.fixedTimeCourses?.enabled && (
                     <div className="space-y-6">
-                      {/* 固定时间课程列表 */}
+                      {/* 固定时间课程列表 - 第一个位置 */}
                       <div>
                         <Label>固定时间课程列表</Label>
                         <div className="mt-2 space-y-3">
@@ -1898,6 +1989,14 @@ export default function SchedulingRulesPage() {
                                       });
                                     }}
                                   >
+                                    <option value="">请选择课程类型</option>
+                                    {/* 🆕 动态显示可用科目 */}
+                                    {availableSubjects.map(subject => (
+                                      <option key={subject} value={subject}>
+                                        {subject}
+                                      </option>
+                                    ))}
+                                    {/* 保留特殊课程类型 */}
                                     <option value="class-meeting">班会</option>
                                     <option value="flag-raising">升旗仪式</option>
                                     <option value="eye-exercise">眼保健操</option>
@@ -1906,6 +2005,9 @@ export default function SchedulingRulesPage() {
                                     <option value="cleaning">大扫除</option>
                                     <option value="other">其他</option>
                                   </Select>
+                                  {subjectsLoading && (
+                                    <p className="text-xs text-gray-500 mt-1">正在加载课程科目...</p>
+                                  )}
                                 </div>
                                 
                                 <div>
@@ -1956,12 +2058,16 @@ export default function SchedulingRulesPage() {
                                       }));
                                     }}
                                   >
-                                    {[1, 2, 3, 4, 5, 6, 7, 8].map(period => (
+                                    {/* 🆕 动态显示可用节次 - 第一个位置 */}
+                                    {availablePeriods.map(period => (
                                       <option key={period} value={period.toString()}>
                                         第{period}节
                                       </option>
                                     ))}
                                   </Select>
+                                  {periodsLoading && (
+                                    <p className="text-xs text-gray-500 mt-1">正在加载节次配置...</p>
+                                  )}
                                 </div>
                                 
                                 <div className="flex items-end">
@@ -2095,8 +2201,8 @@ export default function SchedulingRulesPage() {
                             variant="outline"
                             onClick={() => {
                               const newCourse = {
-                                type: 'class-meeting' as const,
-                                name: getCourseNameByType('class-meeting'), // 自动获取名称
+                                type: '' as any, // 🆕 改为空字符串，让用户选择
+                                name: '', // 🆕 名称也改为空
                                 dayOfWeek: 1,
                                 period: 1,
                                 weekType: 'all' as const,
@@ -2186,6 +2292,354 @@ export default function SchedulingRulesPage() {
                             当固定时间课程与其他课程冲突时的处理方式
                           </p>
                         </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* 🆕 新增：科目时间约束配置 */}
+              <Card className="mt-6">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="h-5 w-5" />
+                    科目时间约束配置
+                  </CardTitle>
+                  <CardDescription>
+                    配置特定科目必须在特定时间段出现的约束条件（如：语文必须在周一到周四第7节出现2次）
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {/* 启用开关 */}
+                  <div className="flex items-center space-x-2 mb-4">
+                    <Switch
+                      id="enableSubjectTimeConstraints"
+                      checked={formData.courseArrangementRules.subjectTimeConstraints?.enabled || false}
+                      onCheckedChange={(checked) => {
+                        setFormData(prev => ({
+                          ...prev,
+                          courseArrangementRules: {
+                            ...prev.courseArrangementRules,
+                            subjectTimeConstraints: {
+                              ...prev.courseArrangementRules.subjectTimeConstraints,
+                              enabled: checked
+                            }
+                          }
+                        }));
+                      }}
+                    />
+                    <Label htmlFor="enableSubjectTimeConstraints" className="text-base font-medium">
+                      启用科目时间约束
+                    </Label>
+                  </div>
+
+                  {/* 约束配置列表 */}
+                  {formData.courseArrangementRules.subjectTimeConstraints?.enabled && (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-base font-medium">约束条件列表</Label>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const newConstraints = [...(formData.courseArrangementRules.subjectTimeConstraints?.constraints || [])];
+                            newConstraints.push({
+                              subject: '',
+                              requiredOccurrences: 1,
+                              timeRange: { startDay: 1, endDay: 4 },
+                              period: 7,
+                              weekType: 'all',
+                              priority: newConstraints.length + 1,
+                              description: ''
+                            });
+                            setFormData(prev => ({
+                              ...prev,
+                              courseArrangementRules: {
+                                ...prev.courseArrangementRules,
+                                subjectTimeConstraints: {
+                                  ...prev.courseArrangementRules.subjectTimeConstraints,
+                                  constraints: newConstraints
+                                }
+                              }
+                            }));
+                          }}
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          添加约束
+                        </Button>
+                      </div>
+
+                      <div className="space-y-3">
+                        {(formData.courseArrangementRules.subjectTimeConstraints?.constraints || []).map((constraint, index) => (
+                          <div key={index} className="border rounded-lg p-4 bg-gray-50">
+                            <div className="grid gap-4 md:grid-cols-6">
+                              {/* 科目选择 */}
+                              <div>
+                                <Label className="text-sm">科目</Label>
+                                <Select
+                                  value={constraint.subject}
+                                  onValueChange={(value) => {
+                                    const newConstraints = [...(formData.courseArrangementRules.subjectTimeConstraints?.constraints || [])];
+                                    newConstraints[index] = { ...newConstraints[index], subject: value };
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      courseArrangementRules: {
+                                        ...prev.courseArrangementRules,
+                                        subjectTimeConstraints: {
+                                          ...prev.courseArrangementRules.subjectTimeConstraints,
+                                          constraints: newConstraints
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                >
+                                  <option value="">请选择科目</option>
+                                  {availableSubjects.map(subject => (
+                                    <option key={subject} value={subject}>
+                                      {subject}
+                                    </option>
+                                  ))}
+                                </Select>
+                              </div>
+
+                              {/* 出现次数 */}
+                              <div>
+                                <Label className="text-sm">出现次数</Label>
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  max="10"
+                                  value={constraint.requiredOccurrences}
+                                  onChange={(e) => {
+                                    const newConstraints = [...(formData.courseArrangementRules.subjectTimeConstraints?.constraints || [])];
+                                    newConstraints[index] = { ...newConstraints[index], requiredOccurrences: parseInt(e.target.value) || 1 };
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      courseArrangementRules: {
+                                        ...prev.courseArrangementRules,
+                                        subjectTimeConstraints: {
+                                          ...prev.courseArrangementRules.subjectTimeConstraints,
+                                          constraints: newConstraints
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                />
+                              </div>
+
+                              {/* 开始星期 */}
+                              <div>
+                                <Label className="text-sm">开始星期</Label>
+                                <Select
+                                  value={constraint.timeRange.startDay.toString()}
+                                  onValueChange={(value) => {
+                                    const newConstraints = [...(formData.courseArrangementRules.subjectTimeConstraints?.constraints || [])];
+                                    newConstraints[index] = { 
+                                      ...newConstraints[index], 
+                                      timeRange: { 
+                                        ...newConstraints[index].timeRange, 
+                                        startDay: parseInt(value) 
+                                      } 
+                                    };
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      courseArrangementRules: {
+                                        ...prev.courseArrangementRules,
+                                        subjectTimeConstraints: {
+                                          ...prev.courseArrangementRules.subjectTimeConstraints,
+                                          constraints: newConstraints
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                >
+                                  {WEEKDAY_OPTIONS.map(day => (
+                                    <option key={day.value} value={day.value.toString()}>
+                                      {day.label}
+                                    </option>
+                                  ))}
+                                </Select>
+                              </div>
+
+                              {/* 结束星期 */}
+                              <div>
+                                <Label className="text-sm">结束星期</Label>
+                                <Select
+                                  value={constraint.timeRange.endDay.toString()}
+                                  onValueChange={(value) => {
+                                    const newConstraints = [...(formData.courseArrangementRules.subjectTimeConstraints?.constraints || [])];
+                                    newConstraints[index] = { 
+                                      ...newConstraints[index], 
+                                      timeRange: { 
+                                        ...newConstraints[index].timeRange, 
+                                        endDay: parseInt(value) 
+                                      } 
+                                    };
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      courseArrangementRules: {
+                                        ...prev.courseArrangementRules,
+                                        subjectTimeConstraints: {
+                                          ...prev.courseArrangementRules.subjectTimeConstraints,
+                                          constraints: newConstraints
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                >
+                                  {WEEKDAY_OPTIONS.map(day => (
+                                    <option key={day.value} value={day.value.toString()}>
+                                      {day.label}
+                                    </option>
+                                  ))}
+                                </Select>
+                              </div>
+
+                              {/* 节次 */}
+                              <div>
+                                <Label className="text-sm">节次</Label>
+                                <Select
+                                  value={constraint.period.toString()}
+                                  onValueChange={(value) => {
+                                    const newConstraints = [...(formData.courseArrangementRules.subjectTimeConstraints?.constraints || [])];
+                                    newConstraints[index] = { ...newConstraints[index], period: parseInt(value) };
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      courseArrangementRules: {
+                                        ...prev.courseArrangementRules,
+                                        subjectTimeConstraints: {
+                                          ...prev.courseArrangementRules.subjectTimeConstraints,
+                                          constraints: newConstraints
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                >
+                                  {availablePeriods.map(period => (
+                                    <option key={period} value={period.toString()}>
+                                      第{period}节
+                                    </option>
+                                  ))}
+                                </Select>
+                              </div>
+
+                              {/* 删除按钮 */}
+                              <div className="flex items-end">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    const newConstraints = (formData.courseArrangementRules.subjectTimeConstraints?.constraints || []).filter((_, i) => i !== index);
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      courseArrangementRules: {
+                                        ...prev.courseArrangementRules,
+                                        subjectTimeConstraints: {
+                                          ...prev.courseArrangementRules.subjectTimeConstraints,
+                                          constraints: newConstraints
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+
+                            {/* 周次类型和优先级 */}
+                            <div className="mt-3 grid gap-4 md:grid-cols-3">
+                              <div>
+                                <Label className="text-sm">周次类型</Label>
+                                <Select
+                                  value={constraint.weekType}
+                                  onValueChange={(value) => {
+                                    const newConstraints = [...(formData.courseArrangementRules.subjectTimeConstraints?.constraints || [])];
+                                    newConstraints[index] = { ...newConstraints[index], weekType: value as any };
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      courseArrangementRules: {
+                                        ...prev.courseArrangementRules,
+                                        subjectTimeConstraints: {
+                                          ...prev.courseArrangementRules.subjectTimeConstraints,
+                                          constraints: newConstraints
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                >
+                                  <option value="all">全周</option>
+                                  <option value="odd">单周</option>
+                                  <option value="even">双周</option>
+                                </Select>
+                              </div>
+
+                              <div>
+                                <Label className="text-sm">优先级</Label>
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  max="10"
+                                  value={constraint.priority}
+                                  onChange={(e) => {
+                                    const newConstraints = [...(formData.courseArrangementRules.subjectTimeConstraints?.constraints || [])];
+                                    newConstraints[index] = { ...newConstraints[index], priority: parseInt(e.target.value) || 1 };
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      courseArrangementRules: {
+                                        ...prev.courseArrangementRules,
+                                        subjectTimeConstraints: {
+                                          ...prev.courseArrangementRules.subjectTimeConstraints,
+                                          constraints: newConstraints
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                />
+                              </div>
+
+                              <div>
+                                <Label className="text-sm">描述（可选）</Label>
+                                <Input
+                                  value={constraint.description || ''}
+                                  placeholder="如：晚托课程要求"
+                                  onChange={(e) => {
+                                    const newConstraints = [...(formData.courseArrangementRules.subjectTimeConstraints?.constraints || [])];
+                                    newConstraints[index] = { ...newConstraints[index], description: e.target.value };
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      courseArrangementRules: {
+                                        ...prev.courseArrangementRules,
+                                        subjectTimeConstraints: {
+                                          ...prev.courseArrangementRules.subjectTimeConstraints,
+                                          constraints: newConstraints
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* 示例说明 */}
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <h4 className="font-medium text-blue-900 mb-2">💡 使用说明</h4>
+                        <p className="text-sm text-blue-800">
+                          科目时间约束用于确保特定科目在指定时间段内出现足够的次数。例如：
+                        </p>
+                        <ul className="text-sm text-blue-800 mt-2 space-y-1">
+                          <li>• <strong>语文</strong>：必须在<strong>周一到周四第7节</strong>出现<strong>2次</strong></li>
+                          <li>• <strong>数学</strong>：必须在<strong>周一到周四第7节</strong>出现<strong>1次</strong></li>
+                          <li>• <strong>英语</strong>：必须在<strong>周一到周四第7节</strong>出现<strong>1次</strong></li>
+                        </ul>
+                        <p className="text-sm text-blue-800 mt-2">
+                          排课引擎会确保这些约束得到满足，但具体在哪一天安排由引擎灵活决定。
+                        </p>
                       </div>
                     </div>
                   )}
@@ -3301,7 +3755,7 @@ export default function SchedulingRulesPage() {
 
                   {formData.courseArrangementRules.fixedTimeCourses?.enabled && (
                     <div className="space-y-6">
-                      {/* 固定时间课程列表 */}
+                      {/* 固定时间课程列表 - 第二个位置 */}
                       <div>
                         <Label>固定时间课程列表</Label>
                         <div className="mt-2 space-y-3">
@@ -3310,26 +3764,34 @@ export default function SchedulingRulesPage() {
                               <div className="grid gap-4 md:grid-cols-4">
                                 <div>
                                   <Label className="text-sm">课程类型</Label>
-                                  
-                                    <Select
-                                      value={course.type}
-                                      onValueChange={(value) => {
-                                        updateFixedTimeCourse(index, { 
-                                          type: value as any,
-                                          name: getCourseNameByType(value) // 🆕 自动更新名称
-                                        });
-                                      }}
-                                    >
-                                      <option value="class-meeting">班会</option>
-                                      <option value="flag-raising">升旗仪式</option>
-                                      <option value="eye-exercise">眼保健操</option>
-                                      <option value="morning-reading">晨读</option>
-                                      <option value="afternoon-reading">午读</option>
-                                      <option value="cleaning">大扫除</option>
-                                      <option value="other">其他</option>
-                                    </Select>
-                                  
-                                  
+                                  <Select
+                                    value={course.type}
+                                    onValueChange={(value) => {
+                                      updateFixedTimeCourse(index, { 
+                                        type: value as any,
+                                        name: getCourseNameByType(value) // 🆕 自动更新名称
+                                      });
+                                    }}
+                                  >
+                                    <option value="">请选择课程类型</option>
+                                    {/* 🆕 动态显示可用科目 */}
+                                    {availableSubjects.map(subject => (
+                                      <option key={subject} value={subject}>
+                                        {subject}
+                                      </option>
+                                    ))}
+                                    {/* 保留特殊课程类型 */}
+                                    <option value="class-meeting">班会</option>
+                                    <option value="flag-raising">升旗仪式</option>
+                                    <option value="eye-exercise">眼保健操</option>
+                                    <option value="morning-reading">晨读</option>
+                                    <option value="afternoon-reading">午读</option>
+                                    <option value="cleaning">大扫除</option>
+                                    <option value="other">其他</option>
+                                  </Select>
+                                  {subjectsLoading && (
+                                    <p className="text-xs text-gray-500 mt-1">正在加载课程科目...</p>
+                                  )}
                                 </div>
                                 
                                 <div>
@@ -3380,12 +3842,16 @@ export default function SchedulingRulesPage() {
                                       }));
                                     }}
                                   >
-                                    {[1, 2, 3, 4, 5, 6, 7, 8].map(period => (
+                                    {/* 🆕 动态显示可用节次 - 第二个位置 */}
+                                    {availablePeriods.map(period => (
                                       <option key={period} value={period.toString()}>
                                         第{period}节
                                       </option>
                                     ))}
                                   </Select>
+                                  {periodsLoading && (
+                                    <p className="text-xs text-gray-500 mt-1">正在加载节次配置...</p>
+                                  )}
                                 </div>
                                 
                                 <div className="flex items-end">
@@ -3519,8 +3985,8 @@ export default function SchedulingRulesPage() {
                             variant="outline"
                             onClick={() => {
                               const newCourse = {
-                                type: 'class-meeting' as const,
-                                name: getCourseNameByType('class-meeting'), // �� 自动获取名称
+                                type: '' as any, // 🆕 改为空字符串，让用户选择
+                                name: '', // 🆕 名称也改为空
                                 dayOfWeek: 1,
                                 period: 1,
                                 weekType: 'all' as const,
@@ -3548,16 +4014,18 @@ export default function SchedulingRulesPage() {
                             <Switch
                               id="edit-fixedTimePriority"
                               checked={formData.courseArrangementRules.fixedTimeCourses?.priority || false}
-                              onCheckedChange={(checked) => setFormData(prev => ({
-                                ...prev,
-                                courseArrangementRules: {
-                                  ...prev.courseArrangementRules,
-                                  fixedTimeCourses: {
-                                    ...prev.courseArrangementRules.fixedTimeCourses,
-                                    priority: checked
+                              onCheckedChange={(checked) => {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  courseArrangementRules: {
+                                    ...prev.courseArrangementRules,
+                                    fixedTimeCourses: {
+                                      ...prev.courseArrangementRules.fixedTimeCourses,
+                                      priority: checked
+                                    }
                                   }
-                                }
-                              }))}
+                                }));
+                              }}
                             />
                             <Label htmlFor="edit-fixedTimePriority">固定时间课程优先</Label>
                           </div>
@@ -3566,16 +4034,18 @@ export default function SchedulingRulesPage() {
                             <Switch
                               id="edit-allowFixedTimeOverride"
                               checked={formData.courseArrangementRules.fixedTimeCourses?.allowOverride || false}
-                              onCheckedChange={(checked) => setFormData(prev => ({
-                                ...prev,
-                                courseArrangementRules: {
-                                  ...prev.courseArrangementRules,
-                                  fixedTimeCourses: {
-                                    ...prev.courseArrangementRules.fixedTimeCourses,
-                                    allowOverride: checked
+                              onCheckedChange={(checked) => {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  courseArrangementRules: {
+                                    ...prev.courseArrangementRules,
+                                    fixedTimeCourses: {
+                                      ...prev.courseArrangementRules.fixedTimeCourses,
+                                      allowOverride: checked
+                                    }
                                   }
-                                }
-                              }))}
+                                }));
+                              }}
                             />
                             <Label htmlFor="edit-allowFixedTimeOverride">允许手动调整</Label>
                           </div>
@@ -3585,16 +4055,18 @@ export default function SchedulingRulesPage() {
                           <Label className="text-sm">冲突处理策略</Label>
                           <Select
                             value={formData.courseArrangementRules.fixedTimeCourses?.conflictStrategy || 'strict'}
-                            onValueChange={(value) => setFormData(prev => ({
-                              ...prev,
-                              courseArrangementRules: {
-                                ...prev.courseArrangementRules,
-                                fixedTimeCourses: {
-                                  ...prev.courseArrangementRules.fixedTimeCourses,
-                                  conflictStrategy: value as any
+                            onValueChange={(value) => {
+                              setFormData(prev => ({
+                                ...prev,
+                                courseArrangementRules: {
+                                  ...prev.courseArrangementRules,
+                                  fixedTimeCourses: {
+                                    ...prev.courseArrangementRules.fixedTimeCourses,
+                                    conflictStrategy: value as any
+                                  }
                                 }
-                              }
-                            }))}
+                              }));
+                            }}
                           >
                             <option value="strict">严格模式（不允许冲突）</option>
                             <option value="flexible">灵活模式（允许调整其他课程）</option>
@@ -3604,6 +4076,354 @@ export default function SchedulingRulesPage() {
                             当固定时间课程与其他课程冲突时的处理方式
                           </p>
                         </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* 🆕 新增：科目时间约束配置 - 编辑模式 */}
+              <Card className="mt-6">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="h-5 w-5" />
+                    科目时间约束配置
+                  </CardTitle>
+                  <CardDescription>
+                    配置特定科目必须在特定时间段出现的约束条件（如：语文必须在周一到周四第7节出现2次）
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {/* 启用开关 */}
+                  <div className="flex items-center space-x-2 mb-4">
+                    <Switch
+                      id="edit-enableSubjectTimeConstraints"
+                      checked={formData.courseArrangementRules.subjectTimeConstraints?.enabled || false}
+                      onCheckedChange={(checked) => {
+                        setFormData(prev => ({
+                          ...prev,
+                          courseArrangementRules: {
+                            ...prev.courseArrangementRules,
+                            subjectTimeConstraints: {
+                              ...prev.courseArrangementRules.subjectTimeConstraints,
+                              enabled: checked
+                            }
+                          }
+                        }));
+                      }}
+                    />
+                    <Label htmlFor="edit-enableSubjectTimeConstraints" className="text-base font-medium">
+                      启用科目时间约束
+                    </Label>
+                  </div>
+
+                  {/* 约束配置列表 */}
+                  {formData.courseArrangementRules.subjectTimeConstraints?.enabled && (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-base font-medium">约束条件列表</Label>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const newConstraints = [...(formData.courseArrangementRules.subjectTimeConstraints?.constraints || [])];
+                            newConstraints.push({
+                              subject: '',
+                              requiredOccurrences: 1,
+                              timeRange: { startDay: 1, endDay: 4 },
+                              period: 7,
+                              weekType: 'all',
+                              priority: newConstraints.length + 1,
+                              description: ''
+                            });
+                            setFormData(prev => ({
+                              ...prev,
+                              courseArrangementRules: {
+                                ...prev.courseArrangementRules,
+                                subjectTimeConstraints: {
+                                  ...prev.courseArrangementRules.subjectTimeConstraints,
+                                  constraints: newConstraints
+                                }
+                              }
+                            }));
+                          }}
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          添加约束
+                        </Button>
+                      </div>
+
+                      <div className="space-y-3">
+                        {(formData.courseArrangementRules.subjectTimeConstraints?.constraints || []).map((constraint, index) => (
+                          <div key={index} className="border rounded-lg p-4 bg-gray-50">
+                            <div className="grid gap-4 md:grid-cols-6">
+                              {/* 科目选择 */}
+                              <div>
+                                <Label className="text-sm">科目</Label>
+                                <Select
+                                  value={constraint.subject}
+                                  onValueChange={(value) => {
+                                    const newConstraints = [...(formData.courseArrangementRules.subjectTimeConstraints?.constraints || [])];
+                                    newConstraints[index] = { ...newConstraints[index], subject: value };
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      courseArrangementRules: {
+                                        ...prev.courseArrangementRules,
+                                        subjectTimeConstraints: {
+                                          ...prev.courseArrangementRules.subjectTimeConstraints,
+                                          constraints: newConstraints
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                >
+                                  <option value="">请选择科目</option>
+                                  {availableSubjects.map(subject => (
+                                    <option key={subject} value={subject}>
+                                      {subject}
+                                    </option>
+                                  ))}
+                                </Select>
+                              </div>
+
+                              {/* 出现次数 */}
+                              <div>
+                                <Label className="text-sm">出现次数</Label>
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  max="10"
+                                  value={constraint.requiredOccurrences}
+                                  onChange={(e) => {
+                                    const newConstraints = [...(formData.courseArrangementRules.subjectTimeConstraints?.constraints || [])];
+                                    newConstraints[index] = { ...newConstraints[index], requiredOccurrences: parseInt(e.target.value) || 1 };
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      courseArrangementRules: {
+                                        ...prev.courseArrangementRules,
+                                        subjectTimeConstraints: {
+                                          ...prev.courseArrangementRules.subjectTimeConstraints,
+                                          constraints: newConstraints
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                />
+                              </div>
+
+                              {/* 开始星期 */}
+                              <div>
+                                <Label className="text-sm">开始星期</Label>
+                                <Select
+                                  value={constraint.timeRange.startDay.toString()}
+                                  onValueChange={(value) => {
+                                    const newConstraints = [...(formData.courseArrangementRules.subjectTimeConstraints?.constraints || [])];
+                                    newConstraints[index] = { 
+                                      ...newConstraints[index], 
+                                      timeRange: { 
+                                        ...newConstraints[index].timeRange, 
+                                        startDay: parseInt(value) 
+                                      } 
+                                    };
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      courseArrangementRules: {
+                                        ...prev.courseArrangementRules,
+                                        subjectTimeConstraints: {
+                                          ...prev.courseArrangementRules.subjectTimeConstraints,
+                                          constraints: newConstraints
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                >
+                                  {WEEKDAY_OPTIONS.map(day => (
+                                    <option key={day.value} value={day.value.toString()}>
+                                      {day.label}
+                                    </option>
+                                  ))}
+                                </Select>
+                              </div>
+
+                              {/* 结束星期 */}
+                              <div>
+                                <Label className="text-sm">结束星期</Label>
+                                <Select
+                                  value={constraint.timeRange.endDay.toString()}
+                                  onValueChange={(value) => {
+                                    const newConstraints = [...(formData.courseArrangementRules.subjectTimeConstraints?.constraints || [])];
+                                    newConstraints[index] = { 
+                                      ...newConstraints[index], 
+                                      timeRange: { 
+                                        ...newConstraints[index].timeRange, 
+                                        endDay: parseInt(value) 
+                                      } 
+                                    };
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      courseArrangementRules: {
+                                        ...prev.courseArrangementRules,
+                                        subjectTimeConstraints: {
+                                          ...prev.courseArrangementRules.subjectTimeConstraints,
+                                          constraints: newConstraints
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                >
+                                  {WEEKDAY_OPTIONS.map(day => (
+                                    <option key={day.value} value={day.value.toString()}>
+                                      {day.label}
+                                    </option>
+                                  ))}
+                                </Select>
+                              </div>
+
+                              {/* 节次 */}
+                              <div>
+                                <Label className="text-sm">节次</Label>
+                                <Select
+                                  value={constraint.period.toString()}
+                                  onValueChange={(value) => {
+                                    const newConstraints = [...(formData.courseArrangementRules.subjectTimeConstraints?.constraints || [])];
+                                    newConstraints[index] = { ...newConstraints[index], period: parseInt(value) };
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      courseArrangementRules: {
+                                        ...prev.courseArrangementRules,
+                                        subjectTimeConstraints: {
+                                          ...prev.courseArrangementRules.subjectTimeConstraints,
+                                          constraints: newConstraints
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                >
+                                  {availablePeriods.map(period => (
+                                    <option key={period} value={period.toString()}>
+                                      第{period}节
+                                    </option>
+                                  ))}
+                                </Select>
+                              </div>
+
+                              {/* 删除按钮 */}
+                              <div className="flex items-end">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    const newConstraints = (formData.courseArrangementRules.subjectTimeConstraints?.constraints || []).filter((_, i) => i !== index);
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      courseArrangementRules: {
+                                        ...prev.courseArrangementRules,
+                                        subjectTimeConstraints: {
+                                          ...prev.courseArrangementRules.subjectTimeConstraints,
+                                          constraints: newConstraints
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+
+                            {/* 周次类型和优先级 */}
+                            <div className="mt-3 grid gap-4 md:grid-cols-3">
+                              <div>
+                                <Label className="text-sm">周次类型</Label>
+                                <Select
+                                  value={constraint.weekType}
+                                  onValueChange={(value) => {
+                                    const newConstraints = [...(formData.courseArrangementRules.subjectTimeConstraints?.constraints || [])];
+                                    newConstraints[index] = { ...newConstraints[index], weekType: value as any };
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      courseArrangementRules: {
+                                        ...prev.courseArrangementRules,
+                                        subjectTimeConstraints: {
+                                          ...prev.courseArrangementRules.subjectTimeConstraints,
+                                          constraints: newConstraints
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                >
+                                  <option value="all">全周</option>
+                                  <option value="odd">单周</option>
+                                  <option value="even">双周</option>
+                                </Select>
+                              </div>
+
+                              <div>
+                                <Label className="text-sm">优先级</Label>
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  max="10"
+                                  value={constraint.priority}
+                                  onChange={(e) => {
+                                    const newConstraints = [...(formData.courseArrangementRules.subjectTimeConstraints?.constraints || [])];
+                                    newConstraints[index] = { ...newConstraints[index], priority: parseInt(e.target.value) || 1 };
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      courseArrangementRules: {
+                                        ...prev.courseArrangementRules,
+                                        subjectTimeConstraints: {
+                                          ...prev.courseArrangementRules.subjectTimeConstraints,
+                                          constraints: newConstraints
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                />
+                              </div>
+
+                              <div>
+                                <Label className="text-sm">描述（可选）</Label>
+                                <Input
+                                  value={constraint.description || ''}
+                                  placeholder="如：晚托课程要求"
+                                  onChange={(e) => {
+                                    const newConstraints = [...(formData.courseArrangementRules.subjectTimeConstraints?.constraints || [])];
+                                    newConstraints[index] = { ...newConstraints[index], description: e.target.value };
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      courseArrangementRules: {
+                                        ...prev.courseArrangementRules,
+                                        subjectTimeConstraints: {
+                                          ...prev.courseArrangementRules.subjectTimeConstraints,
+                                          constraints: newConstraints
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* 示例说明 */}
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <h4 className="font-medium text-blue-900 mb-2">💡 使用说明</h4>
+                        <p className="text-sm text-blue-800">
+                          科目时间约束用于确保特定科目在指定时间段内出现足够的次数。例如：
+                        </p>
+                        <ul className="text-sm text-blue-800 mt-2 space-y-1">
+                          <li>• <strong>语文</strong>：必须在<strong>周一到周四第7节</strong>出现<strong>2次</strong></li>
+                          <li>• <strong>数学</strong>：必须在<strong>周一到周四第7节</strong>出现<strong>1次</strong></li>
+                          <li>• <strong>英语</strong>：必须在<strong>周一到周四第7节</strong>出现<strong>1次</strong></li>
+                        </ul>
+                        <p className="text-sm text-blue-800 mt-2">
+                          排课引擎会确保这些约束得到满足，但具体在哪一天安排由引擎灵活决定。
+                        </p>
                       </div>
                     </div>
                   )}
