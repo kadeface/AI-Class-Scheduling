@@ -90,10 +90,84 @@ export default function ScheduleConfigPage() {
   };
 
   /**
+   * 计算课程时长（分钟）
+   */
+  const calculateDuration = (startTime: string, endTime: string): number => {
+    const start = new Date(`2000-01-01T${startTime}:00`);
+    const end = new Date(`2000-01-01T${endTime}:00`);
+    return Math.round((end.getTime() - start.getTime()) / (1000 * 60));
+  };
+
+  /**
+   * 计算休息时间（分钟）
+   * 基于标准课程时间表动态计算休息时间
+   */
+  const calculateBreakTime = (startTime: string, endTime: string, period: number): number => {
+    // 如果是最后一节（第12节），休息时间设为0
+    if (period >= 12) {
+      return 0;
+    }
+    
+    // 标准课程时间表（每节课45分钟，课间休息10分钟，大课间20分钟，午休2小时）
+    const standardSchedule = {
+      1: { start: '08:00', end: '08:45', nextStart: '08:55' },   // 第1节到第2节：课间休息10分钟
+      2: { start: '08:55', end: '09:40', nextStart: '10:00' },  // 第2节到第3节：大课间20分钟
+      3: { start: '10:00', end: '10:45', nextStart: '10:55' },  // 第3节到第4节：课间休息10分钟
+      4: { start: '10:55', end: '11:40', nextStart: '12:00' },  // 第4节到第5节：午休前20分钟
+      5: { start: '12:00', end: '12:45', nextStart: '14:00' },  // 第5节到第6节：午休2小时15分钟
+      6: { start: '14:00', end: '14:45', nextStart: '14:55' },  // 第6节到第7节：课间休息10分钟
+      7: { start: '14:55', end: '15:40', nextStart: '15:50' },  // 第7节到第8节：课间休息10分钟
+      8: { start: '15:50', end: '16:35', nextStart: '16:45' },  // 第8节到第9节：课间休息10分钟
+      9: { start: '16:45', end: '17:30', nextStart: '17:40' },  // 第9节到第10节：课间休息10分钟
+      10: { start: '17:40', end: '18:25', nextStart: '18:35' }, // 第10节到第11节：课间休息10分钟
+      11: { start: '18:35', end: '19:20', nextStart: '19:30' }  // 第11节到第12节：课间休息10分钟
+    };
+    
+    const currentPeriod = standardSchedule[period as keyof typeof standardSchedule];
+    if (!currentPeriod) {
+      return 10; // 默认休息时间
+    }
+    
+    // 计算当前节次的结束时间
+    const currentEnd = new Date(`2000-01-01T${endTime}:00`);
+    
+    // 获取下一节的开始时间
+    const nextStart = new Date(`2000-01-01T${currentPeriod.nextStart}:00`);
+    
+    // 计算休息时间（分钟）
+    const breakTime = Math.round((nextStart.getTime() - currentEnd.getTime()) / (1000 * 60));
+    
+    // 返回休息时间，如果计算结果为负数或过大，则返回标准值
+    if (breakTime > 0 && breakTime <= 180) {
+      return breakTime;
+    }
+    
+    // 返回标准休息时间
+    if (period === 2) return 20;  // 大课间
+    if (period === 4) return 20;  // 午休前
+    if (period === 5) return 135; // 午休
+    return 10; // 标准课间休息
+  };
+
+  /**
    * 处理表单数据变化
    */
   const handleFormChange = (field: keyof PeriodTimeFormData, value: string | number) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData(prev => {
+      const newData = { ...prev, [field]: value };
+      
+      // 当开始时间、结束时间或节次变化时，自动计算休息时间
+      if (field === 'startTime' || field === 'endTime' || field === 'period') {
+        const breakTime = calculateBreakTime(
+          newData.startTime, 
+          newData.endTime, 
+          newData.period
+        );
+        newData.breakTime = breakTime;
+      }
+      
+      return newData;
+    });
   };
 
   /**
@@ -180,15 +254,6 @@ export default function ScheduleConfigPage() {
     } catch (error) {
       console.error('删除时间配置失败:', error);
     }
-  };
-
-  /**
-   * 计算课程时长（分钟）
-   */
-  const calculateDuration = (startTime: string, endTime: string): number => {
-    const start = new Date(`2000-01-01T${startTime}:00`);
-    const end = new Date(`2000-01-01T${endTime}:00`);
-    return Math.round((end.getTime() - start.getTime()) / (1000 * 60));
   };
 
   // 监听筛选条件变化
@@ -296,79 +361,118 @@ export default function ScheduleConfigPage() {
 
       {/* 新建/编辑对话框 */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader className="pb-4">
+            <DialogTitle className="text-xl font-semibold">
               {editingConfig ? '编辑时间配置' : '新建时间配置'}
             </DialogTitle>
           </DialogHeader>
           
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="period">节次</Label>
-              <select
-                id="period"
-                value={formData.period.toString()}
-                onChange={(e) => handleFormChange('period', parseInt(e.target.value))}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {Array.from({ length: 12 }, (_, i) => i + 1).map((num) => (
-                  <option key={num} value={num.toString()}>
-                    第{num}节
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="startTime">开始时间</Label>
-                <Input
-                  id="startTime"
-                  type="time"
-                  value={formData.startTime}
-                  onChange={(e) => handleFormChange('startTime', e.target.value)}
-                />
-              </div>
-              <div>
-                <Label htmlFor="endTime">结束时间</Label>
-                <Input
-                  id="endTime"
-                  type="time"
-                  value={formData.endTime}
-                  onChange={(e) => handleFormChange('endTime', e.target.value)}
-                />
+          <div className="space-y-6">
+            {/* 第一行：节次选择 */}
+            <div className="space-y-2">
+              <Label htmlFor="period" className="text-sm font-medium text-gray-700">
+                节次
+              </Label>
+              <div className="max-w-xs">
+                <select
+                  id="period"
+                  value={formData.period.toString()}
+                  onChange={(e) => handleFormChange('period', parseInt(e.target.value))}
+                  className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                >
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((num) => (
+                    <option key={num} value={num.toString()}>
+                      第{num}节
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
-            <div>
-              <Label htmlFor="breakTime">休息时间（分钟）</Label>
-              <Input
-                id="breakTime"
-                type="number"
-                min="0"
-                max="180"
-                value={formData.breakTime}
-                onChange={(e) => handleFormChange('breakTime', parseInt(e.target.value))}
-              />
+            {/* 第二行：时间设置 */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium text-gray-700">时间设置</Label>
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="startTime" className="text-xs text-gray-600">
+                    开始时间
+                  </Label>
+                  <Input
+                    id="startTime"
+                    type="time"
+                    value={formData.startTime}
+                    onChange={(e) => handleFormChange('startTime', e.target.value)}
+                    className="h-10"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="endTime" className="text-xs text-gray-600">
+                    结束时间
+                  </Label>
+                  <Input
+                    id="endTime"
+                    type="time"
+                    value={formData.endTime}
+                    onChange={(e) => handleFormChange('endTime', e.target.value)}
+                    className="h-10"
+                  />
+                </div>
+              </div>
             </div>
 
-            <div>
-              <Label htmlFor="description">描述</Label>
-              <Input
-                id="description"
-                placeholder="例如：第一节、午休等"
-                value={formData.description}
-                onChange={(e) => handleFormChange('description', e.target.value)}
-              />
+            {/* 第三行：休息时间和描述 */}
+            <div className="grid grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="breakTime" className="text-sm font-medium text-gray-700">
+                  休息时间
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="breakTime"
+                    type="number"
+                    min="0"
+                    max="180"
+                    value={formData.breakTime}
+                    onChange={(e) => handleFormChange('breakTime', parseInt(e.target.value))}
+                    className="h-10 pr-12"
+                  />
+                  <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-gray-500">
+                    分钟
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500">
+                  休息时间会根据节次自动计算，您也可以手动调整
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="description" className="text-sm font-medium text-gray-700">
+                  描述
+                </Label>
+                <Input
+                  id="description"
+                  placeholder="例如：第一节、午休等"
+                  value={formData.description}
+                  onChange={(e) => handleFormChange('description', e.target.value)}
+                  className="h-10"
+                />
+              </div>
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4">
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+          <div className="flex justify-end gap-3 pt-6 border-t border-gray-200 mt-6">
+            <Button 
+              variant="outline" 
+              onClick={() => setDialogOpen(false)}
+              className="px-6 h-10"
+            >
               取消
             </Button>
-            <Button onClick={handleSave}>
+            <Button 
+              onClick={handleSave}
+              className="px-6 h-10"
+            >
               <Save className="h-4 w-4 mr-2" />
               保存
             </Button>

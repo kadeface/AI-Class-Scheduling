@@ -7,7 +7,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { AcademicPeriodSelector } from '../../schedules/schedule-view/components/AcademicPeriodSelector';
 import { Calendar, Plus, Edit, Trash2, Save, X } from 'lucide-react';
@@ -42,6 +41,8 @@ interface SemesterCalendar {
  * 学期日历表单数据接口
  */
 interface CalendarFormData {
+  academicYear: string;    // 新增：学年
+  semester: string;         // 新增：学期
   startDate: string;
   endDate: string;
   weekDays: number[];
@@ -65,6 +66,8 @@ export default function SemesterCalendarPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCalendar, setEditingCalendar] = useState<SemesterCalendar | null>(null);
   const [formData, setFormData] = useState<CalendarFormData>({
+    academicYear: '',
+    semester: '',
     startDate: '',
     endDate: '',
     weekDays: [1, 2, 3, 4, 5],
@@ -192,6 +195,8 @@ export default function SemesterCalendarPage() {
    */
   const resetForm = () => {
     setFormData({
+      academicYear: '',
+      semester: '',
       startDate: '',
       endDate: '',
       weekDays: [1, 2, 3, 4, 5],
@@ -208,6 +213,8 @@ export default function SemesterCalendarPage() {
   const openEditDialog = (calendarData: SemesterCalendar) => {
     setEditingCalendar(calendarData);
     setFormData({
+      academicYear: calendarData.academicYear,
+      semester: calendarData.semester,
       startDate: calendarData.startDate.split('T')[0],
       endDate: calendarData.endDate.split('T')[0],
       weekDays: calendarData.weekDays,
@@ -226,6 +233,12 @@ export default function SemesterCalendarPage() {
    */
   const openNewDialog = () => {
     resetForm();
+    // 设置当前筛选条件中的学年学期
+    setFormData(prev => ({
+      ...prev,
+      academicYear: filters.academicYear,
+      semester: filters.semester
+    }));
     setDialogOpen(true);
   };
 
@@ -234,6 +247,32 @@ export default function SemesterCalendarPage() {
    */
   const handleSave = async () => {
     try {
+      // 表单验证
+      if (!editingCalendar) {
+        // 新建时的验证
+        if (!formData.academicYear.trim()) {
+          alert('请输入学年');
+          return;
+        }
+        if (!formData.semester.trim()) {
+          alert('请选择学期');
+          return;
+        }
+      }
+      
+      if (!formData.startDate) {
+        alert('请选择开始日期');
+        return;
+      }
+      if (!formData.endDate) {
+        alert('请选择结束日期');
+        return;
+      }
+      if (formData.weekDays.length === 0) {
+        alert('请至少选择一个上课日');
+        return;
+      }
+
       const response = await fetch('/api/schedule-config/semester-calendar', {
         method: 'POST',
         headers: {
@@ -241,8 +280,9 @@ export default function SemesterCalendarPage() {
         },
         body: JSON.stringify({
           ...formData,
-          academicYear: filters.academicYear,
-          semester: filters.semester
+          // 使用表单数据中的学年学期，而不是筛选条件
+          academicYear: formData.academicYear,
+          semester: formData.semester
         })
       });
 
@@ -290,7 +330,7 @@ export default function SemesterCalendarPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">学期日历管理</h1>
-          <p className="text-gray-600">管理学期开始结束日期、上课日和节假日</p>
+          <p className="text-gray-600">管理学期开始结束日期、上课日和节假日，支持新建学期</p>
         </div>
         <Button onClick={openNewDialog}>
           <Plus className="h-4 w-4 mr-2" />
@@ -422,6 +462,35 @@ export default function SemesterCalendarPage() {
           <div className="space-y-6">
             {/* 基本信息 */}
             <div className="grid grid-cols-2 gap-4">
+              {/* 学年学期选择（仅在新建时显示） */}
+              {!editingCalendar && (
+                <>
+                  <div>
+                    <Label htmlFor="academicYear">学年</Label>
+                    <Input
+                      id="academicYear"
+                      type="text"
+                      placeholder="例如：2025-2026"
+                      value={formData.academicYear}
+                      onChange={(e) => handleFormChange('academicYear', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="semester">学期</Label>
+                    <select
+                      id="semester"
+                      value={formData.semester}
+                      onChange={(e) => handleFormChange('semester', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="">请选择学期</option>
+                      <option value="1">第一学期</option>
+                      <option value="2">第二学期</option>
+                  
+                    </select>
+                  </div>
+                </>
+              )}
               <div>
                 <Label htmlFor="startDate">开始日期</Label>
                 <Input
